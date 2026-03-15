@@ -1,0 +1,186 @@
+---
+slug: /consumers/http-client
+sidebar_position: 1
+---
+
+# HTTP Client Integration
+
+Airnode exposes a standard HTTP API. You call an endpoint, receive signed data, and optionally submit it on-chain
+yourself.
+
+## Making a request
+
+Send a POST request to `/endpoints/{endpointId}` with parameters in the JSON body. Include an API key header if the
+endpoint requires authentication.
+
+```bash
+curl -X POST http://airnode.example.com/endpoints/0x... \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-key" \
+  -d '{"parameters":{"ids":"bitcoin","vs_currencies":"usd"}}'
+```
+
+## Response format
+
+The response format depends on whether the endpoint has encoding configured.
+
+### Encoded response
+
+When the endpoint defines `encoding` (type, path, times), the response contains ABI-encoded `data` as a hex string. This
+is the format you submit to on-chain contracts.
+
+```json
+{
+  "airnode": "0x...",
+  "endpointId": "0x...",
+  "timestamp": 1700000000,
+  "data": "0x...",
+  "signature": "0x..."
+}
+```
+
+### Raw response
+
+When the endpoint has no encoding, the response contains the upstream API's JSON output directly. The signature covers
+the hash of the JSON data.
+
+```json
+{
+  "airnode": "0x...",
+  "endpointId": "0x...",
+  "timestamp": 1700000000,
+  "rawData": { "bitcoin": { "usd": 67432 } },
+  "signature": "0x..."
+}
+```
+
+## Signature format
+
+Every response is signed by the airnode's private key using EIP-191 personal sign:
+
+```
+messageHash = keccak256(encodePacked(endpointId, timestamp, data))
+signature = EIP-191 personal sign over messageHash
+```
+
+The signature proves the airnode endorsed this data at this timestamp for this endpoint. Anyone can verify it without
+trusting the transport layer.
+
+## Verifying signatures off-chain
+
+Use viem (or any EIP-191 library) to recover the signer and confirm it matches the expected airnode address.
+
+```typescript
+import { recoverAddress, hashMessage, keccak256, encodePacked } from 'viem';
+
+const messageHash = keccak256(encodePacked(['bytes32', 'uint256', 'bytes'], [endpointId, BigInt(timestamp), data]));
+
+const recovered = await recoverAddress({
+  hash: hashMessage({ raw: messageHash }),
+  signature,
+});
+
+// recovered === airnode address
+```
+
+If the recovered address does not match the airnode address you expect, the data has been tampered with or was signed by
+a different key.
+
+## Authentication
+
+Endpoints with `auth.type: 'apiKey'` require an `X-Api-Key` header. Endpoints with `auth.type: 'free'` accept
+unauthenticated requests.
+
+```bash
+# Free endpoint -- no auth header needed
+curl -X POST http://airnode.example.com/endpoints/0x... \
+  -d '{"parameters":{"id":"1"}}'
+
+# API key endpoint
+curl -X POST http://airnode.example.com/endpoints/0x... \
+  -H "X-Api-Key: your-key" \
+  -d '{"parameters":{"id":"1"}}'
+```
+
+## Async requests
+
+For endpoints with `mode: async`, the initial response is a 202 with a poll URL:
+
+```json
+{
+  "requestId": "0x...",
+  "status": "pending",
+  "pollUrl": "/requests/0x..."
+}
+```
+
+Poll until complete:
+
+```bash
+curl http://airnode.example.com/requests/0x...
+# → { "requestId": "0x...", "status": "complete", "data": "0x...", "signature": "0x...", ... }
+```
+
+Status transitions: `pending` → `processing` → `complete` | `failed`.
+
+## SSE streaming
+
+For endpoints with `mode: stream`, the response is a Server-Sent Event:
+
+```bash
+curl -N http://airnode.example.com/endpoints/0x... \
+  -H "Content-Type: application/json" \
+  -d '{"parameters":{"ids":"bitcoin"}}'
+```
+
+```
+data: {"done":true,"airnode":"0x...","endpointId":"0x...","timestamp":1700000000,"data":"0x...","signature":"0x..."}
+```
+
+The full pipeline runs (including plugins), and the signed result is delivered as a single SSE event.
+
+## x402 payment
+
+For endpoints with x402 auth, the first request returns 402 with payment details:
+
+```json
+{
+  "paymentId": "0x...",
+  "amount": "1000000",
+  "token": "0xA0b8...",
+  "network": 8453,
+  "recipient": "0x...",
+  "expiresAt": 1700001000
+}
+```
+
+After paying on-chain, retry with the transaction hash:
+
+```bash
+curl -X POST http://airnode.example.com/endpoints/0x... \
+  -H "Content-Type: application/json" \
+  -H "X-Payment-Proof: 0x<txHash>" \
+  -d '{"parameters":{"ids":"bitcoin"}}'
+```
+
+## Error responses
+
+| Status | Meaning                                            |
+| ------ | -------------------------------------------------- |
+| `400`  | Missing or invalid parameters                      |
+| `401`  | Missing or invalid API key / NFT key               |
+| `402`  | Payment required (x402 — includes payment details) |
+| `404`  | Unknown endpoint ID                                |
+| `413`  | Request body too large (> 64KB)                    |
+| `415`  | Content-Type must be application/json              |
+| `429`  | Rate limit exceeded                                |
+| `502`  | Upstream API error or internal processing failure  |
+
+## Health check
+
+```bash
+curl http://airnode.example.com/health
+```
+
+Returns the airnode address and version. Use this to verify the server is running and to discover the airnode address
+for signature verification.

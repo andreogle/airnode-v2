@@ -1,0 +1,34 @@
+import { dim, red, reset } from './colors';
+
+// =============================================================================
+// Banner
+// =============================================================================
+interface BannerOptions {
+  readonly address: string;
+  readonly version: string;
+  readonly host: string;
+  readonly port: number;
+  readonly endpoints: number;
+}
+
+function printBanner(options: BannerOptions): void {
+  const lines = [
+    ``,
+    `${red}     ___    _                      __  ${reset}`,
+    `${red}    /   |  (_)________  ____  ____/ /__ ${reset}`,
+    `${red}   / /| | / / ___/ __ \\/ __ \\/ __  / _ \\${reset}`,
+    `${red}  / ___ |/ / /  / / / / /_/ / /_/ /  __/${reset}`,
+    String.raw`${red} /_/  |_/_/_/  /_/ /_/\____/\__,_/\___/${reset}`,
+    ``,
+    `${dim}  Version:   ${options.version}${reset}`,
+    `${dim}  Address:   ${options.address}${reset}`,
+    `${dim}  Listen:    ${options.host}:${String(options.port)}${reset}`,
+    `${dim}  Endpoints: ${String(options.endpoints)}${reset}`,
+    ``,
+  ];
+
+  console.info(lines.join('\n'));
+}
+
+export { printBanner };
+export type { BannerOptions };

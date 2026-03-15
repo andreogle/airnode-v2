@@ -1,0 +1,8 @@
+[submodule "contracts/lib/snekmate"]
+	path = contracts/lib/snekmate
+	url = https://github.com/pcaversaccio/snekmate
+	ignore = dirty
+[submodule "contracts/lib/account-abstraction"]
+	path = contracts/lib/account-abstraction
+	url = https://github.com/eth-infinitism/account-abstraction
+	ignore = dirty

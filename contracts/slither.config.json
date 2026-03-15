@@ -1,0 +1,4 @@
+{
+  "filter_paths": "lib/,test/,script/",
+  "foundry_ignore_compile": true
+}

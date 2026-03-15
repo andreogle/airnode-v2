@@ -1,0 +1,47 @@
+{
+  "name": "airnode",
+  "version": "2.0.0-alpha.0",
+  "module": "src/cli/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "airnode": "bun src/cli/index.ts",
+    "book:build": "(cd book && bun run build)",
+    "book:start": "(cd book && bun start)",
+    "book:version": "(cd book && bun run docusaurus docs:version)",
+    "build:linux-x64": "bun src/build.ts --target=bun-linux-x64 --outfile dist/airnode",
+    "build:osx": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode",
+    "build:windows": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode.exe",
+    "dev": "bun --watch src/cli/index.ts start",
+    "fmt": "prettier . --write && eslint . --fix",
+    "lint": "bun run lint:prettier && bun run lint:eslint",
+    "lint:eslint": "eslint . --cache",
+    "lint:prettier": "prettier . --check",
+    "lint:slither": "(cd contracts && forge build --build-info --force && slither .)",
+    "test:contracts": "(cd contracts && forge test -vvv)",
+    "test:integration": "bun run integration/run-sequential.ts",
+    "test:unit": "bun test"
+  },
+  "dependencies": {
+    "@api3/promise-utils": "^0.4.0",
+    "commander": "^14.0.3",
+    "viem": "^2.47.0",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.10",
+    "eslint": "^9",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-functional": "^9.0.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-promise": "^7.2.1",
+    "eslint-plugin-unicorn": "^63.0.0",
+    "prettier": "3.8.1",
+    "prettier-plugin-solidity": "^2.2.1",
+    "typescript-eslint": "^8.57.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,112 @@
+name: 👮‍♂️ Sanity checks
+
+on: [push, pull_request, workflow_dispatch]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prettify-n-lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        python_version:
+          - 3.13
+        architecture:
+          - x64
+        node_version:
+          - 24
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm cache directory path
+        id: pnpm-cache-dir-path
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Restore pnpm cache
+        uses: actions/cache@v4
+        id: pnpm-cache
+        with:
+          path: ${{ steps.pnpm-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Use Node.js ${{ matrix.node_version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node_version }}
+
+      - name: Install pnpm project with a clean slate
+        run: pnpm install --prefer-offline --frozen-lockfile
+
+      - name: Prettier and lint
+        run: pnpm lint:check
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Check formatting with Black
+        uses: psf/black@stable
+        with:
+          options: "--check --verbose"
+          src: "./lib/utils"
+
+  codespell:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          check_filenames: true
+          skip: ./.git,pnpm-lock.yaml
+          ignore_words_list: pre-emptive
+
+  validate-links:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        ruby_version:
+          - 3.4
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby_version }}
+          bundler-cache: true
+
+      - name: Install awesome_bot
+        run: gem install awesome_bot
+
+      - name: Validate URLs
+        run: |
+          awesome_bot ./*.md src/snekmate/**/*.vy src/snekmate/**/mocks/*.vy src/snekmate/**/interfaces/*.vyi \
+          test/**/*.sol test/**/interfaces/*.sol test/**/mocks/*.sol test/**/scripts/*.js scripts/*.sh lib/utils/*.sol lib/utils/*.py \
+          --allow-dupe --allow-redirect --request-delay 0.4 \
+          --white-list https://www.wagmi.xyz,https://github.com/pcaversaccio/snekmate.git@,https://github.com/vyperlang/vyper.git@,https://github.com/pcaversaccio/snekmate/releases/tag/v0.1.2,https://github.com/pcaversaccio/snekmate/blob/v0.1.2,https://github.com/pcaversaccio/snekmate/compare/v0.1.1...v0.1.2,https://hyperelliptic.org

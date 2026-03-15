@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "commonjs",
+    "allowJs": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "declaration": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "./scripts/**/*.js",
+    "./scripts/**/*.ts",
+    "./test/**/*.js",
+    "./test/**/*.ts",
+    "./typechain-types/**/*.ts"
+  ],
+  "files": ["./hardhat.config.ts", "eslint.config.js", ".solcover.js"]
+}

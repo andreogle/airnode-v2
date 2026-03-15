@@ -1,0 +1,267 @@
+/**
+ * API3-aligned theme for Airnode documentation.
+ * Colors and typography matched to api3.org and market.api3.org.
+ */
+
+/* =============================================================================
+ * Light mode
+ * ============================================================================= */
+:root {
+  --ifm-color-primary: #1843f5;
+  --ifm-color-primary-dark: #0f35e4;
+  --ifm-color-primary-darker: #0e32d7;
+  --ifm-color-primary-darkest: #0b29b1;
+  --ifm-color-primary-light: #3159f6;
+  --ifm-color-primary-lighter: #3e64f7;
+  --ifm-color-primary-lightest: #6a87f9;
+  --ifm-background-color: #f4f7fc;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-font-size-base: 16px;
+  --ifm-code-font-size: 90%;
+  --ifm-heading-font-weight: 600;
+  --ifm-font-weight-bold: 600;
+  --ifm-line-height-base: 1.65;
+  --ifm-heading-line-height: 1.3;
+  --ifm-navbar-background-color: #ffffff;
+  --ifm-navbar-shadow: 0 1px 0 0 #e2ebfd;
+  --ifm-footer-background-color: #111648;
+  --ifm-footer-color: rgba(255, 255, 255, 0.8);
+  --ifm-footer-link-color: rgba(255, 255, 255, 0.8);
+  --ifm-footer-title-color: rgba(255, 255, 255, 0.95);
+  --docusaurus-highlighted-code-line-bg: rgba(24, 67, 245, 0.08);
+}
+
+/* =============================================================================
+ * Dark mode
+ * ============================================================================= */
+[data-theme='dark'] {
+  --ifm-color-primary: #7b9bff;
+  --ifm-color-primary-dark: #5a80ff;
+  --ifm-color-primary-darker: #4973ff;
+  --ifm-color-primary-darkest: #174fff;
+  --ifm-color-primary-light: #9cb6ff;
+  --ifm-color-primary-lighter: #adc3ff;
+  --ifm-color-primary-lightest: #dfe9ff;
+  --ifm-background-color: #0a0e2e;
+  --ifm-background-surface-color: #111648;
+  --ifm-navbar-background-color: #0a0e2e;
+  --ifm-navbar-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  --ifm-footer-background-color: #060924;
+  --ifm-footer-color: rgba(255, 255, 255, 0.7);
+  --ifm-footer-link-color: rgba(255, 255, 255, 0.7);
+  --ifm-footer-title-color: rgba(255, 255, 255, 0.9);
+  --docusaurus-highlighted-code-line-bg: rgba(123, 155, 255, 0.15);
+}
+
+/* =============================================================================
+ * Typography — load Inter
+ * ============================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* =============================================================================
+ * Navbar
+ * ============================================================================= */
+.navbar {
+  padding: 0.75rem 1.5rem;
+}
+
+.navbar__title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* =============================================================================
+ * Sidebar
+ * ============================================================================= */
+[data-theme='dark'] .menu {
+  background: transparent;
+}
+
+.menu__link {
+  font-size: 0.875rem;
+  border-radius: 6px;
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  font-weight: 500;
+}
+
+/* =============================================================================
+ * Code blocks
+ * ============================================================================= */
+div[class*='codeBlockContainer'] {
+  --ifm-pre-padding: 1.2rem 1.5rem;
+}
+
+[data-theme='dark'] div[class*='codeBlockContainer'] {
+  --prism-background-color: #080d30;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] div[class*='codeBlockContainer'] {
+  border: 2px solid #e2ebfd;
+}
+
+code {
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+[data-theme='dark'] code {
+  background-color: rgba(123, 155, 255, 0.08);
+  color: #d0dcf5;
+}
+
+/* =============================================================================
+ * Footer
+ * ============================================================================= */
+.footer--dark {
+  --ifm-footer-background-color: #111648;
+  background-color: #111648;
+  border-top: 1px solid rgba(24, 67, 245, 0.15);
+}
+
+[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: #060924;
+  background-color: #060924;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.footer--dark .footer__title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.footer--dark .footer__link-item {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.footer--dark .footer__link-item:hover {
+  opacity: 1;
+  color: #ffffff;
+}
+
+.footer--dark .footer__copyright {
+  opacity: 0.4;
+  font-size: 0.85rem;
+}
+
+/* =============================================================================
+ * Buttons
+ * ============================================================================= */
+.button {
+  border-radius: 8px;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.button--primary {
+  --ifm-button-background-color: #1843f5;
+  --ifm-button-border-color: #1843f5;
+  color: #ffffff;
+}
+
+.button--primary:hover {
+  --ifm-button-background-color: #0f35e4;
+  --ifm-button-border-color: #0f35e4;
+  color: #ffffff;
+}
+
+[data-theme='dark'] .button--primary {
+  --ifm-button-background-color: #3a63f7;
+  --ifm-button-border-color: #3a63f7;
+  color: #ffffff;
+}
+
+[data-theme='dark'] .button--primary:hover {
+  --ifm-button-background-color: #5a7eff;
+  --ifm-button-border-color: #5a7eff;
+  color: #ffffff;
+}
+
+.button--secondary {
+  --ifm-button-background-color: transparent;
+  color: var(--ifm-font-color-base);
+  border: 1.5px solid var(--ifm-color-emphasis-300);
+}
+
+.button--secondary:hover {
+  --ifm-button-background-color: var(--ifm-color-emphasis-100);
+  color: var(--ifm-font-color-base);
+}
+
+[data-theme='dark'] .button--secondary {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme='dark'] .button--secondary:hover {
+  --ifm-button-background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* =============================================================================
+ * Content
+ * ============================================================================= */
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: -0.02em;
+}
+
+[data-theme='dark'] .markdown a {
+  color: #7b9bff;
+}
+
+[data-theme='dark'] .markdown a:hover {
+  color: #adc3ff;
+}
+
+/* Table styling */
+[data-theme='dark'] table {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] table th {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='dark'] table td,
+[data-theme='dark'] table th {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Admonition / callout tweaks */
+[data-theme='dark'] .alert {
+  border-left-width: 3px;
+}
+
+/* =============================================================================
+ * Scrollbar (dark mode, Webkit only — progressive enhancement)
+ * ============================================================================= */
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}

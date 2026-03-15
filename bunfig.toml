@@ -1,0 +1,5 @@
+[test]
+root = "src"
+coverage = true
+coverageSkipTestFiles = true
+coverageThreshold = { line = 0.95, function = 0.95, statement = 0.95 }
