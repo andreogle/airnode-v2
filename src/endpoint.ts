@@ -33,13 +33,14 @@ function buildParameterSpec(
 }
 
 function buildEncodingSpec(encoding?: {
-  readonly type: string;
-  readonly path: string;
+  readonly type?: string;
+  readonly path?: string;
   readonly times?: string;
 }): string {
   if (!encoding) return '';
-  const parts =
-    encoding.times === undefined ? [encoding.type, encoding.path] : [encoding.type, encoding.path, encoding.times];
+  if (!encoding.type || !encoding.path) return '';
+  const { type, path, times } = encoding;
+  const parts = times === undefined ? [type, path] : [type, path, times];
   return parts.join('|');
 }
 

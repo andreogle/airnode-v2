@@ -17,7 +17,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Airnode Operators',
-      items: ['operators/index', 'operators/deployment'],
+      items: ['operators/index', 'operators/deployment', 'operators/cache-server'],
     },
     {
       type: 'category',

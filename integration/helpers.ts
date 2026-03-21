@@ -1,4 +1,5 @@
 import type { Hex } from 'viem';
+import { createAsyncRequestStore } from '../src/async';
 import { createCache } from '../src/cache';
 import type { ResponseCache } from '../src/cache';
 import { loadEnvFile } from '../src/config/env';
@@ -8,6 +9,7 @@ import type { ResolvedEndpoint } from '../src/endpoint';
 import { handleEndpointRequest } from '../src/pipeline';
 import { createEmptyRegistry } from '../src/plugins';
 import type { PluginRegistry } from '../src/plugins';
+import { startPushLoop } from '../src/push';
 import { createServer } from '../src/server';
 import type { ServerHandle } from '../src/server';
 import { createAirnodeAccount } from '../src/sign';
@@ -60,6 +62,8 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
 
   const endpointMap = buildEndpointMap(testConfig);
   const cache = createCache();
+  const asyncStore = createAsyncRequestStore();
+  const push = startPushLoop({ account, airnode: account.address, endpointMap });
 
   const server = createServer({
     config: testConfig,
@@ -68,6 +72,8 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     endpointMap,
     plugins: options.plugins ?? createEmptyRegistry(),
     cache,
+    beaconStore: push.store,
+    asyncStore,
     handleRequest: handleEndpointRequest,
   });
 
@@ -80,6 +86,8 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     stop: () => {
       server.stop();
       cache.stop();
+      push.stop();
+      asyncStore.stop();
     },
   };
 }

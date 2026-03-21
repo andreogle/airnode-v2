@@ -17,6 +17,7 @@ interface BoundedMap<K, V> {
   readonly has: (key: K) => boolean;
   readonly delete: (key: K) => void;
   readonly clear: () => void;
+  readonly values: () => readonly V[];
   readonly size: () => number;
   readonly stop: () => void;
 }
@@ -54,6 +55,8 @@ function createBoundedMap<K, V>(options: BoundedMapOptions<V>): BoundedMap<K, V>
     clear: () => {
       store.clear(); // eslint-disable-line functional/immutable-data
     },
+
+    values: () => [...store.values()],
 
     size: () => store.size,
 

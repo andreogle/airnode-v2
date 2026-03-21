@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parse } from 'yaml';
-import { configSchema } from './schema';
+import { cacheServerConfigSchema, configSchema, parameterSchema } from './schema';
 
 function parseYaml(raw: string): unknown {
   return parse(raw) as unknown;
@@ -295,5 +295,37 @@ apis:
     expect(result.version).toBe('1.0');
     expect(result.apis).toHaveLength(1);
     expect(result.apis[0]?.endpoints[0]?.encoding?.type).toBe('int256');
+  });
+
+  test('parses cache server example config successfully', async () => {
+    const file = Bun.file(`${import.meta.dirname}/../../examples/configs/cache-server/config.yaml`);
+    const content = await file.text();
+    const result = cacheServerConfigSchema.parse(parseYaml(content));
+
+    expect(result.version).toBe('1.0');
+    expect(result.endpoints).toHaveLength(2);
+    expect(result.endpoints[0]?.path).toBe('/realtime');
+    expect(result.endpoints[0]?.delaySeconds).toBe(0);
+    expect(result.endpoints[1]?.path).toBe('/delayed');
+    expect(result.endpoints[1]?.delaySeconds).toBe(60);
+  });
+});
+
+describe('parameterSchema', () => {
+  test('rejects required parameter with a default value', () => {
+    expect(() => parameterSchema.parse({ name: 'q', required: true, default: 'usd' })).toThrow(
+      'A parameter cannot be both required and have a default value'
+    );
+  });
+
+  test('accepts required parameter without a default', () => {
+    const result = parameterSchema.parse({ name: 'q', required: true });
+    expect(result.required).toBe(true);
+  });
+
+  test('accepts optional parameter with a default', () => {
+    const result = parameterSchema.parse({ name: 'q', default: 'usd' });
+    expect(result.required).toBe(false);
+    expect(result.default).toBe('usd');
   });
 });

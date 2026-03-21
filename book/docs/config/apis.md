@@ -374,9 +374,13 @@ encoding:
 
 | Field   | Type     | Required | Description                                                                     |
 | ------- | -------- | -------- | ------------------------------------------------------------------------------- |
-| `type`  | `string` | Yes      | Solidity type(s) for ABI encoding: `int256`, `uint256`, `bool`, `bytes32`, etc. |
-| `path`  | `string` | Yes      | JSONPath expression to extract the value from the API response.                 |
+| `type`  | `string` | No       | Solidity type(s) for ABI encoding: `int256`, `uint256`, `bool`, `bytes32`, etc. |
+| `path`  | `string` | No       | JSONPath expression to extract the value from the API response.                 |
 | `times` | `string` | No       | Multiplier applied before encoding. Converts decimals to integers for Solidity. |
+
+All fields are optional individually. The encoding is complete when both `type` and `path` are present — either from the
+config, from the requester's request parameters, or a combination of both. See
+[requester-specified encoding](#requester-specified-encoding) below.
 
 ### Multi-value encoding
 
@@ -407,6 +411,42 @@ endpoints:
     # No encoding -- raw JSON response is signed
 ```
 
+### Requester-specified encoding
+
+Clients can control encoding by passing reserved parameters in their request body: `_type`, `_path`, and optionally
+`_times`. These parameters are consumed by the pipeline and never sent to the upstream API.
+
+**Three modes:**
+
+1. **Operator-fixed** — the endpoint has a complete `encoding` block (`type` + `path`). Client reserved parameters are
+   ignored. The endpoint ID commits to this encoding.
+2. **Partial** — the endpoint has an `encoding` block with some fields (e.g. `type` only). The client fills in the
+   missing fields via `_path` or `_times`. Operator fields take precedence.
+3. **Requester-only** — no `encoding` block. The client provides `_type` and `_path`. If neither is provided, raw JSON
+   mode is used.
+
+```bash
+# Requester chooses what to extract from a raw endpoint
+curl -X POST http://localhost:3000/endpoints/{endpointId} \
+  -H "Content-Type: application/json" \
+  -d '{"parameters":{"ids":"ethereum","vs_currencies":"usd","_type":"int256","_path":"$.ethereum.usd","_times":"1e18"}}'
+```
+
+```yaml
+# Partial: operator fixes the type, requester chooses the path
+endpoints:
+  - name: flexiblePrice
+    path: /simple/price
+    encoding:
+      type: int256
+    # path comes from the requester's _path parameter
+```
+
+If the merged result has `_type` without `_path` (or vice versa), the server returns 400.
+
+:::note Push endpoints require a complete encoding in the config (`type` + `path`). The push loop has no client
+parameters, so requester-specified encoding does not apply to push. :::
+
 ## Push
 
 The `push` field enables a background loop that calls the upstream API on a fixed interval and stores signed data for
@@ -415,11 +455,25 @@ relayers.
 ```yaml
 push:
   interval: 10000 # call API every 10 seconds
+  targets:
+    - url: http://cache.example.com/beacons/0xYourAirnodeAddress
+      authToken: ${CACHE_SERVER_AUTH_TOKEN}
 ```
 
-| Field      | Type     | Required | Description                                      |
-| ---------- | -------- | -------- | ------------------------------------------------ |
-| `interval` | `number` | Yes      | Loop interval in milliseconds. Positive integer. |
+| Field      | Type     | Required | Description                                                         |
+| ---------- | -------- | -------- | ------------------------------------------------------------------- |
+| `interval` | `number` | Yes      | Loop interval in milliseconds. Positive integer.                    |
+| `targets`  | `array`  | No       | Cache server URLs to push signed beacons to. See [Cache Server][1]. |
 
-Pushed data is available via `GET /beacons` and `GET /beacons/{beaconId}`. If the endpoint also has a `cache.delay`, the
-beacon data is not served until the delay has elapsed.
+Each target has:
+
+| Field       | Type     | Required | Description                                            |
+| ----------- | -------- | -------- | ------------------------------------------------------ |
+| `url`       | `string` | Yes      | Cache server ingestion URL (includes airnode address). |
+| `authToken` | `string` | Yes      | Bearer token for push authentication.                  |
+
+Pushed data is available locally via `GET /beacons` and `GET /beacons/{beaconId}`. If `targets` are configured, the
+signed data is also POSTed to each cache server after every update (retried up to 2 times on failure). If the endpoint
+also has a `cache.delay`, the local beacon data is not served until the delay has elapsed.
+
+[1]: /docs/operators/cache-server

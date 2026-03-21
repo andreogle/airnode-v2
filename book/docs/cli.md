@@ -36,6 +36,25 @@ airnode start -c config.yaml -e .env.production
 
 Shut down gracefully with `Ctrl+C` (`SIGINT`) or `SIGTERM`.
 
+## `airnode cache-server`
+
+Start the cache server for signed beacon data. See [Cache Server](/docs/operators/cache-server) for full documentation.
+
+```bash
+airnode cache-server [options]
+```
+
+| Option            | Alias | Default             | Description                  |
+| ----------------- | ----- | ------------------- | ---------------------------- |
+| `--config <path>` | `-c`  | `cache-server.yaml` | Path to the config file      |
+| `--env <path>`    | `-e`  | `.env`              | Path to the environment file |
+
+```bash
+airnode cache-server -c cache-server.yaml -e .env.production
+```
+
+No `AIRNODE_PRIVATE_KEY` is needed — the cache server verifies signatures but does not sign.
+
 ## `airnode config validate`
 
 Validate a config file without starting the server. Checks YAML syntax, schema validation, and cross-field consistency.

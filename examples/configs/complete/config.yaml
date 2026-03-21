@@ -40,7 +40,6 @@ apis:
             description: Coin ID (e.g. ethereum, bitcoin)
           - name: vs_currencies
             in: query
-            required: true
             default: usd
         encoding:
           type: int256
@@ -51,6 +50,9 @@ apis:
           delay: 60000 # public responses delayed by 60s (OEV window)
         push:
           interval: 10000 # call API every 10 seconds, store signed data for relayers
+          targets:
+            - url: http://localhost:8090/beacons/${AIRNODE_ADDRESS}
+              authToken: ${CACHE_SERVER_AUTH_TOKEN}
         description: Get the current price of a coin
 
       - name: coinMarketData
@@ -150,11 +152,9 @@ apis:
             fixed: generateIntegers
           - name: min
             in: body
-            required: true
             default: 0
           - name: max
             in: body
-            required: true
             default: 100
         encoding:
           type: uint256

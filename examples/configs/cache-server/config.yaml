@@ -1,0 +1,27 @@
+version: '1.0'
+
+server:
+  port: 8090
+  host: '0.0.0.0'
+  cors:
+    origins:
+      - '*'
+  rateLimit:
+    window: 60000
+    max: 1000
+
+allowedAirnodes:
+  - address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+    authToken: ${CACHE_SERVER_AUTH_TOKEN}
+
+endpoints:
+  - path: /realtime
+    delaySeconds: 0
+    auth:
+      type: apiKey
+      keys:
+        - ${REALTIME_CLIENT_KEY}
+  - path: /delayed
+    delaySeconds: 60
+    auth:
+      type: free

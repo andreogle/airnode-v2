@@ -2,6 +2,7 @@ import type { z } from 'zod/v4';
 import type {
   apiSchema,
   cacheSchema,
+  cacheServerConfigSchema,
   clientAuthMethodSchema,
   clientAuthSchema,
   configSchema,
@@ -24,3 +25,4 @@ export type Push = z.infer<typeof pushSchema>;
 export type Cache = z.infer<typeof cacheSchema>;
 export type Server = z.infer<typeof serverSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
+export type CacheServerConfig = z.infer<typeof cacheServerConfigSchema>;

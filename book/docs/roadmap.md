@@ -21,7 +21,8 @@ clients.
 - Plugin system with 6 hooks and per-request time budgets
 - AirnodeVerifier contract (pull path -- verify + forward to callback)
 - AirnodeDataFeed contract (push path -- verify + store + read, beacon sets with median aggregation)
-- Push loop with beacon store for data feed relayers
+- Push loop with beacon store and push targets for external cache servers
+- Cache server (standalone process for receiving, verifying, and serving signed beacon data)
 - DNS identity verification (ERC-7529)
 - In-memory response cache with TTL
 - Cache delay for OEV windows
@@ -74,8 +75,7 @@ Developer experience and ecosystem tooling.
 - **Config builder**: Visual interface for building Airnode configs from OpenAPI specs. Replaces manual YAML editing.
 - **Endpoint directory**: Public registry of available airnode endpoints with documentation, pricing, and availability
   metrics. Endpoint IDs are the common identifier -- operators serving the same API produce the same ID.
-- **Cache server**: Thin standalone process that receives signed push data from the airnode and serves it to relayers.
-  Decouples the airnode from serving beacon data directly. Supports delayed endpoints for OEV tiers.
+- **Operator dashboard**: Request volume, revenue, uptime metrics.
 
 ## Future
 

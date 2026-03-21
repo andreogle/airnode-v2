@@ -50,6 +50,14 @@ function getPublicClient(rpc: string): ReturnType<typeof createPublicClient> {
 }
 
 // =============================================================================
+// RPC retry options
+//
+// Chain RPC nodes frequently return transient errors (502, rate limits, timeouts).
+// balanceOf and getTransactionReceipt are pure reads — safe to retry.
+// =============================================================================
+const RPC_RETRY_OPTIONS = { retries: 2, delay: { type: 'static' as const, delayMs: 500 } };
+
+// =============================================================================
 // API key auth
 // =============================================================================
 function constantTimeEquals(a: string, b: string): boolean {
@@ -140,13 +148,15 @@ async function checkNftKey(
   }
 
   const client = getPublicClient(config.rpc);
-  const result = await go(() =>
-    client.readContract({
-      address: config.contract as Hex,
-      abi: [{ type: 'function', name: 'balanceOf', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }],
-      functionName: 'balanceOf',
-      args: [sigResult.address],
-    })
+  const result = await go(
+    () =>
+      client.readContract({
+        address: config.contract as Hex,
+        abi: [{ type: 'function', name: 'balanceOf', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }],
+        functionName: 'balanceOf',
+        args: [sigResult.address],
+      }),
+    RPC_RETRY_OPTIONS
   );
   const owns = result.success && (result.data as bigint) > 0n;
 
@@ -183,11 +193,11 @@ async function verifyPayment(
 ): Promise<boolean> {
   const client = getPublicClient(rpc);
 
-  const receipt = await go(() => client.getTransactionReceipt({ hash: txHash }));
+  const receipt = await go(() => client.getTransactionReceipt({ hash: txHash }), RPC_RETRY_OPTIONS);
   if (!receipt.success || receipt.data.status !== 'success') return false;
 
   // Check transaction recency
-  const block = await go(() => client.getBlock({ blockNumber: receipt.data.blockNumber }));
+  const block = await go(() => client.getBlock({ blockNumber: receipt.data.blockNumber }), RPC_RETRY_OPTIONS);
   if (!block.success) return false;
   if (Math.floor(Date.now() / 1000) - Number(block.data.timestamp) > MAX_TX_AGE_SECONDS) return false;
 
@@ -195,7 +205,7 @@ async function verifyPayment(
 
   // ETH transfer
   if (token.toLowerCase() === ETH_ZERO_ADDRESS) {
-    const tx = await go(() => client.getTransaction({ hash: txHash }));
+    const tx = await go(() => client.getTransaction({ hash: txHash }), RPC_RETRY_OPTIONS);
     if (!tx.success) return false;
     return tx.data.to?.toLowerCase() === recipient.toLowerCase() && tx.data.value >= requiredAmount;
   }

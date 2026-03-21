@@ -129,4 +129,102 @@ describe('startPushLoop', () => {
 
     expect(fetchMock.mock.calls.length).toBe(callCount);
   });
+
+  test('pushes to targets after beacon update', async () => {
+    const endpoint = makeEndpoint({
+      push: {
+        interval: 100,
+        targets: [{ url: 'https://cache.example.com/beacons/0xabc', authToken: 'test-token' }],
+      },
+    });
+    const push = startPushLoop(makeDeps(makeApi(), endpoint));
+    await Bun.sleep(50);
+
+    // First call is the upstream API, second is the target POST
+    const targetCalls = fetchMock.mock.calls.filter(
+      (call: unknown[]) => (call[0] as string) === 'https://cache.example.com/beacons/0xabc'
+    );
+    expect(targetCalls.length).toBeGreaterThanOrEqual(1);
+
+    const targetOptions = targetCalls[0]?.[1] as RequestInit;
+    expect(targetOptions.method).toBe('POST');
+    expect((targetOptions.headers as Record<string, string>)['Authorization']).toBe('Bearer test-token');
+    expect((targetOptions.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse(targetOptions.body as string) as { airnode: string; signature: string };
+    expect(body.airnode).toBe(TEST_AIRNODE);
+    expect(body.signature).toMatch(/^0x/);
+
+    push.stop();
+  });
+
+  test('logs warning on target failure without blocking push loop', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url === 'https://broken.example.com/beacons') {
+        return Promise.reject(new Error('Connection refused'));
+      }
+      return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(DEFAULT_MOCK_DATA)), status: 200 });
+    });
+
+    const endpoint = makeEndpoint({
+      push: {
+        interval: 100,
+        targets: [{ url: 'https://broken.example.com/beacons', authToken: 'token' }],
+      },
+    });
+    const push = startPushLoop(makeDeps(makeApi(), endpoint));
+    await Bun.sleep(50);
+
+    // Beacon store should still be populated despite target failure
+    expect(push.store.list().length).toBe(1);
+
+    push.stop();
+  });
+
+  test('retries push to targets on failure', async () => {
+    let callCount = 0;
+    fetchMock.mockImplementation((url: string) => {
+      if (url === 'https://flaky.example.com/beacons') {
+        callCount++;
+        if (callCount <= 2) {
+          return Promise.resolve({ ok: false, status: 503, text: () => Promise.resolve('') });
+        }
+        return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{}') });
+      }
+      return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(DEFAULT_MOCK_DATA)), status: 200 });
+    });
+
+    const endpoint = makeEndpoint({
+      push: {
+        interval: 60_000, // long interval so only one update fires
+        targets: [{ url: 'https://flaky.example.com/beacons', authToken: 'token' }],
+      },
+    });
+    const push = startPushLoop(makeDeps(makeApi(), endpoint));
+    // Wait long enough for retries (1s + 2s + processing time)
+    await Bun.sleep(4000);
+
+    const flakyCalls = fetchMock.mock.calls.filter(
+      (call: unknown[]) => (call[0] as string) === 'https://flaky.example.com/beacons'
+    );
+    // Should have retried: initial + 2 retries = 3 attempts total
+    expect(flakyCalls.length).toBe(3);
+
+    push.stop();
+  }, 10_000);
+
+  test('works with no targets configured', async () => {
+    const endpoint = makeEndpoint({ push: { interval: 100 } });
+    const push = startPushLoop(makeDeps(makeApi(), endpoint));
+    await Bun.sleep(50);
+
+    // Only the upstream API call, no target calls
+    expect(push.store.list().length).toBe(1);
+    const targetCalls = fetchMock.mock.calls.filter(
+      (call: unknown[]) => (call[0] as string) !== 'https://api.example.com/price'
+    );
+    expect(targetCalls.length).toBe(0);
+
+    push.stop();
+  });
 });

@@ -8,22 +8,26 @@ const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 // =============================================================================
 // Parameters
 // =============================================================================
-export const parameterSchema = z.object({
-  name: z.string().min(1),
-  in: z.enum(['query', 'header', 'path', 'cookie', 'body']).default('query'),
-  required: z.boolean().default(false),
-  fixed: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  secret: z.boolean().default(false),
-  description: z.string().optional(),
-});
+export const parameterSchema = z
+  .object({
+    name: z.string().min(1),
+    in: z.enum(['query', 'header', 'path', 'cookie', 'body']).default('query'),
+    required: z.boolean().default(false),
+    fixed: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    secret: z.boolean().default(false),
+    description: z.string().optional(),
+  })
+  .refine((p) => !(p.required && p.default !== undefined), {
+    message: 'A parameter cannot be both required and have a default value',
+  });
 
 // =============================================================================
 // Encoding (response processing)
 // =============================================================================
 export const encodingSchema = z.object({
-  type: z.string().min(1),
-  path: z.string().min(1),
+  type: z.string().min(1).optional(),
+  path: z.string().min(1).optional(),
   times: z.string().optional(),
 });
 
@@ -78,12 +82,16 @@ export const cacheSchema = z.object({
 });
 
 // =============================================================================
-// Endpoints
-// =============================================================================
 // Push (data feed background loop)
 // =============================================================================
+const pushTargetSchema = z.object({
+  url: z.url(),
+  authToken: z.string().min(1),
+});
+
 export const pushSchema = z.object({
   interval: z.number().int().positive(),
+  targets: z.array(pushTargetSchema).optional(),
 });
 
 // =============================================================================
@@ -156,4 +164,33 @@ export const configSchema = z.object({
   server: serverSchema,
   apis: z.array(apiSchema).min(1),
   settings: settingsSchema,
+});
+
+// =============================================================================
+// Cache server config
+//
+// Separate config schema for the standalone cache server process. The cache
+// server has no private key, no upstream APIs, no plugins — it receives
+// pre-signed beacon data from airnodes and serves it to clients.
+// =============================================================================
+const allowedAirnodeSchema = z.object({
+  address: evmAddressSchema,
+  authToken: z.string().min(1),
+});
+
+const cacheEndpointSchema = z.object({
+  path: z
+    .string()
+    .min(1)
+    .startsWith('/')
+    .refine((p) => !p.endsWith('/') || p === '/', { message: 'Path must not end with a trailing slash' }),
+  delaySeconds: z.number().int().nonnegative(),
+  auth: clientAuthSchema.optional(),
+});
+
+export const cacheServerConfigSchema = z.object({
+  version: z.literal('1.0'),
+  server: serverSchema,
+  allowedAirnodes: z.union([z.literal('*'), z.array(allowedAirnodeSchema).min(1)]),
+  endpoints: z.array(cacheEndpointSchema).min(1),
 });

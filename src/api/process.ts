@@ -2,7 +2,14 @@ import { type Hex, encodeAbiParameters, toHex } from 'viem';
 import { isNil } from '../guards';
 import { query } from '../json-path';
 import type { JsonValue } from '../json-path';
-import type { Encoding } from '../types';
+// Accepts both operator-fixed encoding (from config) and resolved encoding
+// (merged config + requester params). Only requires the fields that are
+// needed for processing — type and path must be present.
+interface ProcessEncoding {
+  readonly type: string;
+  readonly path: string;
+  readonly times?: string;
+}
 
 type SolidityType = 'int256' | 'uint256' | 'bool' | 'bytes32' | 'address' | 'string' | 'bytes';
 
@@ -62,7 +69,7 @@ function validateSolidityType(type: string): SolidityType {
   return type as SolidityType;
 }
 
-function processResponse(data: unknown, encoding: Encoding): Hex {
+function processResponse(data: unknown, encoding: ProcessEncoding): Hex {
   const types = encoding.type.split(',');
   const paths = encoding.path.split(',');
   const times = encoding.times?.split(',') ?? [];

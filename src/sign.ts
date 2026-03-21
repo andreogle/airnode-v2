@@ -1,4 +1,5 @@
-import { type Hex, encodePacked, keccak256 } from 'viem';
+import { go } from '@api3/promise-utils';
+import { type Hex, encodePacked, hashMessage, keccak256, recoverAddress } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 
 // =============================================================================
@@ -52,5 +53,23 @@ function deriveBeaconId(airnode: Hex, endpointId: Hex): Hex {
   return keccak256(encodePacked(['address', 'bytes32'], [airnode, endpointId]));
 }
 
-export { createAirnodeAccount, deriveBeaconId, deriveMessageHash, signResponse };
+// =============================================================================
+// Signature verification
+//
+// Recovers the signer address from a signed beacon. Used by the cache server
+// to verify that incoming data was actually signed by the claimed airnode.
+// =============================================================================
+async function verifySignedBeacon(
+  endpointId: Hex,
+  timestamp: number,
+  data: Hex,
+  signature: Hex
+): Promise<Hex | undefined> {
+  const messageHash = deriveMessageHash(endpointId, timestamp, data);
+  const result = await go(async () => recoverAddress({ hash: hashMessage({ raw: messageHash }), signature }));
+  if (!result.success) return undefined;
+  return result.data;
+}
+
+export { createAirnodeAccount, deriveBeaconId, deriveMessageHash, signResponse, verifySignedBeacon };
 export type { SignedResponse };

@@ -248,4 +248,152 @@ describe('handleEndpointRequest', () => {
 
     expect(response.status).toBe(200);
   });
+
+  // ===========================================================================
+  // Requester-specified encoding
+  // ===========================================================================
+  test('encodes response when client sends _type and _path', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved(); // no encoding block
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(
+      makeRequest(),
+      endpointId,
+      {
+        _type: 'int256',
+        _path: '$.result',
+      },
+      deps
+    );
+    const body = (await response.json()) as SignedResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatch(/^0x/);
+    expect(body.signature).toMatch(/^0x/);
+    // Should NOT have rawData — it's an encoded response
+    expect('rawData' in body).toBe(false);
+  });
+
+  test('applies _times multiplier from request params', async () => {
+    mockFetchResponse({ result: 1.5 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(
+      makeRequest(),
+      endpointId,
+      {
+        _type: 'int256',
+        _path: '$.result',
+        _times: '1000',
+      },
+      deps
+    );
+    const body = (await response.json()) as SignedResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatch(/^0x/);
+  });
+
+  test('returns 400 when _type is provided without _path', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'int256' }, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('_type');
+    expect(body.error).toContain('_path');
+  });
+
+  test('returns 400 when _path is provided without _type', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _path: '$.result' }, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('_type');
+  });
+
+  test('operator-fixed encoding takes precedence over request params', async () => {
+    mockFetchResponse({ result: 42, other: 99 });
+    const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    // Client tries to override with _path pointing to $.other — should be ignored
+    const response = await handleEndpointRequest(
+      makeRequest(),
+      endpointId,
+      {
+        _type: 'uint256',
+        _path: '$.other',
+      },
+      deps
+    );
+    const body = (await response.json()) as SignedResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatch(/^0x/);
+  });
+
+  test('returns raw response when no encoding and no reserved params', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as RawResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.rawData).toEqual({ price: 3000 });
+  });
+
+  test('partial encoding: operator sets type, requester provides _path', async () => {
+    mockFetchResponse({ result: 42, other: 99 });
+    // Operator fixes type but not path — requester chooses what to extract
+    const resolved = makeResolved({}, { encoding: { type: 'int256' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _path: '$.result' }, deps);
+    const body = (await response.json()) as SignedResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatch(/^0x/);
+  });
+
+  test('partial encoding: returns 400 when merged result is incomplete', async () => {
+    mockFetchResponse({ result: 42 });
+    // Operator sets only times — neither type nor path
+    const resolved = makeResolved({}, { encoding: { times: '1000' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'int256' }, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('_type');
+    expect(body.error).toContain('_path');
+  });
 });

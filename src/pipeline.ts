@@ -10,7 +10,7 @@ import type { ResolvedEndpoint } from './endpoint';
 import { logger, runWithContext } from './logger';
 import type { PluginRegistry } from './plugins';
 import { signResponse } from './sign';
-import type { ClientAuth } from './types';
+import type { ClientAuth, Encoding } from './types';
 
 // =============================================================================
 // Types
@@ -121,6 +121,44 @@ async function buildRawResponse(
 }
 
 // =============================================================================
+// Requester-specified encoding
+//
+// Clients can pass _type, _path, and _times in their request parameters to
+// control encoding. Three modes:
+//
+// 1. Operator-fixed: encoding block has type+path. Requester params ignored.
+// 2. Partial: encoding block has some fields (e.g. type only). Requester
+//    fills in the rest. Operator fields take precedence.
+// 3. Requester-only: no encoding block. Requester provides _type+_path.
+//
+// If the merged result has neither type nor path, raw mode is used. If it
+// has one but not the other, return 400.
+// =============================================================================
+const RESERVED_PARAM_TYPE = '_type';
+const RESERVED_PARAM_PATH = '_path';
+const RESERVED_PARAM_TIMES = '_times';
+
+interface ResolvedEncoding {
+  readonly type: string;
+  readonly path: string;
+  readonly times?: string;
+}
+
+function resolveEncoding(
+  configEncoding: Encoding | undefined,
+  parameters: Record<string, string>
+): ResolvedEncoding | 'invalid' | undefined {
+  const type = configEncoding?.type ?? parameters[RESERVED_PARAM_TYPE];
+  const path = configEncoding?.path ?? parameters[RESERVED_PARAM_PATH];
+  const times = configEncoding?.times ?? parameters[RESERVED_PARAM_TIMES];
+
+  if (!type && !path) return undefined;
+  if (!type || !path) return 'invalid';
+
+  return times ? { type, path, times } : { type, path };
+}
+
+// =============================================================================
 // API call pipeline
 // =============================================================================
 async function executeApiCall(
@@ -161,8 +199,14 @@ async function executeApiCall(
 
   const apiResponse = afterResult.response;
 
-  if (resolved.endpoint.encoding) {
-    const encodedData = processResponse(apiResponse.data, resolved.endpoint.encoding);
+  // Resolve encoding: merge operator config with requester params (operator takes precedence)
+  const encoding = resolveEncoding(resolved.endpoint.encoding, resolvedParameters);
+  if (encoding === 'invalid') {
+    return jsonResponse({ error: 'Both _type and _path are required for encoding' }, 400);
+  }
+
+  if (encoding) {
+    const encodedData = processResponse(apiResponse.data, encoding);
 
     const signResult = await deps.plugins.callBeforeSign({
       endpointId,

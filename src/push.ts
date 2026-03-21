@@ -6,6 +6,7 @@ import { processResponse } from './api/process';
 import type { ResolvedEndpoint } from './endpoint';
 import { logger } from './logger';
 import { deriveBeaconId, signResponse } from './sign';
+import type { Push } from './types';
 
 // =============================================================================
 // Types
@@ -61,10 +62,12 @@ async function updateBeacon(
 ): Promise<SignedBeaconData | undefined> {
   const { api, endpoint } = resolved;
 
-  if (!endpoint.encoding) {
-    logger.warn(`Push endpoint ${api.name}/${endpoint.name} has no encoding — skipping`);
+  if (!endpoint.encoding || !endpoint.encoding.type || !endpoint.encoding.path) {
+    logger.warn(`Push endpoint ${api.name}/${endpoint.name} has no complete encoding (type+path) — skipping`);
     return undefined;
   }
+
+  const encoding = { type: endpoint.encoding.type, path: endpoint.encoding.path, times: endpoint.encoding.times };
 
   // Resolve fixed/default parameters (no client parameters for push)
   const parameters: Record<string, string> = {};
@@ -75,7 +78,7 @@ async function updateBeacon(
     return undefined;
   }
 
-  const encodedData = processResponse(apiResult.data.data, endpoint.encoding);
+  const encodedData = processResponse(apiResult.data.data, encoding);
   const timestamp = Math.floor(Date.now() / 1000);
   const signed = await signResponse(deps.account, endpointId, timestamp, encodedData);
   const beaconId = deriveBeaconId(deps.airnode, endpointId);
@@ -94,6 +97,40 @@ async function updateBeacon(
 }
 
 // =============================================================================
+// Push to external cache servers
+//
+// Retries up to 2 times with 1s static delay. Safe because the cache server's
+// setIfNewer is idempotent — re-sending the same signed beacon is a no-op.
+// Throws on non-ok HTTP status so go() retries handle both network errors and
+// server errors (e.g. 503).
+// =============================================================================
+const PUSH_RETRY_OPTIONS = { retries: 2, delay: { type: 'static' as const, delayMs: 1000 } };
+
+async function pushToTarget(url: string, authToken: string, body: string): Promise<void> {
+  const result = await go(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body,
+    });
+    if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+    return response;
+  }, PUSH_RETRY_OPTIONS);
+
+  if (!result.success) {
+    logger.warn(`Push to ${url} failed after 3 attempts: ${result.error.message}`);
+  }
+}
+
+async function pushToTargets(beacon: SignedBeaconData, targets: NonNullable<Push['targets']>): Promise<void> {
+  const body = JSON.stringify(beacon);
+  await Promise.allSettled(targets.map((target) => pushToTarget(target.url, target.authToken, body)));
+}
+
+// =============================================================================
 // Push loop
 // =============================================================================
 function startPushLoop(deps: PushDependencies): PushHandle {
@@ -107,6 +144,7 @@ function startPushLoop(deps: PushDependencies): PushHandle {
 
     const { api, endpoint } = resolved;
     const beaconId = deriveBeaconId(deps.airnode, endpointId);
+    const { targets } = pushConfig;
 
     logger.info(
       `Push loop started: ${api.name}/${endpoint.name} every ${String(pushConfig.interval)}ms (beacon ${beaconId.slice(0, 10)}...)`
@@ -114,7 +152,9 @@ function startPushLoop(deps: PushDependencies): PushHandle {
 
     const runUpdate = (): void => {
       void updateBeacon(endpointId, resolved, deps).then((result) => {
-        if (result) store.set(beaconId, result);
+        if (!result) return result;
+        store.set(beaconId, result);
+        if (targets && targets.length > 0) void pushToTargets(result, targets);
         return result;
       });
     };
