@@ -48,9 +48,9 @@ describe('S13 — Plugin hooks — onBeforeApiCall / onAfterApiCall', () => {
     const body = (await response.json()) as { data: string };
 
     expect(response.status).toBe(200);
-    // 99.9 * 100 = 9990 as int256 → 0x...270e (9990 in hex)
+    // 99.9 * 100 = 9990 as int256 → 0x...2706 (9990 in hex)
     // The mock returns 22.5 which would encode to 2250 (0x...08ca). The plugin overrides to 99.9.
-    expect(body.data).toContain('270e');
+    expect(body.data).toContain('2706');
   });
 
   test('plugin returning undefined passes through', async () => {
