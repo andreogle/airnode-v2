@@ -396,4 +396,36 @@ describe('handleEndpointRequest', () => {
     expect(body.error).toContain('_type');
     expect(body.error).toContain('_path');
   });
+
+  // ===========================================================================
+  // Empty / 204 responses
+  // ===========================================================================
+  test('empty upstream response returns signed null in raw mode', async () => {
+    fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
+    const resolved = makeResolved(); // no encoding — raw mode
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as RawResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.rawData).toBeNull();
+    expect(body.signature).toMatch(/^0x/);
+  });
+
+  test('empty upstream response with encoding returns 502', async () => {
+    fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
+    const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe('API returned no data to encode');
+  });
 });

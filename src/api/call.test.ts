@@ -329,4 +329,28 @@ describe('callApi', () => {
     expect((options.headers as Record<string, string>)['X-Request-Id']).toBe('req-001');
     expect(options.body).toBe(JSON.stringify({ amount: '1000' }));
   });
+
+  test('returns null data for empty response body (204 No Content)', async () => {
+    fetchMock.mockResolvedValue({
+      text: () => Promise.resolve(''),
+      status: 204,
+    });
+
+    const result = await callApi(makeApi(), makeEndpoint(), {});
+
+    expect(result.status).toBe(204);
+    expect(result.data).toBeUndefined();
+  });
+
+  test('returns null data for whitespace-only response body', async () => {
+    fetchMock.mockResolvedValue({
+      text: () => Promise.resolve('  \n  '),
+      status: 200,
+    });
+
+    const result = await callApi(makeApi(), makeEndpoint(), {});
+
+    expect(result.status).toBe(200);
+    expect(result.data).toBeUndefined();
+  });
 });

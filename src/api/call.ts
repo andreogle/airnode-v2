@@ -82,6 +82,12 @@ async function callApi(
   });
 
   const text = await response.text();
+
+  // Empty body (e.g. 204 No Content) — return undefined data, let the pipeline decide
+  if (text.trim() === '') {
+    return { data: undefined, status: response.status };
+  }
+
   const jsonResult = goSync(() => JSON.parse(text) as unknown);
   if (!jsonResult.success) {
     throw new Error(`API returned non-JSON response (status ${String(response.status)})`);

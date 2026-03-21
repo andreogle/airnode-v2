@@ -7,6 +7,7 @@ import type { AsyncRequestStore } from './async';
 import { authenticateRequest, isPaymentRequired } from './auth';
 import type { ResponseCache } from './cache';
 import type { ResolvedEndpoint } from './endpoint';
+import { isNil } from './guards';
 import { logger, runWithContext } from './logger';
 import type { PluginRegistry } from './plugins';
 import { signResponse } from './sign';
@@ -52,6 +53,7 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 function stableStringify(value: unknown): string {
+  if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
   const sortedEntries = Object.entries(value as Record<string, unknown>)
@@ -115,7 +117,7 @@ async function buildRawResponse(
     airnode: deps.airnode,
     endpointId,
     timestamp,
-    rawData,
+    rawData: rawData ?? null, // eslint-disable-line unicorn/no-null
     signature: signed.signature,
   };
 }
@@ -206,6 +208,10 @@ async function executeApiCall(
   }
 
   if (encoding) {
+    if (isNil(apiResponse.data)) {
+      return jsonResponse({ error: 'API returned no data to encode' }, 502);
+    }
+
     const encodedData = processResponse(apiResponse.data, encoding);
 
     const signResult = await deps.plugins.callBeforeSign({
