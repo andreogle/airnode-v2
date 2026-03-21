@@ -105,12 +105,13 @@ function post(
   });
 }
 
-async function setMockResponse(path: string, response: unknown): Promise<void> {
-  await fetch(`${MOCK_API_URL}/mock/set-response`, {
+async function setMockResponse(path: string, response: unknown, status = 200): Promise<void> {
+  const result = await fetch(`${MOCK_API_URL}/mock/set-response`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, response }),
+    body: JSON.stringify({ path, response, status }),
   });
+  if (!result.ok) throw new Error(`Failed to set mock response: ${String(result.status)}`);
 }
 
 interface RecordedCall {
@@ -122,11 +123,13 @@ interface RecordedCall {
 
 async function getMockCalls(): Promise<readonly RecordedCall[]> {
   const response = await fetch(`${MOCK_API_URL}/mock/calls`);
+  if (!response.ok) throw new Error(`Failed to get mock calls: ${String(response.status)}`);
   return (await response.json()) as RecordedCall[];
 }
 
 async function resetMock(): Promise<void> {
-  await fetch(`${MOCK_API_URL}/mock/reset`, { method: 'POST' });
+  const result = await fetch(`${MOCK_API_URL}/mock/reset`, { method: 'POST' });
+  if (!result.ok) throw new Error(`Failed to reset mock: ${String(result.status)}`);
 }
 
 export {

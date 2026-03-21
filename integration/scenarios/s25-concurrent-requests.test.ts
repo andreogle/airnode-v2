@@ -43,10 +43,10 @@ describe('S25 — Concurrent request handling', () => {
       expect(r.status).toBe(200);
     }
 
-    // The mock should have been called at most a few times (first request populates cache)
+    // At least one request must hit the API (cache was empty), but with caching
+    // enabled, not all 5 should hit the upstream — some should be served from cache
     const calls = await getMockCalls();
-    // With cache, subsequent requests shouldn't hit the API
-    // First request hits the API, rest may hit cache depending on timing
-    expect(calls.length).toBeLessThanOrEqual(5);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls.length).toBeLessThan(5);
   });
 });

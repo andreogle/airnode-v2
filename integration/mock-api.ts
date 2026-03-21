@@ -61,8 +61,8 @@ function startMockApi(port = 5123): MockApiHandle {
 
       // Control endpoints
       if (url.pathname === '/mock/set-response' && request.method === 'POST') {
-        const payload = JSON.parse(body) as { path: string; response: unknown };
-        overrides.set(payload.path, payload.response); // eslint-disable-line functional/immutable-data
+        const payload = JSON.parse(body) as { path: string; response: unknown; status?: number };
+        overrides.set(payload.path, payload); // eslint-disable-line functional/immutable-data
         return Response.json({ ok: true });
       }
       if (url.pathname === '/mock/calls' && request.method === 'GET') {
@@ -79,8 +79,10 @@ function startMockApi(port = 5123): MockApiHandle {
       calls.push({ url: request.url, method: request.method, headers, body }); // eslint-disable-line functional/immutable-data
 
       // Return override if set, otherwise default
-      const override = overrides.get(url.pathname);
-      if (override !== undefined) return Response.json(override);
+      const override = overrides.get(url.pathname) as { response: unknown; status?: number } | undefined;
+      if (override !== undefined) {
+        return Response.json(override.response, { status: override.status ?? 200 });
+      }
 
       return Response.json(findDefaultResponse(url.pathname));
     },
