@@ -411,6 +411,18 @@ endpoints:
     # No encoding -- raw JSON response is signed
 ```
 
+### Empty responses (204 No Content)
+
+When the upstream API returns an empty body (e.g. HTTP 204), the behavior depends on the encoding mode:
+
+- **Raw mode** — returns `rawData: null` with a valid signature. The signature covers `keccak256(toHex("null"))`,
+  providing a verifiable attestation that the API returned no content.
+- **Encoded mode** — returns HTTP 502 with `"API returned no data to encode"`. There is no value to extract via
+  JSONPath, so encoding cannot proceed.
+
+Empty JSON objects (`{}`) behave similarly — raw mode signs them as-is, while encoded mode fails if the JSONPath finds no
+value at the configured path.
+
 ### Requester-specified encoding
 
 Clients can control encoding by passing reserved parameters in their request body: `_type`, `_path`, and optionally

@@ -61,6 +61,23 @@ Raw mode is useful when the consumer needs the full JSON structure or when multi
 needed. The signature still proves the data came from this airnode, but the data itself is not ABI-encoded for on-chain
 use.
 
+### Response (empty)
+
+When the upstream API returns an empty body (e.g. HTTP 204 No Content), the behavior depends on encoding:
+
+- **Raw endpoints** return `rawData: null` with a valid signature, attesting that the API returned no content.
+- **Encoded endpoints** return HTTP 502 because there is no data to extract and encode.
+
+```json
+{
+  "airnode": "0xd1e98F3Ac20DA5e4da874723517c914a31b0e857",
+  "endpointId": "0xa1b2...endpoint-id-hash",
+  "timestamp": 1711234567,
+  "rawData": null,
+  "signature": "0x1234...65-byte-ecdsa-signature"
+}
+```
+
 ## Push
 
 Push is continuous. Airnode calls APIs on a background interval, signs the results, and stores them in an in-memory
