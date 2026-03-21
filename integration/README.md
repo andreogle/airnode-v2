@@ -291,10 +291,10 @@ logic). Full integration requires a live chain for payment verification.
 
 ### S31 — SSE streaming
 
-- Request with `Accept: text/event-stream` returns SSE stream
-- Intermediate chunks are unsigned data events with index
-- Final event includes `done: true` with the complete signed response
-- Response has `Content-Type: text/event-stream` and `Cache-Control: no-cache` headers
-- Falls back to normal response when Accept header is not set
+- Endpoint with `mode: stream` returns `Content-Type: text/event-stream`
+- Response body is a valid SSE event (`data: <json>\n\n`)
+- Event includes `done: true` with the complete signed response (airnode, endpointId, data, signature, timestamp)
+- Response has `Cache-Control: no-cache` header
+- Non-stream endpoints return normal JSON regardless of Accept header
 
-**Status:** Implemented in pipeline. Covered by unit tests.
+**Status:** Implemented (`s31-sse-streaming.test.ts`)
