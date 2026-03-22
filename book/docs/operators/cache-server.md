@@ -67,8 +67,9 @@ endpoints:
 
 ### `allowedAirnodes`
 
-Either a list of allowed airnode addresses with their push auth tokens, or `'*'` to accept any airnode (still requires a
-non-empty bearer token).
+An explicit list of airnode addresses authorized to push data, each with an auth token for bearer authentication. Every
+airnode that pushes to this cache server must be listed — there is no wildcard mode. This ensures only trusted airnodes
+can populate the store.
 
 ### `endpoints`
 

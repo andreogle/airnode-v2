@@ -191,6 +191,6 @@ const cacheEndpointSchema = z.object({
 export const cacheServerConfigSchema = z.object({
   version: z.literal('1.0'),
   server: serverSchema,
-  allowedAirnodes: z.union([z.literal('*'), z.array(allowedAirnodeSchema).min(1)]),
+  allowedAirnodes: z.array(allowedAirnodeSchema).min(1),
   endpoints: z.array(cacheEndpointSchema).min(1),
 });

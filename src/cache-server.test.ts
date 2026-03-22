@@ -297,52 +297,6 @@ describe('cache server', () => {
 });
 
 // =============================================================================
-// Wildcard allowedAirnodes
-// =============================================================================
-describe('cache server with wildcard airnodes', () => {
-  let server: CacheServerHandle;
-
-  let baseUrl: string;
-
-  beforeAll(() => {
-    server = createCacheServer({
-      config: makeConfig({
-        allowedAirnodes: '*',
-        endpoints: [{ path: '/data', delaySeconds: 0, auth: { type: 'free' } }],
-      } as Partial<CacheServerConfig>),
-    });
-    baseUrl = `http://${server.hostname}:${String(server.port)}`;
-  });
-
-  afterAll(() => {
-    server.stop();
-  });
-
-  test('accepts any airnode when allowedAirnodes is wildcard', async () => {
-    const beacon = await makeSignedBeacon();
-    const response = await postBeacons(baseUrl, TEST_AIRNODE, beacon, 'any-token');
-    const body = (await response.json()) as { count: number };
-
-    expect(response.status).toBe(200);
-    expect(body.count).toBeGreaterThanOrEqual(0);
-  });
-
-  test('rejects empty bearer token even in wildcard mode', async () => {
-    const beacon = await makeSignedBeacon();
-    const response = await fetch(`${baseUrl}/beacons/${TEST_AIRNODE}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ',
-      },
-      body: JSON.stringify(beacon),
-    });
-
-    expect(response.status).toBe(401);
-  });
-});
-
-// =============================================================================
 // Rate limiting
 // =============================================================================
 describe('cache server with rate limiting', () => {

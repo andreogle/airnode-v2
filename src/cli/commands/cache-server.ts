@@ -35,7 +35,7 @@ export const cacheServer = new Command('cache-server')
       endpoints: config.endpoints.length,
     });
 
-    const airnodeCount = config.allowedAirnodes === '*' ? 'any' : String(config.allowedAirnodes.length);
+    const airnodeCount = String(config.allowedAirnodes.length);
     logger.info(`Config loaded: ${airnodeCount} allowed airnode(s), ${String(config.endpoints.length)} endpoint(s)`);
 
     const server = createCacheServer({ config });

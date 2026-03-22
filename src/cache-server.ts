@@ -70,9 +70,9 @@ function createBeaconIngestionStore(): BeaconIngestionStore {
 // =============================================================================
 // Push authentication (bearer token from airnode → cache server)
 //
-// Wildcard mode ('*') still requires a non-empty bearer token as a deliberate
-// intent marker — without it, the ingestion pipeline is exposed to
-// unauthenticated traffic.
+// Every push request must come from an explicitly allowed airnode address
+// with a matching auth token. There is no wildcard mode — the cache server
+// operator must declare which airnodes are trusted.
 // =============================================================================
 function authenticatePush(
   request: Request,
@@ -84,8 +84,6 @@ function authenticatePush(
 
   const token = authHeader.slice(7);
   if (token.length === 0) return 'Empty bearer token';
-
-  if (allowedAirnodes === '*') return undefined;
 
   const allowed = allowedAirnodes.find((a) => a.address.toLowerCase() === airnodeAddress.toLowerCase());
   if (!allowed) return 'Airnode not in allowedAirnodes list';
