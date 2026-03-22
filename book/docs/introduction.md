@@ -10,6 +10,40 @@ provider's private key (EIP-191), and returns the signed data. Clients can verif
 signed response on-chain. There is no chain scanning, no coordinator cycle, no database -- Airnode is a stateless HTTP
 service that API providers run alongside their existing APIs.
 
+## Why Run an Airnode
+
+If you operate an API, running an Airnode lets you serve your data to smart contracts and crypto-native clients without
+changing your existing infrastructure. Your API stays exactly as it is — Airnode sits in front of it as a signing proxy.
+
+- **Monetize your API on-chain.** Smart contracts can't call HTTP APIs directly. Airnode bridges this gap. Developers pay
+  per-request via API keys, NFT access passes, or x402 HTTP-native payments — you choose the model.
+- **No blockchain expertise required.** You don't run a node, manage wallets, or write smart contracts. Airnode is a
+  stateless HTTP server that signs responses. The on-chain verification contracts are already deployed.
+- **Your data, your key.** Every response is signed with your private key, creating a verifiable attestation:
+  "this API provider, at this time, received this data from this API." Your reputation is tied to your signature.
+- **Zero infrastructure change.** Airnode calls your existing API endpoints. You don't need to modify your API, add new
+  routes, or change your data format. Point Airnode at your API URL and configure which endpoints to serve.
+- **Data feed revenue.** Push mode turns any API into a continuous data feed. Price feeds, weather data, sports scores —
+  anything that updates regularly can be pushed to on-chain consumers who pay for access.
+
+## Why Request Data from an Airnode
+
+If you're building a smart contract, dApp, or AI agent that needs real-world data, Airnode provides it with
+cryptographic guarantees.
+
+- **First-party data.** The API provider runs the Airnode and signs the data directly. No intermediary chain of oracles
+  repackaging data — the signature traces back to the source. You can verify the provider's identity via DNS (ERC-7529).
+- **Verifiable off-chain and on-chain.** Every response includes an EIP-191 signature. Verify it locally in your
+  application or submit it to an on-chain verifier contract. The same signature works in both contexts.
+- **Standard HTTP interface.** No proprietary SDKs or oracle-specific protocols. Send a `POST` request, get signed JSON
+  back. Any HTTP client works — `curl`, `fetch`, Axios, or your smart contract's off-chain component.
+- **Flexible encoding.** Get raw JSON for off-chain use, or ABI-encoded data ready for on-chain submission. You can even
+  choose the encoding at request time with `_type`, `_path`, and `_times` parameters.
+- **Multiple access models.** Free endpoints for public data, API keys for authenticated access, NFT-gated endpoints for
+  token holders, or pay-per-request via x402. Use whatever fits your use case.
+- **Aggregation and quorum.** Multiple independent airnodes serving the same API produce the same endpoint ID. Collect
+  signatures from several providers and submit them to a quorum verifier — no single provider can fabricate data.
+
 ## Core Flow
 
 Every request follows the same path:
@@ -104,7 +138,6 @@ apis:
             required: true
           - name: vs_currencies
             in: query
-            required: true
             default: usd
         encoding:
           type: int256
