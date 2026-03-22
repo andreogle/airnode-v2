@@ -85,20 +85,27 @@ No cache server or external infrastructure required. The airnode is the entire b
 
 ## Multi-operator setup
 
-Multiple independent airnodes serve the same API data. A cache server aggregates their signed responses. Relayers read
-from the cache server and submit on-chain with quorum verification.
+Multiple independent first-party airnodes — each operated by a different API provider — serve comparable data. A cache
+server aggregates their signed responses. Relayers read from the cache server and submit on-chain with quorum
+verification.
 
 ```
-Airnode A ──┐
-Airnode B ──┼──▶ Cache Server ──▶ Relayer ──▶ On-chain Contract
-Airnode C ──┘
+Airnode A (Provider X) ──┐
+Airnode B (Provider Y) ──┼──▶ Cache Server ──▶ Relayer ──▶ On-chain Contract
+Airnode C (Provider Z) ──┘
 ```
 
 Use this when:
 
-- You need redundancy across independent operators.
-- On-chain consumers require data signed by multiple sources (beacon sets / quorum).
+- You need redundancy across independent API providers.
+- On-chain consumers require data signed by multiple first-party sources (beacon sets / quorum).
 - You want to decouple airnode operators from gas payment and on-chain submission.
 
 Each airnode produces its own beacon ID for the same endpoint. The cache server collects all of them. A relayer can
 aggregate them into a beacon set on-chain using median aggregation.
+
+The trust value of a multi-operator setup comes from **independence at the source level**. Multiple first-party airnodes
+from different API providers (e.g., CoinGecko, CoinMarketCap, CryptoCompare each running their own airnode) provide
+genuine redundancy — an attacker would need to compromise multiple independent data sources. Multiple third-party
+operators calling the same API do not provide this property, since they all depend on the same upstream source and
+introduce the same intermediary trust assumptions.

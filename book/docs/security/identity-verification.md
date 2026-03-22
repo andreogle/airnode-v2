@@ -118,9 +118,21 @@ who sets the TXT record is claiming: "I control this domain and I operate this a
 - **It composes with existing trust**: if you already trust CoinGecko's API, verifying that their airnode address
   resolves to their domain extends that trust to their on-chain oracle.
 
+### First-party verification
+
+DNS identity verification is most meaningful for **first-party airnodes** — where the API provider operates the node.
+When CoinGecko sets a DNS TXT record associating their airnode address with `api.coingecko.com`, consumers can verify
+that the data signer is the same entity that controls the data source. This is the strongest trust configuration.
+
+A third-party operator can only verify their own domain. If `oracle-service.example.com` claims to serve CoinGecko data,
+DNS verification proves the operator controls `oracle-service.example.com` — not that CoinGecko authorized them or that
+the data is genuine. Consumers should always look for DNS verification against the **API provider's domain**, not the
+operator's domain.
+
 What identity verification does **not** prove:
 
-- That the airnode is serving correct data (the operator is still trusted to be honest).
+- That the airnode is serving correct data (with first-party operation, the provider's reputation is at stake; with
+  third-party operation, this is unverifiable).
 - That the configuration hasn't changed (the operator can update their config at any time).
 - That the DNS record is current (records can be removed, so verify close to integration time).
 

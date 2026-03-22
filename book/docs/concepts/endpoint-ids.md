@@ -92,12 +92,17 @@ These fields do not affect the endpoint ID:
 
 ### Cross-operator comparability
 
-When two independent operators serve the same API endpoint with the same parameters and encoding, they produce the same
-endpoint ID. On-chain contracts can verify that data from different airnodes refers to the same underlying data point
-without trusting a centralized registry.
+When two independent first-party operators serve the same API endpoint with the same parameters and encoding, they
+produce the same endpoint ID. On-chain contracts can verify that data from different airnodes refers to the same
+underlying data point without trusting a centralized registry.
 
-This is how beacon aggregation works: multiple airnodes produce beacons for the same endpoint ID, and a data feed
-contract aggregates them into a single value. The endpoint ID is the common key.
+This is how beacon aggregation works: multiple first-party airnodes produce beacons for the same endpoint ID, and a data
+feed contract aggregates them into a single value. The endpoint ID is the common key.
+
+Note that a matching endpoint ID proves two operators committed to the same API specification — it does not prove they
+are actually calling it. With first-party airnodes (where the API provider operates the node), this is inherently
+trustworthy. With third-party operators, a matching endpoint ID provides weaker guarantees because the operator could
+fabricate data while claiming to serve the specified API.
 
 ### TLS proof verification
 

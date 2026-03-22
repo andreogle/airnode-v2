@@ -32,7 +32,8 @@ If you're building a smart contract, dApp, or AI agent that needs real-world dat
 cryptographic guarantees.
 
 - **First-party data.** The API provider runs the Airnode and signs the data directly. No intermediary chain of oracles
-  repackaging data — the signature traces back to the source. You can verify the provider's identity via DNS (ERC-7529).
+  repackaging data — the signature traces back to the source. Verify that the airnode is operated by the API provider
+  using [DNS identity verification](/docs/security/identity-verification) (ERC-7529) before trusting its data.
 - **Verifiable off-chain and on-chain.** Every response includes an EIP-191 signature. Verify it locally in your
   application or submit it to an on-chain verifier contract. The same signature works in both contexts.
 - **Standard HTTP interface.** No proprietary SDKs or oracle-specific protocols. Send a `POST` request, get signed JSON
@@ -41,8 +42,9 @@ cryptographic guarantees.
   choose the encoding at request time with `_type`, `_path`, and `_times` parameters.
 - **Multiple access models.** Free endpoints for public data, API keys for authenticated access, NFT-gated endpoints for
   token holders, or pay-per-request via x402. Use whatever fits your use case.
-- **Aggregation and quorum.** Multiple independent airnodes serving the same API produce the same endpoint ID. Collect
-  signatures from several providers and submit them to a quorum verifier — no single provider can fabricate data.
+- **Aggregation and quorum.** Multiple first-party airnodes from different API providers serving comparable data produce
+  the same endpoint ID. Collect signatures from several providers and submit them to a quorum verifier — no single
+  provider can fabricate data.
 
 ## Core Flow
 

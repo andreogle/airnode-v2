@@ -7,6 +7,37 @@ sidebar_position: 1
 
 Understanding what you are trusting when you consume data from an airnode.
 
+## First-party oracle model
+
+Airnode is designed around the **first-party oracle** principle: the entity that operates the API also operates the
+airnode. When CoinGecko runs an airnode serving CoinGecko's API, the signature on every response traces directly back to
+the data source. There is no intermediary oracle network, no third-party relaying the data, no trust gap between the
+signer and the source.
+
+This is important because it means the trust relationship is the same on-chain as it is off-chain. If you already trust
+CoinGecko's API for off-chain use, an airnode operated by CoinGecko extends that exact same trust on-chain. The
+signature is the API provider's signature.
+
+### Why first-party matters
+
+With a third-party oracle (someone other than the API provider running the node), consumers must trust that the operator:
+
+- Is actually calling the API they claim and not fabricating or caching responses
+- Has legitimate access to the API and is not violating terms of service
+- Is not modifying, delaying, or selectively omitting data
+- Will keep the node running and the API credentials current
+
+None of these properties can be verified on-chain today. The endpoint ID commits to *what* API should be called, but it
+does not prove the operator is actually calling it. DNS identity verification proves *who* controls a domain, but a
+third-party operator would only prove their own domain -- not the API provider's.
+
+**First-party operation eliminates this entire class of trust assumptions.** The API provider has no incentive to
+fabricate responses to their own API, already has legitimate access, and controls the infrastructure end-to-end.
+
+Consumers should prefer airnodes operated by the API provider and verify this via
+[DNS identity verification](/docs/security/identity-verification). If an airnode's identity cannot be traced to the API
+provider's domain, treat it with the same skepticism you would apply to any unverified data source.
+
 ## What you are trusting
 
 ### 1. The airnode operator is calling the API they claim
@@ -14,7 +45,8 @@ Understanding what you are trusting when you consume data from an airnode.
 The endpoint ID is a specification-bound hash that commits to the API URL, path, method, parameters, and encoding rules.
 Two independent operators serving the same API with the same config produce the same endpoint ID. This is a verifiable
 commitment -- you can inspect the config and confirm the endpoint ID matches -- but it is not proof that the operator is
-actually running that config. Until TLS proofs mature, you trust the operator to be honest.
+actually running that config. With a first-party airnode, this is not a concern: the API provider has no reason to
+misrepresent calls to their own API. Until TLS proofs mature, third-party operators require out-of-band trust.
 
 ### 2. The airnode's private key is secure
 
@@ -28,8 +60,8 @@ The first-party trust model means the API provider is already trusted. If you us
 trust CoinGecko. Airnode extends that trust on-chain -- the data is signed by the API provider's key, not by a
 third-party oracle network.
 
-For higher assurance, use a quorum of multiple independent airnodes serving the same endpoint ID. An attacker would need
-to compromise a majority to manipulate the result.
+For higher assurance, use a quorum of multiple independent first-party airnodes -- each operated by a different API
+provider serving comparable data. An attacker would need to compromise a majority of providers to manipulate the result.
 
 ## How trust is established
 
@@ -51,11 +83,17 @@ Multiple independent airnodes can serve the same endpoint ID. On-chain, you can 
 sets (median of N independent values via AirnodeDataFeed). Off-chain, your client can query multiple airnodes and
 compare results. No single operator can manipulate the aggregated feed.
 
-### Future: TLS proofs
+### Future: TLS proofs and third-party trust
 
 TLS Notary (or zkTLS) can produce cryptographic proof that the data came from a specific HTTPS endpoint. This would
 eliminate the need to trust the operator's honesty -- the proof shows the data was not fabricated. When TLS proof
 technology matures, it can be integrated as a plugin or proof mode without changing the core architecture.
+
+TLS proofs are particularly significant for third-party operators. Today, a third-party operator cannot prove they are
+actually calling the API they claim. With TLS proofs, the cryptographic proof itself demonstrates the data came from
+the API provider's HTTPS endpoint -- regardless of who operates the airnode. This could make third-party operation
+viable for use cases where the API provider does not want to run infrastructure, while still preserving verifiable
+data provenance. Until then, first-party operation remains the only trust model where the data source is guaranteed.
 
 ### Future: TEE attestation
 

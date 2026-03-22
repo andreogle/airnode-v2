@@ -8,6 +8,16 @@ sidebar_label: Getting Started
 
 Set up and run an Airnode in under 5 minutes.
 
+## Who should run an Airnode
+
+Airnode is designed for **API providers** to serve their own data on-chain. You should be the API provider or an
+authorized representative of the API provider. This is what makes Airnode a first-party oracle — the entity that
+controls the data source also controls the signing key.
+
+If you are not the API provider, the trust properties change fundamentally. Consumers cannot verify that you are
+honestly relaying data from the upstream API, and DNS identity verification will only prove your domain — not the API
+provider's. See the [Trust Model](/docs/security/trust-model) for details.
+
 ## 1. Generate a key
 
 ```bash

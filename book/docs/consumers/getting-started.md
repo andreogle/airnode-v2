@@ -23,12 +23,19 @@ curl http://airnode.example.com/health
 
 Save the `airnode` address. You need it to verify signatures.
 
-## Step 2: Find your endpoint ID
+## Step 2: Verify the operator
+
+Before trusting an airnode, verify that it is operated by the API provider — not a third party. Use
+[DNS identity verification](/docs/security/identity-verification) (ERC-7529) to confirm the airnode address is
+associated with the API provider's domain. A first-party airnode (operated by the data source) provides the strongest
+trust guarantees. See the [Trust Model](/docs/security/trust-model) for why this matters.
+
+## Step 3: Find your endpoint ID
 
 The airnode operator provides the endpoint ID for each API route. It is a `bytes32` hash derived from the endpoint's OIS
 specification. The operator's documentation lists available endpoint IDs and their expected parameters.
 
-## Step 3: Make a request
+## Step 4: Make a request
 
 Call the endpoint with parameters in the JSON body.
 
@@ -63,7 +70,7 @@ If the endpoint has no encoding configured, you get `rawData` instead of `data`:
 }
 ```
 
-## Step 4: Verify the signature
+## Step 5: Verify the signature
 
 Recover the signer address and compare it to the airnode address from `/health`.
 
@@ -99,7 +106,7 @@ const rawDataHash = keccak(toBytes(JSON.stringify(rawData)));
 // Use rawDataHash in place of `data` in the encodePacked call above
 ```
 
-## Step 5: Decode the data
+## Step 6: Decode the data
 
 Encoded responses contain ABI-encoded values. Decode them with viem.
 
@@ -120,7 +127,7 @@ Raw responses need no decoding. Access the JSON directly:
 const ethPrice = rawData.ethereum.usd; // 3842.17
 ```
 
-## Step 6: Submit on-chain (optional)
+## Step 7: Submit on-chain (optional)
 
 Pass the signed data to an on-chain verifier contract. See [On-Chain Integration](/docs/consumers/on-chain) for contract
 examples using AirnodeVerifier (pull) and AirnodeDataFeed (push).
