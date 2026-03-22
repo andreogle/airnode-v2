@@ -177,7 +177,7 @@ The output must be an ES module with a default export matching the `AirnodePlugi
 ## Example plugins
 
 The repository includes example plugins in
-[`examples/plugins/`](https://github.com/andreogle/airnode-v2/tree/main/examples/plugins):
+[`examples/plugins/`](https://github.com/api3dao/airnode-v2/tree/main/examples/plugins):
 
 | Plugin                 | Description                                                                   |
 | ---------------------- | ----------------------------------------------------------------------------- |

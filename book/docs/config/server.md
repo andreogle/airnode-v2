@@ -64,7 +64,7 @@ CORS headers are included on every response. The `OPTIONS` preflight handler ret
 
 - `Access-Control-Allow-Origin` -- from `cors.origins`
 - `Access-Control-Allow-Methods` -- `GET, POST, OPTIONS`
-- `Access-Control-Allow-Headers` -- `Content-Type, X-Api-Key`
+- `Access-Control-Allow-Headers` -- `Content-Type, X-Api-Key, Authorization, X-Payment-Proof`
 - `Access-Control-Max-Age` -- `86400` (24 hours)
 
 ```yaml

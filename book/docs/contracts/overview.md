@@ -49,7 +49,7 @@ The fields:
   Two independent airnodes serving the same API with the same config produce the same endpoint ID.
 - **timestamp** -- unix timestamp (seconds) of when the data was produced.
 - **data** -- ABI-encoded response. For data feeds, this is a single `int256` in 32 bytes. For the verifier, it can be
-  arbitrary bytes up to 4096.
+  arbitrary bytes up to 4096 bytes.
 
 ## Design decisions
 

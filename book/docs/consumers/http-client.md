@@ -94,10 +94,12 @@ unauthenticated requests.
 ```bash
 # Free endpoint -- no auth header needed
 curl -X POST http://airnode.example.com/endpoints/0x... \
+  -H "Content-Type: application/json" \
   -d '{"parameters":{"id":"1"}}'
 
 # API key endpoint
 curl -X POST http://airnode.example.com/endpoints/0x... \
+  -H "Content-Type: application/json" \
   -H "X-Api-Key: your-key" \
   -d '{"parameters":{"id":"1"}}'
 ```
@@ -128,7 +130,7 @@ Status transitions: `pending` → `processing` → `complete` | `failed`.
 For endpoints with `mode: stream`, the response is a Server-Sent Event:
 
 ```bash
-curl -N http://airnode.example.com/endpoints/0x... \
+curl -X POST -N http://airnode.example.com/endpoints/0x... \
   -H "Content-Type: application/json" \
   -d '{"parameters":{"ids":"bitcoin"}}'
 ```

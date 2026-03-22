@@ -22,7 +22,7 @@ settings:
 | Field     | Type     | Required | Description                                                                                 |
 | --------- | -------- | -------- | ------------------------------------------------------------------------------------------- |
 | `source`  | `string` | Yes      | Path to the plugin file (`.ts` or `.js`). Resolved relative to the config file's directory. |
-| `timeout` | `int`    | Yes      | Per-request time budget in milliseconds. Must be a positive integer.                        |
+| `timeout` | `number` | Yes      | Per-request time budget in milliseconds. Must be a positive integer.                        |
 
 ## Source resolution
 

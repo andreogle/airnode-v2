@@ -185,18 +185,18 @@ endpoints:
     description: Get the current price of a coin
 ```
 
-| Field         | Type     | Required | Default | Description                                                   |
-| ------------- | -------- | -------- | ------- | ------------------------------------------------------------- |
-| `name`        | `string` | Yes      | --      | Endpoint name. Used in logging and endpoint ID derivation.    |
-| `path`        | `string` | Yes      | --      | URL path appended to the API's `url`.                         |
-| `method`      | `string` | No       | `GET`   | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.      |
-| `mode`        | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                  |
-| `parameters`  | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).         |
-| `encoding`    | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.         |
-| `auth`        | `object` | No       | --      | Overrides API-level auth for this endpoint.                   |
-| `cache`       | `object` | No       | --      | Overrides API-level cache for this endpoint.                  |
-| `push`        | `object` | No       | --      | Background push loop configuration. See [Push](#push).        |
-| `description` | `string` | No       | --      | Human-readable description. Does not affect runtime behavior. |
+| Field         | Type     | Required | Default | Description                                                         |
+| ------------- | -------- | -------- | ------- | ------------------------------------------------------------------- |
+| `name`        | `string` | Yes      | --      | Endpoint name. Used in logging. Not part of endpoint ID derivation. |
+| `path`        | `string` | Yes      | --      | URL path appended to the API's `url`.                               |
+| `method`      | `string` | No       | `GET`   | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.            |
+| `mode`        | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                        |
+| `parameters`  | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).               |
+| `encoding`    | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.               |
+| `auth`        | `object` | No       | --      | Overrides API-level auth for this endpoint.                         |
+| `cache`       | `object` | No       | --      | Overrides API-level cache for this endpoint.                        |
+| `push`        | `object` | No       | --      | Background push loop configuration. See [Push](#push).              |
+| `description` | `string` | No       | --      | Human-readable description. Does not affect runtime behavior.       |
 
 ### `mode`
 
@@ -235,7 +235,6 @@ parameters:
     description: Coin ID (e.g. ethereum, bitcoin)
   - name: vs_currencies
     in: query
-    required: true
     default: usd
 ```
 
@@ -265,6 +264,9 @@ Resolution order:
 3. `default` -- fallback when the client provides nothing
 
 If none produce a value and `required: true`, the request fails with a validation error.
+
+A parameter cannot have both `required: true` and a `default` value. If you set a default, the parameter is implicitly
+optional — there is always a fallback value. The schema validator rejects this combination.
 
 ### Secret parameters
 
@@ -334,11 +336,9 @@ endpoints:
         fixed: generateIntegers
       - name: min
         in: body
-        required: true
         default: 0
       - name: max
         in: body
-        required: true
         default: 100
 ```
 
@@ -420,8 +420,8 @@ When the upstream API returns an empty body (e.g. HTTP 204), the behavior depend
 - **Encoded mode** — returns HTTP 502 with `"API returned no data to encode"`. There is no value to extract via
   JSONPath, so encoding cannot proceed.
 
-Empty JSON objects (`{}`) behave similarly — raw mode signs them as-is, while encoded mode fails if the JSONPath finds no
-value at the configured path.
+Empty JSON objects (`{}`) behave similarly — raw mode signs them as-is, while encoded mode fails if the JSONPath finds
+no value at the configured path.
 
 ### Requester-specified encoding
 
@@ -456,8 +456,12 @@ endpoints:
 
 If the merged result has `_type` without `_path` (or vice versa), the server returns 400.
 
-:::note Push endpoints require a complete encoding in the config (`type` + `path`). The push loop has no client
-parameters, so requester-specified encoding does not apply to push. :::
+:::note
+
+Push endpoints require a complete encoding in the config (`type` + `path`). The push loop has no client parameters, so
+requester-specified encoding does not apply to push.
+
+:::
 
 ## Push
 

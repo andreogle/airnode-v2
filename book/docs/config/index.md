@@ -22,9 +22,6 @@ version: '1.0'
 
 server:
   port: 3000
-  rateLimit:
-    window: 60000
-    max: 100
 
 settings:
   proof: none
@@ -85,7 +82,6 @@ apis:
             description: Coin ID (e.g. ethereum, bitcoin)
           - name: vs_currencies
             in: query
-            required: true
             default: usd
         encoding:
           type: int256
@@ -186,11 +182,9 @@ apis:
             fixed: generateIntegers
           - name: min
             in: body
-            required: true
             default: 0
           - name: max
             in: body
-            required: true
             default: 100
         encoding:
           type: uint256

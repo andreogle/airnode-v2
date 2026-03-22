@@ -15,12 +15,12 @@ service that API providers run alongside their existing APIs.
 If you operate an API, running an Airnode lets you serve your data to smart contracts and crypto-native clients without
 changing your existing infrastructure. Your API stays exactly as it is — Airnode sits in front of it as a signing proxy.
 
-- **Monetize your API on-chain.** Smart contracts can't call HTTP APIs directly. Airnode bridges this gap. Developers pay
-  per-request via API keys, NFT access passes, or x402 HTTP-native payments — you choose the model.
+- **Monetize your API on-chain.** Smart contracts can't call HTTP APIs directly. Airnode bridges this gap. Developers
+  pay per-request via API keys, NFT access passes, or x402 HTTP-native payments — you choose the model.
 - **No blockchain expertise required.** You don't run a node, manage wallets, or write smart contracts. Airnode is a
   stateless HTTP server that signs responses. The on-chain verification contracts are already deployed.
-- **Your data, your key.** Every response is signed with your private key, creating a verifiable attestation:
-  "this API provider, at this time, received this data from this API." Your reputation is tied to your signature.
+- **Your data, your key.** Every response is signed with your private key, creating a verifiable attestation: "this API
+  provider, at this time, received this data from this API." Your reputation is tied to your signature.
 - **Zero infrastructure change.** Airnode calls your existing API endpoints. You don't need to modify your API, add new
   routes, or change your data format. Point Airnode at your API URL and configure which endpoints to serve.
 - **Data feed revenue.** Push mode turns any API into a continuous data feed. Price feeds, weather data, sports scores —
@@ -182,7 +182,7 @@ curl http://localhost:3000/health
 ```json
 {
   "status": "ok",
-  "version": "2.0.0",
+  "version": "2.0.0-alpha.0",
   "airnode": "0x..."
 }
 ```
@@ -194,4 +194,5 @@ curl http://localhost:3000/health
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters              |
 | `GET`  | `/beacons/{beaconId}`     | Read latest push beacon data                  |
 | `GET`  | `/beacons`                | List all available beacons                    |
+| `GET`  | `/requests/{requestId}`   | Poll an async request for its result          |
 | `GET`  | `/health`                 | Health check with version and airnode address |

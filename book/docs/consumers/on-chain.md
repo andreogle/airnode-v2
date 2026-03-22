@@ -126,8 +126,9 @@ mapping.
 
 ### Data format
 
-All feeds use 18 decimals and store values as `int224`. ETH at $3000.50 is stored as `3000500000000000000000`. Values
-are packed with a `uint32` timestamp into a single storage slot.
+By convention, feeds use 18 decimals (configured via the `times` multiplier in the airnode config) and store values as
+`int224`. ETH at $3000.50 is stored as `3000500000000000000000`. Values are packed with a `uint32` timestamp into a
+single storage slot.
 
 ### When to use push
 

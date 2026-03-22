@@ -16,6 +16,7 @@ starts, loads the config, and serves requests.
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters in the request body |
 | `GET`  | `/beacons/{beaconId}`     | Read the latest signed beacon data (push)            |
 | `GET`  | `/beacons`                | List all available beacons with their latest values  |
+| `GET`  | `/requests/{requestId}`   | Poll an async request for its result                 |
 | `GET`  | `/health`                 | Health check returning version and airnode address   |
 
 CORS preflight (`OPTIONS`) is handled automatically. Rate limiting uses a token bucket per client IP, configured via
@@ -29,8 +30,8 @@ giving plugins the ability to observe, filter, or modify data at each stage.
 1. **Resolve endpoint** -- look up the endpoint by ID in the endpoint map. Returns 404 if not found.
 2. **Plugin: onHttpRequest** -- plugins can reject requests early (IP filtering, custom auth). A rejected request never
    reaches the API.
-3. **Authenticate** -- verify client credentials. Either free access (no check) or API key via `X-Api-Key` header,
-   matched against the configured key list.
+3. **Authenticate** -- verify client credentials based on the configured method: free access (no check), API key via
+   `X-Api-Key` header, NFT key via ERC-721 ownership verification, or x402 payment via on-chain transfer.
 4. **Validate parameters** -- check that all required parameters (those without `fixed` or `default` values) are present
    in the request body.
 5. **Check cache** -- if the endpoint has cache config, return a cached response when the TTL has not expired.
