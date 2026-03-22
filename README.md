@@ -1,146 +1,90 @@
 # Airnode v2
 
-> **⚠️ EXPERIMENTAL — DO NOT USE IN PRODUCTION ⚠️**
->
-> This project is under active development. The code has **not been audited**. The contracts, signature formats, and
-> APIs are subject to breaking changes without notice. **Do not use this software for production workloads, mainnet
-> deployments, or any system where security or financial loss is a concern.**
+> **This project is under active development. The code has not been audited. Signature formats, APIs, and contracts are
+> subject to breaking changes. Do not use for production workloads or mainnet deployments.**
 
-An HTTP server that signs API responses. API providers run it alongside their existing APIs. Clients receive signed data
-and can optionally submit it on-chain.
+Sign API responses with your private key and serve them over HTTP. Clients verify signatures off-chain or submit them to
+on-chain contracts. No chain scanning, no database, no coordinator — a stateless HTTP service that sits in front of your
+existing API.
 
-## What it does
+## How it works
 
 ```
-Client → HTTP request → Airnode → upstream API → sign response → HTTP response
+Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
+                    │                    │
+                    │◀───JSON response───┘
+                    │
+                    ├─ Extract value (JSONPath)
+                    ├─ ABI-encode (int256, uint256, ...)
+                    ├─ Sign (EIP-191)
+                    │
+                    ▼
+              Signed response ──▶ verify off-chain or submit on-chain
 ```
 
-The airnode never touches the chain. It calls upstream APIs, signs the responses with the operator's private key
-(EIP-191), and returns the signed data. Clients can verify signatures off-chain or submit them to on-chain contracts.
+**Pull** — client sends `POST /endpoints/{endpointId}`, gets a signed response back.
 
-Two delivery paths:
-
-- **Pull** — client sends `POST /endpoints/{endpointId}`, gets a signed response back immediately
-- **Push** — server calls APIs on a timer, stores signed data, relayers poll `GET /beacons/{beaconId}` and push on-chain
-
-## Prerequisites
-
-| Tool                                  | Version | Install                                                     |
-| ------------------------------------- | ------- | ----------------------------------------------------------- |
-| [Bun](https://bun.sh)                 | latest  | `curl -fsSL https://bun.sh/install \| bash`                 |
-| [Foundry](https://book.getfoundry.sh) | >= 1.0  | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
-| [uv](https://docs.astral.sh/uv/)      | latest  | `curl -LsSf https://astral.sh/uv/install.sh \| sh`          |
-
-Python tools (Vyper, Slither, Halmos) are installed via [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv tool install vyper
-uv tool install slither-analyzer
-uv tool install halmos
-```
+**Push** — server calls APIs on a timer, signs the data, stores it as beacons. Relayers poll `GET /beacons/{beaconId}`
+and submit on-chain.
 
 ## Quick start
 
 ```bash
 bun install
-bun src/cli/index.ts generate-key
+bun airnode generate-key           # prints private key + address
 cp examples/configs/minimal/config.yaml config.yaml
 cp examples/configs/minimal/.env.example .env
-# Edit .env with your generated private key
+# paste your private key into .env
 bun run dev
 ```
 
-Test it:
+Make a request (replace `{endpointId}` with the ID printed at startup):
 
 ```bash
-curl http://localhost:3000/health
+curl -X POST http://localhost:3000/endpoints/{endpointId} \
+  -H "Content-Type: application/json" \
+  -d '{"parameters":{"ids":"ethereum","vs_currencies":"usd"}}'
 ```
 
-## Scripts
-
-| Script                     | Description                              |
-| -------------------------- | ---------------------------------------- |
-| `bun run dev`              | Start the server with `--watch`          |
-| `bun test`                 | Run unit tests (src/)                    |
-| `bun run test:integration` | Run integration tests (sequential)       |
-| `bun run test:contracts`   | Run contract tests (Foundry)             |
-| `bun run fmt`              | Format (Prettier) and lint-fix (ESLint)  |
-| `bun run lint`             | Check formatting and linting             |
-| `bun run lint:slither`     | Run Slither static analysis on contracts |
-
-## Build
-
-Compile to a standalone binary:
-
-```bash
-bun run build:osx        # macOS ARM64
-bun run build:linux-x64  # Linux x86_64
-
-./dist/airnode start                          # Uses config.yaml + .env
-./dist/airnode start -c /path/to/config.yaml  # Custom config path
+```json
+{
+  "airnode": "0x...",
+  "endpointId": "0x...",
+  "timestamp": 1711234567,
+  "data": "0x0000000000000000000000000000000000000000000000a2a15d09519be00000",
+  "signature": "0x..."
+}
 ```
 
-## Project structure
+## What you can do
 
-```
-src/
-  cli/            CLI entry point and commands
-  config/         Zod schema, YAML parser, validator, env interpolation
-  api/            HTTP call building and response processing
-  server.ts       Bun.serve HTTP server (routes, CORS, rate limiting)
-  pipeline.ts     Request processing pipeline (auth → validate → cache → API call → sign)
-  push.ts         Background push loop and beacon store
-  auth.ts         Client-facing authentication (free / apiKey)
-  cache.ts        In-memory TTL response cache with periodic sweep
-  sign.ts         EIP-191 signing, request ID and beacon ID derivation
-  endpoint.ts     Specification-bound endpoint ID derivation
-  plugins.ts      Plugin loader, hook registry, budget tracking
-  identity.ts     DNS identity verification (ERC-7529)
-  logger.ts       Structured logger with AsyncLocalStorage context
-  types.ts        Shared Zod-inferred types
-contracts/        Vyper contracts and Foundry tests
-examples/
-  configs/        Reference configurations (complete + minimal)
-  plugins/        Example plugins (heartbeat, logger, slack-alerts, encrypted-channel)
-integration/      Integration tests (22 scenario files)
-book/             Documentation site (Docusaurus)
-```
+- **Sign any API response** with your key — turn untrusted data into a verifiable attestation
+- **Serve data to smart contracts** — ABI-encoded responses ready for on-chain submission
+- **Run continuous data feeds** — push signed prices, weather, or any updating data on a timer
+- **Monetize access** — API keys, NFT-gated endpoints, or pay-per-request via x402
+- **Control encoding at request time** — clients pass `_type`, `_path`, `_times` to choose what to extract
+- **Deploy a cache server** — separate read layer that receives push data from multiple airnodes
+- **Extend with plugins** — hooks at every pipeline stage for custom logic
 
-## Contracts
+## Routes
 
-Two Vyper 0.4+ contracts targeting the **prague** EVM version:
-
-| Contract             | Purpose                                               |
-| -------------------- | ----------------------------------------------------- |
-| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
-| `AirnodeDataFeed.vy` | Verify signature, store latest value, serve reads     |
-
-Both use the same signature: `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign.
-
-See [`contracts/README.md`](contracts/README.md) for architecture docs, consumer integration examples, and the full test
-suite.
-
-### Contract testing
-
-```bash
-bun run test:contracts                                       # Unit + invariant tests
-halmos --contract AirnodeVerifierSymbolicTest                 # Symbolic execution
-halmos --contract AirnodeDataFeedSymbolicTest
-bun run lint:slither                                         # Static analysis
-```
+| Method | Path                      | Description                      |
+| ------ | ------------------------- | -------------------------------- |
+| `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters |
+| `GET`  | `/beacons/{beaconId}`     | Read latest push beacon data     |
+| `GET`  | `/beacons`                | List all available beacons       |
+| `GET`  | `/requests/{requestId}`   | Poll an async request for status |
+| `GET`  | `/health`                 | Version and airnode address      |
 
 ## Configuration
 
-Config is YAML with 4 sections: `version`, `server`, `settings`, `apis`.
+YAML config with `${ENV_VAR}` interpolation. Bun loads `.env` automatically.
 
 ```yaml
 version: '1.0'
 
 server:
   port: 3000
-  rateLimit:
-    window: 60000
-    max: 100
 
 settings:
   proof: none
@@ -165,16 +109,94 @@ apis:
           type: int256
           path: $.bitcoin.usd
           times: '1e18'
+        push:
+          interval: 10000
 ```
 
-See [`examples/configs/complete/config.yaml`](examples/configs/complete/config.yaml) for a full reference. Secrets use
-`${ENV_VAR}` interpolation — Bun loads `.env` automatically.
+See [`examples/configs/complete/config.yaml`](examples/configs/complete/config.yaml) for auth methods, caching, push
+targets, multi-value encoding, and all available fields.
+
+## Contracts
+
+Two Vyper 0.4+ contracts (EVM target: `prague`):
+
+| Contract             | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
+| `AirnodeDataFeed.vy` | Verify signature, store latest value, serve reads     |
+
+Both verify `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. See
+[`contracts/README.md`](contracts/README.md) for integration examples.
+
+## Development
+
+### Prerequisites
+
+| Tool                                  | Install                                                     |
+| ------------------------------------- | ----------------------------------------------------------- |
+| [Bun](https://bun.sh)                 | `curl -fsSL https://bun.sh/install \| bash`                 |
+| [Foundry](https://book.getfoundry.sh) | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+| [uv](https://docs.astral.sh/uv/)      | `curl -LsSf https://astral.sh/uv/install.sh \| sh`          |
+
+Vyper, Slither, and Halmos are installed via uv:
+
+```bash
+uv tool install vyper
+uv tool install slither-analyzer
+uv tool install halmos
+```
+
+### Scripts
+
+| Script                     | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `bun run dev`              | Start the server with `--watch`          |
+| `bun test`                 | Run unit tests (src/)                    |
+| `bun run test:integration` | Run integration tests (sequential)       |
+| `bun run test:contracts`   | Run contract tests (Foundry)             |
+| `bun run fmt`              | Format (Prettier) and lint-fix (ESLint)  |
+| `bun run lint`             | Check formatting and linting             |
+| `bun run lint:slither`     | Run Slither static analysis on contracts |
+
+### Build
+
+Compile to a standalone binary:
+
+```bash
+bun run build:osx        # macOS ARM64
+bun run build:linux-x64  # Linux x86_64
+
+./dist/airnode start -c config.yaml
+```
+
+### Project structure
+
+```
+src/
+  cli/            CLI commands (start, cache-server, generate-key, etc.)
+  config/         Zod schema, YAML parser, env interpolation
+  api/            Upstream API calls and response processing
+  server.ts       Bun.serve HTTP server
+  pipeline.ts     Request pipeline (auth → validate → cache → API → encode → sign)
+  cache-server.ts Standalone cache server for signed beacon data
+  push.ts         Background push loop with external targets
+  auth.ts         Authentication (free, apiKey, nftKey, x402)
+  sign.ts         EIP-191 signing and signature verification
+  endpoint.ts     Specification-bound endpoint ID derivation
+  plugins.ts      Plugin hooks and budget tracking
+contracts/        Vyper contracts and Foundry tests
+examples/
+  configs/        Reference configs (complete, minimal, cache-server)
+  plugins/        Example plugins (heartbeat, logger, slack-alerts)
+book/             Documentation site (Docusaurus)
+```
 
 ## Documentation
 
+Full docs at the [documentation site](book/). Run locally:
+
 ```bash
-bun run book:start   # Local dev server
-bun run book:build   # Production build
+bun run book:start
 ```
 
 ## License
