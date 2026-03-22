@@ -11,6 +11,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Guides',
+      items: ['guides/system-overview'],
+    },
+    {
+      type: 'category',
       label: 'Config',
       items: ['config/index', 'config/server', 'config/settings', 'config/apis', 'config/plugins'],
     },
@@ -22,7 +27,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Consumers',
-      items: ['consumers/http-client', 'consumers/on-chain'],
+      items: ['consumers/getting-started', 'consumers/http-client', 'consumers/on-chain'],
     },
     'plugins',
     {
@@ -35,6 +40,7 @@ const sidebars: SidebarsConfig = {
       label: 'Security',
       items: ['security/trust-model', 'security/identity-verification'],
     },
+    'troubleshooting',
     'cli',
     'roadmap',
   ],
