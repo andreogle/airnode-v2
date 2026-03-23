@@ -26,7 +26,7 @@
 #   Trust model:
 #   - Permissionless: anyone can push a valid signed update.
 #   - Timestamp monotonicity: updates must have a strictly newer timestamp.
-#   - Timestamps more than 1 hour in the future are rejected.
+#   - Timestamps more than 5 minutes in the future are rejected.
 #   - Data is (int224, uint32) per beacon — matching API3 data feed format.
 #   - Data parameter must be exactly 32 bytes encoding an int256 within int224 range.
 
