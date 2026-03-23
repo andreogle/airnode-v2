@@ -42,7 +42,30 @@ Monetization, access control, and real-time data delivery.
 - **Async requests**: endpoints with `mode: async` return 202 immediately. Client polls `GET /requests/{requestId}`
   until complete or failed. Background processing with admission limits.
 - **SSE streaming**: endpoints with `mode: stream` return signed data as a Server-Sent Event. Full plugin pipeline runs
-  before the SSE event is emitted.
+  before the SSE event is emitted. The current implementation sends a single signed event and closes the connection --
+  functionally equivalent to a sync response, but using SSE framing (`text/event-stream`) so clients can connect with
+  the browser `EventSource` API. This establishes the transport protocol for future real-time streaming (see below).
+
+### Future: real-time SSE streaming
+
+The current `mode: stream` sends one event per connection. The next iteration holds the connection open and pushes
+multiple signed events as the upstream data changes:
+
+- **Continuous signed updates**: the airnode re-queries the upstream API on an interval (or in response to upstream
+  changes) and pushes each new signed result as an SSE event. Each event runs through the full plugin pipeline and
+  carries its own EIP-191 signature.
+- **Upstream proxy streaming**: if the upstream API itself supports streaming (chunked transfer encoding, SSE, or
+  WebSocket), the airnode proxies each chunk -- signing and forwarding incrementally rather than waiting for a complete
+  response.
+- **EventSource reconnection**: SSE has built-in automatic reconnection. Clients that disconnect and reconnect receive
+  the next signed update without any client-side retry logic. The `done: true` field in the event payload distinguishes
+  the final event from intermediate updates.
+- **Backpressure and flow control**: when the upstream produces data faster than the client consumes it, the server
+  buffers or drops stale events (keeping only the latest signed value) to prevent unbounded memory growth.
+
+This turns a pull endpoint into a real-time signed data stream without changing client code -- existing `EventSource`
+clients that work with the single-event implementation will automatically receive continuous updates when the server
+upgrades.
 
 ## Phase 3: Relayer
 
