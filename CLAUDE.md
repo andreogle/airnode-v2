@@ -35,7 +35,7 @@ examples/
   configs/          Example YAML configs (must always pass validation)
   plugins/          Example plugins (heartbeat, logger, slack-alerts, encrypted-channel)
 contracts/
-  src/              Vyper 0.4+ contracts (AirnodeVerifier, AirnodeDataFeed)
+  src/              Vyper 0.4+ contracts (AirnodeVerifier)
   test/             Foundry tests (unit, invariant, symbolic)
 book/               Docusaurus documentation site
 ```
@@ -163,15 +163,14 @@ Vyper 0.4+ contracts in `contracts/src/`, tested with Foundry. EVM target is `pr
 
 ### Contract architecture
 
-Two contracts:
+One contract:
 
-| Contract             | Path      | Purpose                                               |
-| -------------------- | --------- | ----------------------------------------------------- |
-| `AirnodeVerifier.vy` | Pull path | Verify signature, prevent replay, forward to callback |
-| `AirnodeDataFeed.vy` | Push path | Verify signature, store `(int224, uint32)` per beacon |
+| Contract             | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
 
-Both use the same signature: `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign.
-Permissionless — anyone can submit. No admin, no registry, no roles.
+Signature: `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. Permissionless — anyone
+can submit. No admin, no registry, no roles.
 
 ### Signature format
 
@@ -181,14 +180,6 @@ signature = EIP-191 personal sign over hash
 ```
 
 The endpoint ID is a top-level field so future TLS proof verifiers can inspect it directly.
-
-### Beacon derivation
-
-```
-beaconId = keccak256(encodePacked(airnode, endpointId))
-```
-
-Different airnodes serving the same endpoint produce different beacon IDs but the same endpoint ID.
 
 ## Git
 

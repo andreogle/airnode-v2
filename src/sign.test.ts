@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { type Hex, encodePacked, hashMessage, keccak256 } from 'viem';
 import { recoverAddress } from 'viem';
-import { createAirnodeAccount, deriveBeaconId, deriveMessageHash, signResponse, verifySignedBeacon } from './sign';
+import { createAirnodeAccount, deriveMessageHash, signResponse } from './sign';
 
 const TEST_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const TEST_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -54,44 +54,5 @@ describe('signResponse', () => {
 
   test('createAirnodeAccount derives correct address', () => {
     expect(TEST_ACCOUNT.address).toBe(TEST_ADDRESS);
-  });
-});
-
-describe('deriveBeaconId', () => {
-  test('produces deterministic output', () => {
-    const id1 = deriveBeaconId(TEST_ADDRESS, ENDPOINT_ID);
-    const id2 = deriveBeaconId(TEST_ADDRESS, ENDPOINT_ID);
-    expect(id1).toBe(id2);
-  });
-
-  test('matches keccak256(encodePacked(address, bytes32))', () => {
-    const id = deriveBeaconId(TEST_ADDRESS, ENDPOINT_ID);
-    const expected = keccak256(encodePacked(['address', 'bytes32'], [TEST_ADDRESS, ENDPOINT_ID]));
-    expect(id).toBe(expected);
-  });
-
-  test('different airnodes produce different beacon IDs', () => {
-    const id1 = deriveBeaconId(TEST_ADDRESS, ENDPOINT_ID);
-    const id2 = deriveBeaconId('0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Hex, ENDPOINT_ID);
-    expect(id1).not.toBe(id2);
-  });
-});
-
-describe('verifySignedBeacon', () => {
-  test('recovers correct airnode address from valid signature', async () => {
-    const { signature } = await signResponse(TEST_ACCOUNT, ENDPOINT_ID, TIMESTAMP, DATA);
-    const recovered = await verifySignedBeacon(ENDPOINT_ID, TIMESTAMP, DATA, signature);
-    expect(recovered).toBe(TEST_ADDRESS);
-  });
-
-  test('recovers a different address for tampered data', async () => {
-    const { signature } = await signResponse(TEST_ACCOUNT, ENDPOINT_ID, TIMESTAMP, DATA);
-    const recovered = await verifySignedBeacon(ENDPOINT_ID, TIMESTAMP, '0xbaddata' as Hex, signature);
-    expect(recovered).not.toBe(TEST_ADDRESS);
-  });
-
-  test('returns undefined for invalid signature', async () => {
-    const recovered = await verifySignedBeacon(ENDPOINT_ID, TIMESTAMP, DATA, '0xinvalid' as Hex);
-    expect(recovered).toBeUndefined();
   });
 });

@@ -15,17 +15,13 @@ clients.
 
 **Delivered:**
 
-- HTTP server with `POST /endpoints/{endpointId}`, `GET /beacons/{beaconId}`, and `GET /health`
+- HTTP server with `POST /endpoints/{endpointId}` and `GET /health`
 - EIP-191 signed responses (ABI-encoded or raw JSON)
 - Specification-bound endpoint IDs (hash of API URL, path, method, parameters, encoding)
 - Plugin system with 6 hooks and per-request time budgets
-- AirnodeVerifier contract (pull path -- verify + forward to callback)
-- AirnodeDataFeed contract (push path -- verify + store + read, beacon sets with median aggregation)
-- Push loop with beacon store and push targets for external cache servers
-- Cache server (standalone process for receiving, verifying, and serving signed beacon data)
+- AirnodeVerifier contract (verify signature, prevent replay, forward to callback)
 - DNS identity verification (ERC-7529)
 - In-memory response cache with TTL
-- Cache delay for OEV windows
 - CLI for server management, config validation, key generation
 
 ## Phase 2: Auth, payment, and streaming
@@ -63,7 +59,7 @@ multiple signed events as the upstream data changes:
 - **Backpressure and flow control**: when the upstream produces data faster than the client consumes it, the server
   buffers or drops stale events (keeping only the latest signed value) to prevent unbounded memory growth.
 
-This turns a pull endpoint into a real-time signed data stream without changing client code -- existing `EventSource`
+This turns an endpoint into a real-time signed data stream without changing client code -- existing `EventSource`
 clients that work with the single-event implementation will automatically receive continuous updates when the server
 upgrades.
 
@@ -102,12 +98,9 @@ Developer experience and ecosystem tooling.
 
 ## Future
 
-- **Solana support**: Port AirnodeVerifier and AirnodeDataFeed to Solana programs. The HTTP server and signature format
-  are chain-agnostic -- only the on-chain verification contracts need to be rewritten. Solana's low fees and high
-  throughput make it attractive for high-frequency data feeds.
+- **Solana support**: Port AirnodeVerifier to Solana programs. The HTTP server and signature format are chain-agnostic
+  -- only the on-chain verification contract needs to be rewritten.
 - **TLS proofs at scale**: Full integration when TLSNotary reaches production readiness with acceptable latency
   overhead. Target: proof generation under 2 seconds per API call.
 - **VRF as a service**: Verifiable random functions using the airnode's existing key. RFC 9381 ECVRF with on-chain proof
   verification.
-- **BLS signature aggregation**: Replace per-airnode ECDSA verification with aggregated BLS signatures for beacon set
-  updates. Reduces gas cost from O(N) to O(1) for N-provider feeds.

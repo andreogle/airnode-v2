@@ -123,7 +123,7 @@ Any `${VAR}` referenced in your config must also be set in the environment.
 ## Graceful shutdown
 
 Airnode handles `SIGINT` and `SIGTERM` for clean shutdown. The server stops accepting new requests, in-flight requests
-complete, the cache and push loops are stopped, and the process exits.
+complete, the cache is cleared, and the process exits.
 
 ```bash
 # Manual stop

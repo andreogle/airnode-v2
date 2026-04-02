@@ -37,28 +37,5 @@ function printBanner(options: BannerOptions): void {
   console.info(lines.join('\n'));
 }
 
-// =============================================================================
-// Cache server banner
-// =============================================================================
-interface CacheServerBannerOptions {
-  readonly version: string;
-  readonly host: string;
-  readonly port: number;
-  readonly endpoints: number;
-}
-
-function printCacheServerBanner(options: CacheServerBannerOptions): void {
-  const lines = [
-    ...LOGO_LINES,
-    `${dim}  Mode:      Cache Server${reset}`,
-    `${dim}  Version:   ${options.version}${reset}`,
-    `${dim}  Listen:    ${options.host}:${String(options.port)}${reset}`,
-    `${dim}  Endpoints: ${String(options.endpoints)}${reset}`,
-    ``,
-  ];
-
-  console.info(lines.join('\n'));
-}
-
-export { printBanner, printCacheServerBanner };
-export type { BannerOptions, CacheServerBannerOptions };
+export { printBanner };
+export type { BannerOptions };

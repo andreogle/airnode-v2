@@ -93,8 +93,8 @@ const messageHash = keccak256(
 
 ## On-Chain Verification
 
-On-chain contracts verify signatures using `ecrecover` with the EIP-191 prefix. The `AirnodeDataFeed` contract verifies
-beacon updates:
+On-chain contracts verify signatures using `ecrecover` with the EIP-191 prefix. The `AirnodeVerifier` contract verifies
+signed data:
 
 ```solidity
 // Pseudocode -- actual implementation is in Vyper
@@ -108,28 +108,6 @@ The EIP-191 prefix (`\x19Ethereum Signed Message:\n32`) is applied automatically
 off-chain signer (viem's `signMessage`) and the on-chain verifier (snekmate's `message_hash_utils`) apply the same
 prefix, so signatures are interoperable.
 
-## Beacon ID
-
-A beacon ID identifies a data feed from a specific airnode for a specific endpoint:
-
-```
-beaconId = keccak256(encodePacked(airnode, endpointId))
-```
-
-Where `airnode` is encoded as `address` (20 bytes) and `endpointId` as `bytes32` (32 bytes).
-
-Two different airnodes serving the same endpoint produce different beacon IDs. This is how on-chain data feed contracts
-distinguish between data sources: each airnode's beacon is tracked independently, and multiple beacons can be aggregated
-into a composite feed.
-
-```typescript
-import { keccak256, encodePacked } from 'viem';
-
-const beaconId = keccak256(
-  encodePacked(['address', 'bytes32'], ['0xd1e98F3Ac20DA5e4da874723517c914a31b0e857', endpointId])
-);
-```
-
 ## Timestamp
 
 The `timestamp` field is the Unix timestamp (in seconds) at the moment Airnode signs the response. It serves two
@@ -139,8 +117,8 @@ purposes:
 data older than 5 minutes). A client can compare the timestamp to the current time and decide whether to use the data.
 
 **Replay protection** -- the timestamp is part of the signed hash. The same data signed at a different time produces a
-different signature. On-chain data feed contracts can enforce that new updates have a more recent timestamp than the
-stored value, preventing replay of stale data.
+different signature. On-chain contracts can enforce that new updates have a more recent timestamp than the stored value,
+preventing replay of stale data.
 
 The timestamp is set by the airnode, not by the client. A client cannot request data "as of" a specific time -- the
 timestamp always reflects when the airnode processed the request.

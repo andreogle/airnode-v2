@@ -96,8 +96,8 @@ When two independent first-party operators serve the same API endpoint with the 
 produce the same endpoint ID. On-chain contracts can verify that data from different airnodes refers to the same
 underlying data point without trusting a centralized registry.
 
-This is how beacon aggregation works: multiple first-party airnodes produce beacons for the same endpoint ID, and a data
-feed contract aggregates them into a single value. The endpoint ID is the common key.
+This enables cross-operator comparability: multiple first-party airnodes produce signed data for the same endpoint ID,
+and a consumer can verify that they all committed to the same API specification.
 
 Note that a matching endpoint ID proves two operators committed to the same API specification — it does not prove they
 are actually calling it. With first-party airnodes (where the API provider operates the node), this is inherently

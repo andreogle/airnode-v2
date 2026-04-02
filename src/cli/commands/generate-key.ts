@@ -33,7 +33,6 @@ export const generateKey = new Command('generate-key')
       `${yellow}  Whoever holds this key can:${reset}`,
       ``,
       `  ${bold}  •${reset} Sign API responses on behalf of your Airnode`,
-      `  ${bold}  •${reset} Update on-chain data feeds (AirnodeDataFeed)`,
       `  ${bold}  •${reset} Submit verified data to callback contracts (AirnodeVerifier)`,
       ``,
       `${yellow}  Store this key securely. Do not share it. Do not commit it to git.${reset}`,

@@ -34,21 +34,20 @@ estimation, and no pending transaction tracking.
 transactions, nonce gaps, gas price spikes. Moving chain interaction out of the airnode eliminates all of these. The
 airnode does one thing well: call APIs and sign responses.
 
-## Two contracts instead of thirty
+## One contract instead of thirty
 
 v1 had 30+ Solidity contracts across multiple modules: request-response (AirnodeRrpV1), pub-sub (AirnodePsp),
 authorization (RequesterAuthorizerWithAirnode, AccessControlRegistry), sponsor wallets, allocators, subscription slots,
 data feeds (Api3ServerV1), OEV auctions, proxies, and more.
 
-v2 has two Vyper contracts:
+v2 has one Vyper contract:
 
-- **AirnodeVerifier** — pull path. Verifies a signature and forwards data to a callback contract.
-- **AirnodeDataFeed** — push path. Stores signed beacon data for contracts to read.
+- **AirnodeVerifier** — verifies a signature, prevents replay, and forwards data to a callback contract.
 
-Both are permissionless, stateless (beyond replay/beacon storage), and have no admin functions.
+Permissionless, stateless (beyond replay tracking), and no admin functions.
 
 **Why:** Most of v1's contract complexity existed to manage trust between sponsors, requesters, and airnodes on-chain.
-With v2's HTTP model, trust is handled at the HTTP layer (API keys, NFT keys, x402 payment). The contracts only need to
+With v2's HTTP model, trust is handled at the HTTP layer (API keys, NFT keys, x402 payment). The contract only needs to
 verify signatures — everything else is unnecessary.
 
 ## YAML config instead of OIS
@@ -75,18 +74,6 @@ rules. Two independent operators serving the same API with the same config produ
 **Why:** Specification-bound IDs enable cross-operator comparability without a registry. A quorum verifier can confirm
 that multiple airnodes signed data for the same endpoint ID — meaning they all committed to calling the same API the
 same way. When TLS proofs mature, the endpoint ID can be verified against the proven HTTP request on-chain.
-
-## Pull and push from one server
-
-v1 required separate deployments for request-response (RRP) and pub-sub (PSP). They used different contracts, different
-trigger configs, and different processing pipelines.
-
-v2 serves both from the same process. Pull requests arrive via `POST /endpoints/{id}`. Push data is produced by a
-background loop that calls APIs on a timer and stores signed beacons at `GET /beacons/{id}`. A relayer polls the beacon
-endpoints and submits to `AirnodeDataFeed` on-chain.
-
-**Why:** Pull and push are the same operation (call API → sign) with different delivery timing. Splitting them into
-separate systems doubled the operational surface for no benefit.
 
 ## Signature format
 
@@ -116,10 +103,9 @@ v2 has a plugin system with six hooks (`onHttpRequest`, `onBeforeApiCall`, `onAf
 `onResponseSent`, `onError`) and per-request time budgets. v1 had no plugin mechanism — custom logic required forking
 the node.
 
-### Caching and OEV
+### Caching
 
-v2 caches responses in memory with configurable TTL. Push beacon data can be delayed via `cache.delay` to create an OEV
-window — real-time data is served to authenticated clients while public beacon data is held back.
+v2 caches responses in memory with configurable TTL.
 
 ### Vyper contracts
 

@@ -20,15 +20,16 @@ signature is the API provider's signature.
 
 ### Why first-party matters
 
-With a third-party oracle (someone other than the API provider running the node), consumers must trust that the operator:
+With a third-party oracle (someone other than the API provider running the node), consumers must trust that the
+operator:
 
 - Is actually calling the API they claim and not fabricating or caching responses
 - Has legitimate access to the API and is not violating terms of service
 - Is not modifying, delaying, or selectively omitting data
 - Will keep the node running and the API credentials current
 
-None of these properties can be verified on-chain today. The endpoint ID commits to *what* API should be called, but it
-does not prove the operator is actually calling it. DNS identity verification proves *who* controls a domain, but a
+None of these properties can be verified on-chain today. The endpoint ID commits to _what_ API should be called, but it
+does not prove the operator is actually calling it. DNS identity verification proves _who_ controls a domain, but a
 third-party operator would only prove their own domain -- not the API provider's.
 
 **First-party operation eliminates this entire class of trust assumptions.** The API provider has no incentive to
@@ -79,9 +80,9 @@ config, but it creates an auditable commitment.
 
 ### Quorum via multiple airnodes
 
-Multiple independent airnodes can serve the same endpoint ID. On-chain, you can aggregate their responses using beacon
-sets (median of N independent values via AirnodeDataFeed). Off-chain, your client can query multiple airnodes and
-compare results. No single operator can manipulate the aggregated feed.
+Multiple independent airnodes can serve the same endpoint ID. Off-chain, your client can query multiple airnodes and
+compare results. On-chain, you can collect signatures from several airnodes and submit them to a quorum verifier. No
+single operator can manipulate the aggregated result.
 
 ### Future: TLS proofs and third-party trust
 
@@ -90,10 +91,10 @@ eliminate the need to trust the operator's honesty -- the proof shows the data w
 technology matures, it can be integrated as a plugin or proof mode without changing the core architecture.
 
 TLS proofs are particularly significant for third-party operators. Today, a third-party operator cannot prove they are
-actually calling the API they claim. With TLS proofs, the cryptographic proof itself demonstrates the data came from
-the API provider's HTTPS endpoint -- regardless of who operates the airnode. This could make third-party operation
-viable for use cases where the API provider does not want to run infrastructure, while still preserving verifiable
-data provenance. Until then, first-party operation remains the only trust model where the data source is guaranteed.
+actually calling the API they claim. With TLS proofs, the cryptographic proof itself demonstrates the data came from the
+API provider's HTTPS endpoint -- regardless of who operates the airnode. This could make third-party operation viable
+for use cases where the API provider does not want to run infrastructure, while still preserving verifiable data
+provenance. Until then, first-party operation remains the only trust model where the data source is guaranteed.
 
 ### Future: TEE attestation
 
@@ -105,14 +106,8 @@ verifiable chain: the domain proves who operates the airnode, the attestation pr
 
 ### Who submits data on-chain
 
-Both AirnodeVerifier and AirnodeDataFeed are permissionless. Anyone can submit valid signed data -- the client, a
-relayer, the airnode itself, or any third party. The contracts verify the signature, not the submitter.
-
-### The relayer
-
-A relayer is just transport. It reads signed data from the airnode's HTTP server and pushes it on-chain. It cannot forge
-signatures. If a relayer omits data or goes offline, anyone else can submit the same signed data. The relayer has no
-special privileges.
+AirnodeVerifier is permissionless. Anyone can submit valid signed data -- the client, a relayer, the airnode itself, or
+any third party. The contract verifies the signature, not the submitter.
 
 ### The transport layer
 
@@ -139,5 +134,5 @@ recovered = ecrecover(ethSignedHash, signature)
 assert recovered == airnode
 ```
 
-Both AirnodeVerifier and AirnodeDataFeed use this same verification. The `endpointId` is a top-level field (not buried
-inside another hash) so future on-chain verifiers -- including TLS proof verifiers -- can inspect it directly.
+AirnodeVerifier uses this verification. The `endpointId` is a top-level field (not buried inside another hash) so future
+on-chain verifiers -- including TLS proof verifiers -- can inspect it directly.

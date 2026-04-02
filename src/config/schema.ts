@@ -82,19 +82,6 @@ export const cacheSchema = z.object({
 });
 
 // =============================================================================
-// Push (data feed background loop)
-// =============================================================================
-const pushTargetSchema = z.object({
-  url: z.url(),
-  authToken: z.string().min(1),
-});
-
-export const pushSchema = z.object({
-  interval: z.number().int().positive(),
-  targets: z.array(pushTargetSchema).optional(),
-});
-
-// =============================================================================
 const endpointModeSchema = z.enum(['sync', 'async', 'stream']).default('sync');
 
 export const endpointSchema = z.object({
@@ -106,7 +93,6 @@ export const endpointSchema = z.object({
   encoding: encodingSchema.optional(),
   auth: clientAuthSchema.optional(),
   cache: cacheSchema.optional(),
-  push: pushSchema.optional(),
   description: z.string().optional(),
 });
 
@@ -164,33 +150,4 @@ export const configSchema = z.object({
   server: serverSchema,
   apis: z.array(apiSchema).min(1),
   settings: settingsSchema,
-});
-
-// =============================================================================
-// Cache server config
-//
-// Separate config schema for the standalone cache server process. The cache
-// server has no private key, no upstream APIs, no plugins — it receives
-// pre-signed beacon data from airnodes and serves it to clients.
-// =============================================================================
-const allowedAirnodeSchema = z.object({
-  address: evmAddressSchema,
-  authToken: z.string().min(1),
-});
-
-const cacheEndpointSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .startsWith('/')
-    .refine((p) => !p.endsWith('/') || p === '/', { message: 'Path must not end with a trailing slash' }),
-  delaySeconds: z.number().int().nonnegative(),
-  auth: clientAuthSchema.optional(),
-});
-
-export const cacheServerConfigSchema = z.object({
-  version: z.literal('1.0'),
-  server: serverSchema,
-  allowedAirnodes: z.array(allowedAirnodeSchema).min(1),
-  endpoints: z.array(cacheEndpointSchema).min(1),
 });

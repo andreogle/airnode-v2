@@ -14,8 +14,6 @@ starts, loads the config, and serves requests.
 | Method | Path                      | Description                                          |
 | ------ | ------------------------- | ---------------------------------------------------- |
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters in the request body |
-| `GET`  | `/beacons/{beaconId}`     | Read the latest signed beacon data (push)            |
-| `GET`  | `/beacons`                | List all available beacons with their latest values  |
 | `GET`  | `/requests/{requestId}`   | Poll an async request for its result                 |
 | `GET`  | `/health`                 | Health check returning version and airnode address   |
 
@@ -49,9 +47,9 @@ giving plugins the ability to observe, filter, or modify data at each stage.
 
 Error hooks (`onError`) fire when any stage fails, providing plugins with error context for alerting.
 
-## Pull Flow
+## Request Flow
 
-Pull is the on-demand path. A client requests data, Airnode calls the API and responds.
+A client requests data, Airnode calls the API and responds.
 
 ```
 Client                    Airnode                   Upstream API
@@ -73,40 +71,6 @@ Client                    Airnode                   Upstream API
 
 The response is self-contained: it includes the airnode address, endpoint ID, timestamp, encoded data, and signature. A
 client can verify the signature locally or submit it to an on-chain contract.
-
-## Push Flow
-
-Push is the continuous path. Airnode calls APIs on a background interval, signs the data, and stores it in an in-memory
-beacon store. Relayers poll the beacon endpoints and submit signed data on-chain.
-
-```
-                          Airnode                   Upstream API
-                            │                           │
-                            │  (every N ms per endpoint) │
-                            │  HTTP GET/POST             │
-                            │───────────────────────────▶│
-                            │                            │
-                            │◀──────── JSON response ────│
-                            │                            │
-                            ├── Encode (ABI)             │
-                            ├── Sign (EIP-191)           │
-                            ├── Store in beacon store    │
-                            │                            │
-
-Relayer                   Airnode
-  │                         │
-  │  GET /beacons/{id}      │
-  │────────────────────────▶│
-  │                         │
-  │◀── signed beacon data ──│
-  │                         │
-  │  Submit to on-chain     │
-  │  data feed contract     │
-```
-
-Push endpoints require `encoding` (raw JSON cannot be submitted on-chain) and a `push.interval` field in the config. The
-beacon ID is derived from `keccak256(airnode, endpointId)`, so different airnodes serving the same endpoint produce
-different beacons.
 
 ## Signature Format
 
@@ -132,7 +96,6 @@ When Airnode starts:
 3. Derive the airnode address from `AIRNODE_PRIVATE_KEY`.
 4. Build the endpoint map: compute each endpoint ID and register it.
 5. Load plugins from their `source` paths.
-6. Start the push loop for endpoints with `push.interval`.
-7. Start the HTTP server on the configured port and host.
+6. Start the HTTP server on the configured port and host.
 
-The server logs all registered endpoint IDs, beacon IDs (for push endpoints), and the airnode address on startup.
+The server logs all registered endpoint IDs and the airnode address on startup.

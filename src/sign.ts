@@ -1,5 +1,4 @@
-import { go } from '@api3/promise-utils';
-import { type Hex, encodePacked, hashMessage, keccak256, recoverAddress } from 'viem';
+import { type Hex, encodePacked, keccak256 } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 
 // =============================================================================
@@ -20,7 +19,7 @@ function createAirnodeAccount(privateKey: Hex): PrivateKeyAccount {
 // =============================================================================
 // Signing
 //
-// Signature format matches the on-chain contracts (AirnodeVerifier, AirnodeDataFeed):
+// Signature format matches the on-chain contract (AirnodeVerifier):
 //   hash = keccak256(encodePacked(endpointId, timestamp, data))
 //   signature = EIP-191 personal sign over hash
 //
@@ -43,33 +42,5 @@ async function signResponse(
   return { signature, airnode: account.address };
 }
 
-// =============================================================================
-// Beacon ID derivation
-//
-// Matches AirnodeDataFeed.vy:
-//   beacon_id = keccak256(concat(convert(airnode, bytes20), endpoint_id))
-// =============================================================================
-function deriveBeaconId(airnode: Hex, endpointId: Hex): Hex {
-  return keccak256(encodePacked(['address', 'bytes32'], [airnode, endpointId]));
-}
-
-// =============================================================================
-// Signature verification
-//
-// Recovers the signer address from a signed beacon. Used by the cache server
-// to verify that incoming data was actually signed by the claimed airnode.
-// =============================================================================
-async function verifySignedBeacon(
-  endpointId: Hex,
-  timestamp: number,
-  data: Hex,
-  signature: Hex
-): Promise<Hex | undefined> {
-  const messageHash = deriveMessageHash(endpointId, timestamp, data);
-  const result = await go(async () => recoverAddress({ hash: hashMessage({ raw: messageHash }), signature }));
-  if (!result.success) return undefined;
-  return result.data;
-}
-
-export { createAirnodeAccount, deriveBeaconId, deriveMessageHash, signResponse, verifySignedBeacon };
+export { createAirnodeAccount, deriveMessageHash, signResponse };
 export type { SignedResponse };

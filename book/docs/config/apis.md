@@ -138,25 +138,20 @@ returned (or a 402 if the last method was x402).
 
 ## Cache
 
-Response caching and optional delay for push path OEV (Oracle Extractable Value) windows.
+Response caching.
 
 ```yaml
 cache:
-  maxAge: 30000 # cache pull responses for 30 seconds
-  delay: 60000 # delay push beacon data by 60 seconds
+  maxAge: 30000 # cache responses for 30 seconds
 ```
 
-| Field    | Type     | Required | Description                                                            |
-| -------- | -------- | -------- | ---------------------------------------------------------------------- |
-| `maxAge` | `number` | Yes      | Cache TTL in milliseconds for pull responses. Positive integer.        |
-| `delay`  | `number` | No       | Delay before push beacon data is publicly accessible, in milliseconds. |
+| Field    | Type     | Required | Description                                                |
+| -------- | -------- | -------- | ---------------------------------------------------------- |
+| `maxAge` | `number` | Yes      | Cache TTL in milliseconds for responses. Positive integer. |
+| `delay`  | `number` | No       | Delay in milliseconds before cached responses are served.  |
 
-`maxAge` controls pull path caching — repeated `POST /endpoints/{id}` requests with the same parameters return the
-cached response until the TTL expires.
-
-`delay` controls push path visibility — beacon data at `GET /beacons/{id}` is held back until the delay window has
-passed. Pull requests are not affected by `delay`. This creates an OEV window where searchers with direct access can
-extract value before the data appears on-chain.
+`maxAge` controls response caching — repeated `POST /endpoints/{id}` requests with the same parameters return the cached
+response until the TTL expires.
 
 ## Endpoint-level fields
 
@@ -179,9 +174,6 @@ endpoints:
       type: free
     cache:
       maxAge: 30000
-      delay: 60000
-    push:
-      interval: 10000
     description: Get the current price of a coin
 ```
 
@@ -195,7 +187,6 @@ endpoints:
 | `encoding`    | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.               |
 | `auth`        | `object` | No       | --      | Overrides API-level auth for this endpoint.                         |
 | `cache`       | `object` | No       | --      | Overrides API-level cache for this endpoint.                        |
-| `push`        | `object` | No       | --      | Background push loop configuration. See [Push](#push).              |
 | `description` | `string` | No       | --      | Human-readable description. Does not affect runtime behavior.       |
 
 ### `mode`
@@ -455,41 +446,3 @@ endpoints:
 ```
 
 If the merged result has `_type` without `_path` (or vice versa), the server returns 400.
-
-:::note
-
-Push endpoints require a complete encoding in the config (`type` + `path`). The push loop has no client parameters, so
-requester-specified encoding does not apply to push.
-
-:::
-
-## Push
-
-The `push` field enables a background loop that calls the upstream API on a fixed interval and stores signed data for
-relayers.
-
-```yaml
-push:
-  interval: 10000 # call API every 10 seconds
-  targets:
-    - url: http://cache.example.com/beacons/0xYourAirnodeAddress
-      authToken: ${CACHE_SERVER_AUTH_TOKEN}
-```
-
-| Field      | Type     | Required | Description                                                         |
-| ---------- | -------- | -------- | ------------------------------------------------------------------- |
-| `interval` | `number` | Yes      | Loop interval in milliseconds. Positive integer.                    |
-| `targets`  | `array`  | No       | Cache server URLs to push signed beacons to. See [Cache Server][1]. |
-
-Each target has:
-
-| Field       | Type     | Required | Description                                            |
-| ----------- | -------- | -------- | ------------------------------------------------------ |
-| `url`       | `string` | Yes      | Cache server ingestion URL (includes airnode address). |
-| `authToken` | `string` | Yes      | Bearer token for push authentication.                  |
-
-Pushed data is available locally via `GET /beacons` and `GET /beacons/{beaconId}`. If `targets` are configured, the
-signed data is also POSTed to each cache server after every update (retried up to 2 times on failure). If the endpoint
-also has a `cache.delay`, the local beacon data is not served until the delay has elapsed.
-
-[1]: /docs/operators/cache-server

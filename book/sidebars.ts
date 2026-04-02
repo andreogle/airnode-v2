@@ -7,7 +7,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Concepts',
-      items: ['concepts/architecture', 'concepts/pull-and-push', 'concepts/endpoint-ids', 'concepts/signing'],
+      items: ['concepts/architecture', 'concepts/request-response', 'concepts/endpoint-ids', 'concepts/signing'],
     },
     {
       type: 'category',
@@ -22,7 +22,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Airnode Operators',
-      items: ['operators/index', 'operators/deployment', 'operators/cache-server'],
+      items: ['operators/index', 'operators/deployment'],
     },
     {
       type: 'category',
@@ -33,7 +33,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Contracts',
-      items: ['contracts/overview', 'contracts/verifier', 'contracts/data-feed'],
+      items: ['contracts/overview', 'contracts/verifier'],
     },
     {
       type: 'category',

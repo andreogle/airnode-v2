@@ -89,9 +89,6 @@ apis:
           times: '1e18'
         cache:
           maxAge: 30000
-          delay: 60000
-        push:
-          interval: 10000
         description: Get the current price of a coin
 
       - name: coinMarketData

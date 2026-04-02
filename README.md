@@ -22,11 +22,6 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
               Signed response ──▶ verify off-chain or submit on-chain
 ```
 
-**Pull** — client sends `POST /endpoints/{endpointId}`, gets a signed response back.
-
-**Push** — server calls APIs on a timer, signs the data, stores it as beacons. Relayers poll `GET /beacons/{beaconId}`
-and submit on-chain.
-
 ## Quick start
 
 ```bash
@@ -60,10 +55,8 @@ curl -X POST http://localhost:3000/endpoints/{endpointId} \
 
 - **Sign any API response** with your key — turn untrusted data into a verifiable attestation
 - **Serve data to smart contracts** — ABI-encoded responses ready for on-chain submission
-- **Run continuous data feeds** — push signed prices, weather, or any updating data on a timer
 - **Monetize access** — API keys, NFT-gated endpoints, or pay-per-request via x402
 - **Control encoding at request time** — clients pass `_type`, `_path`, `_times` to choose what to extract
-- **Deploy a cache server** — separate read layer that receives push data from multiple airnodes
 - **Extend with plugins** — hooks at every pipeline stage for custom logic
 
 ## Routes
@@ -71,8 +64,6 @@ curl -X POST http://localhost:3000/endpoints/{endpointId} \
 | Method | Path                      | Description                      |
 | ------ | ------------------------- | -------------------------------- |
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters |
-| `GET`  | `/beacons/{beaconId}`     | Read latest push beacon data     |
-| `GET`  | `/beacons`                | List all available beacons       |
 | `GET`  | `/requests/{requestId}`   | Poll an async request for status |
 | `GET`  | `/health`                 | Version and airnode address      |
 
@@ -109,23 +100,20 @@ apis:
           type: int256
           path: $.bitcoin.usd
           times: '1e18'
-        push:
-          interval: 10000
 ```
 
-See [`examples/configs/complete/config.yaml`](examples/configs/complete/config.yaml) for auth methods, caching, push
-targets, multi-value encoding, and all available fields.
+See [`examples/configs/complete/config.yaml`](examples/configs/complete/config.yaml) for auth methods, caching,
+multi-value encoding, and all available fields.
 
 ## Contracts
 
-Two Vyper 0.4+ contracts (EVM target: `prague`):
+One Vyper 0.4+ contract (EVM target: `prague`):
 
 | Contract             | Purpose                                               |
 | -------------------- | ----------------------------------------------------- |
 | `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
-| `AirnodeDataFeed.vy` | Verify signature, store latest value, serve reads     |
 
-Both verify `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. See
+Verifies `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. See
 [`contracts/README.md`](contracts/README.md) for integration examples.
 
 ## Development
@@ -173,20 +161,18 @@ bun run build:linux-x64  # Linux x86_64
 
 ```
 src/
-  cli/            CLI commands (start, cache-server, generate-key, etc.)
+  cli/            CLI commands (start, generate-key, etc.)
   config/         Zod schema, YAML parser, env interpolation
   api/            Upstream API calls and response processing
   server.ts       Bun.serve HTTP server
   pipeline.ts     Request pipeline (auth → validate → cache → API → encode → sign)
-  cache-server.ts Standalone cache server for signed beacon data
-  push.ts         Background push loop with external targets
   auth.ts         Authentication (free, apiKey, nftKey, x402)
-  sign.ts         EIP-191 signing and signature verification
+  sign.ts         EIP-191 signing
   endpoint.ts     Specification-bound endpoint ID derivation
   plugins.ts      Plugin hooks and budget tracking
 contracts/        Vyper contracts and Foundry tests
 examples/
-  configs/        Reference configs (complete, minimal, cache-server)
+  configs/        Reference configs (complete, minimal)
   plugins/        Example plugins (heartbeat, logger, slack-alerts)
 book/             Documentation site (Docusaurus)
 ```

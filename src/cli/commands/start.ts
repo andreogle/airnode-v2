@@ -9,7 +9,6 @@ import { buildEndpointMap } from '../../endpoint';
 import { logger } from '../../logger';
 import { handleEndpointRequest } from '../../pipeline';
 import { loadPlugins } from '../../plugins';
-import { startPushLoop } from '../../push';
 import { createServer } from '../../server';
 import { createAirnodeAccount } from '../../sign';
 import { VERSION } from '../../version';
@@ -47,9 +46,6 @@ export const start = new Command('start')
     const endpointMap = buildEndpointMap(config);
     const plugins = await loadPlugins(config.settings.plugins, path.dirname(configPath));
 
-    // Start push loop for endpoints with push config
-    const push = startPushLoop({ account, airnode: account.address, endpointMap });
-
     printBanner({
       address: account.address,
       version: VERSION,
@@ -69,7 +65,6 @@ export const start = new Command('start')
       endpointMap,
       plugins,
       cache,
-      beaconStore: push.store,
       asyncStore,
       handleRequest: handleEndpointRequest,
     });
@@ -77,7 +72,6 @@ export const start = new Command('start')
     const shutdown = (): void => {
       server.stop();
       cache.stop();
-      push.stop();
       asyncStore.stop();
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(0);

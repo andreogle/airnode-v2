@@ -130,7 +130,7 @@ const ethPrice = rawData.ethereum.usd; // 3842.17
 ## Step 7: Submit on-chain (optional)
 
 Pass the signed data to an on-chain verifier contract. See [On-Chain Integration](/docs/consumers/on-chain) for contract
-examples using AirnodeVerifier (pull) and AirnodeDataFeed (push).
+examples using AirnodeVerifier.
 
 ## Choosing encoding at request time
 

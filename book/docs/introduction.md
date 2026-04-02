@@ -18,13 +18,11 @@ changing your existing infrastructure. Your API stays exactly as it is — Airno
 - **Monetize your API on-chain.** Smart contracts can't call HTTP APIs directly. Airnode bridges this gap. Developers
   pay per-request via API keys, NFT access passes, or x402 HTTP-native payments — you choose the model.
 - **No blockchain expertise required.** You don't run a node, manage wallets, or write smart contracts. Airnode is a
-  stateless HTTP server that signs responses. The on-chain verification contracts are already deployed.
+  stateless HTTP server that signs responses. The on-chain verification contract is already deployed.
 - **Your data, your key.** Every response is signed with your private key, creating a verifiable attestation: "this API
   provider, at this time, received this data from this API." Your reputation is tied to your signature.
 - **Zero infrastructure change.** Airnode calls your existing API endpoints. You don't need to modify your API, add new
   routes, or change your data format. Point Airnode at your API URL and configure which endpoints to serve.
-- **Data feed revenue.** Push mode turns any API into a continuous data feed. Price feeds, weather data, sports scores —
-  anything that updates regularly can be pushed to on-chain consumers who pay for access.
 
 ## Why Request Data from an Airnode
 
@@ -68,19 +66,6 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 4. If the endpoint has encoding configured, Airnode ABI-encodes the response. Otherwise, the raw JSON is returned.
 5. Airnode signs the result with the operator's private key.
 6. The signed response is returned to the client.
-
-## Two Delivery Paths
-
-Airnode serves data through two models from the same server:
-
-**Pull** -- clients request data on demand. A client sends `POST /endpoints/{endpointId}`, Airnode calls the API, signs,
-and responds. One-shot, stateless.
-
-**Push** -- Airnode calls APIs on a background interval, signs the data, and stores it as beacons. Relayers poll
-`GET /beacons/{beaconId}` and submit the signed data to on-chain data feed contracts. This powers continuous price feeds
-without requiring individual client requests.
-
-Both paths produce the same signed data format. The difference is who initiates the API call.
 
 ## Endpoint IDs
 
@@ -194,7 +179,5 @@ curl http://localhost:3000/health
 | Method | Path                      | Description                                   |
 | ------ | ------------------------- | --------------------------------------------- |
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters              |
-| `GET`  | `/beacons/{beaconId}`     | Read latest push beacon data                  |
-| `GET`  | `/beacons`                | List all available beacons                    |
 | `GET`  | `/requests/{requestId}`   | Poll an async request for its result          |
 | `GET`  | `/health`                 | Health check with version and airnode address |

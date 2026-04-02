@@ -48,11 +48,6 @@ apis:
         cache:
           maxAge: 30000
           delay: 60000 # public responses delayed by 60s (OEV window)
-        push:
-          interval: 10000 # call API every 10 seconds, store signed data for relayers
-          targets:
-            - url: http://localhost:8090/beacons/${AIRNODE_ADDRESS}
-              authToken: ${CACHE_SERVER_AUTH_TOKEN}
         description: Get the current price of a coin
 
       - name: coinMarketData

@@ -6,7 +6,6 @@ import type { ResponseCache } from './cache';
 import type { ResolvedEndpoint } from './endpoint';
 import type { PipelineDependencies } from './pipeline';
 import type { PluginRegistry } from './plugins';
-import type { BeaconStore } from './push';
 import { checkRateLimit } from './rate-limit';
 import type { TokenBucket } from './rate-limit';
 import type { Config } from './types';
@@ -22,7 +21,6 @@ interface ServerDependencies {
   readonly endpointMap: ReadonlyMap<Hex, ResolvedEndpoint>;
   readonly plugins: PluginRegistry;
   readonly cache: ResponseCache;
-  readonly beaconStore?: BeaconStore;
   readonly asyncStore?: AsyncRequestStore;
   readonly handleRequest: (
     request: Request,
@@ -56,12 +54,6 @@ function errorResponse(message: string, status: number, corsOrigins = '*'): Resp
 
 function parseEndpointRoute(pathname: string): Hex | undefined {
   const match = /^\/endpoints\/(0x[\da-fA-F]{64})$/.exec(pathname);
-  if (!match) return undefined;
-  return match[1] as Hex;
-}
-
-function parseBeaconRoute(pathname: string): Hex | undefined {
-  const match = /^\/beacons\/(0x[\da-fA-F]{64})$/.exec(pathname);
   if (!match) return undefined;
   return match[1] as Hex;
 }
@@ -135,31 +127,6 @@ function createServer(deps: ServerDependencies): ServerHandle {
 
       if (url.pathname === '/health' && request.method === 'GET') {
         return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, corsOrigins);
-      }
-
-      // Beacon routes (push data feeds)
-      if (url.pathname === '/beacons' && request.method === 'GET' && deps.beaconStore) {
-        const nowMs = Date.now();
-        const delayed = deps.beaconStore
-          .list()
-          .filter((b) => b.delayMs === 0 || b.timestamp * 1000 + b.delayMs <= nowMs);
-        return jsonResponse(delayed, 200, corsOrigins);
-      }
-
-      const beaconId = parseBeaconRoute(url.pathname);
-      if (beaconId && request.method === 'GET') {
-        if (!deps.beaconStore) {
-          return errorResponse('Push not configured', 404, corsOrigins);
-        }
-        const beacon = deps.beaconStore.get(beaconId);
-        if (!beacon) {
-          return errorResponse('Beacon not found', 404, corsOrigins);
-        }
-        const nowMs = Date.now();
-        if (beacon.delayMs > 0 && beacon.timestamp * 1000 + beacon.delayMs > nowMs) {
-          return errorResponse('Data not yet available', 425, corsOrigins);
-        }
-        return jsonResponse(beacon, 200, corsOrigins);
       }
 
       // Async request polling

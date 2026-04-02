@@ -115,7 +115,7 @@ specification for the full parameter list.
 
 ### `Request body too large` (413)
 
-**Cause:** The request body exceeds the size limit. Airnode allows up to 64KB. The cache server allows up to 512KB.
+**Cause:** The request body exceeds the size limit. Airnode allows up to 64KB.
 
 **Fix:** Reduce the request payload size. If you need to send large bodies, check whether the parameters can be
 simplified.
@@ -144,32 +144,6 @@ response.
 
 **Fix:** Inspect the actual upstream response and adjust the `path` in the endpoint's encoding config. Common causes:
 the API changed its response format, a nested field was renamed, or the path uses the wrong separator.
-
-## Push and beacon errors
-
-### `Push endpoint X has no complete encoding — skipping` (log warning)
-
-**Cause:** A push endpoint requires both `type` and `path` in its `encoding` configuration. One or both are missing. The
-push loop skips this endpoint because raw JSON cannot be submitted on-chain.
-
-**Fix:** Add complete encoding to the endpoint config.
-
-```yaml
-encoding:
-  type: int256
-  path: ethereum.usd
-  times: '1000000000000000000'
-```
-
-## Cache server errors
-
-### `Airnode not in allowedAirnodes list` (401 on cache server)
-
-**Cause:** The cache server maintains a list of trusted airnode addresses. The signed data was produced by an airnode
-whose address is not in that list.
-
-**Fix:** Add the airnode's address to the cache server's `allowedAirnodes` configuration. Get the address from the
-airnode's `/health` endpoint.
 
 ## General debugging
 
