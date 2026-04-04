@@ -88,8 +88,9 @@ a different key.
 
 ## Authentication
 
-Endpoints with `auth.type: 'apiKey'` require an `X-Api-Key` header. Endpoints with `auth.type: 'free'` accept
-unauthenticated requests.
+Endpoints support three auth methods: `free` (no credentials), `apiKey` (via `X-Api-Key` header), and `x402`
+(pay-per-request). Endpoints with `auth.type: 'apiKey'` require an `X-Api-Key` header. Endpoints with
+`auth.type: 'free'` accept unauthenticated requests.
 
 ```bash
 # Free endpoint -- no auth header needed
@@ -170,7 +171,7 @@ curl -X POST http://airnode.example.com/endpoints/0x... \
 | Status | Meaning                                            |
 | ------ | -------------------------------------------------- |
 | `400`  | Missing or invalid parameters                      |
-| `401`  | Missing or invalid API key / NFT key               |
+| `401`  | Missing or invalid API key                         |
 | `402`  | Payment required (x402 — includes payment details) |
 | `404`  | Unknown endpoint ID                                |
 | `413`  | Request body too large (> 64KB)                    |

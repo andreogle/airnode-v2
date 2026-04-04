@@ -10,7 +10,7 @@ import { logger } from '../../logger';
 import { handleEndpointRequest } from '../../pipeline';
 import { loadPlugins } from '../../plugins';
 import { createServer } from '../../server';
-import { createAirnodeAccount } from '../../sign';
+import { createAirnodeAccount, createAirnodeAccountFromMnemonic } from '../../sign';
 import { VERSION } from '../../version';
 import { printBanner } from '../banner';
 
@@ -32,14 +32,16 @@ export const start = new Command('start')
 
     await loadEnvFile(envPath);
 
+    const mnemonic = process.env['AIRNODE_MNEMONIC'];
     const privateKey = process.env['AIRNODE_PRIVATE_KEY'] as Hex | undefined;
-    if (!privateKey) {
-      logger.error('AIRNODE_PRIVATE_KEY environment variable is required');
+    if (!privateKey && !mnemonic) {
+      logger.error('AIRNODE_PRIVATE_KEY or AIRNODE_MNEMONIC environment variable is required');
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(1);
     }
 
-    const account = createAirnodeAccount(privateKey);
+    // Mnemonic takes precedence if both are set
+    const account = mnemonic ? createAirnodeAccountFromMnemonic(mnemonic) : createAirnodeAccount(privateKey as Hex);
 
     const raw = await Bun.file(configPath).text();
     const config = parseConfig(raw);

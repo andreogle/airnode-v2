@@ -1,34 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { VyperDeploy } from './VyperDeploy.sol';
+import { Test } from 'forge-std/Test.sol';
+import { AirnodeVerifier } from '../src/AirnodeVerifier.sol';
 import { MockCallback } from './MockCallback.sol';
-
-interface IAirnodeVerifier {
-  function verify_and_fulfill(
-    address airnode,
-    bytes32 endpoint_id,
-    uint256 timestamp,
-    bytes calldata data,
-    bytes calldata signature,
-    address callback_address,
-    bytes4 callback_selector
-  ) external;
-
-  function fulfilled(bytes32) external view returns (bool);
-}
 
 /// @notice Symbolic tests for AirnodeVerifier. Run with Halmos.
 ///         These prove properties hold for ALL possible inputs, not just random samples.
-contract AirnodeVerifierSymbolicTest is VyperDeploy {
-  IAirnodeVerifier verifier;
+contract AirnodeVerifierSymbolicTest is Test {
+  AirnodeVerifier verifier;
   MockCallback callback;
 
   uint256 constant AIRNODE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
   address airnodeAddress;
 
   function setUp() public {
-    verifier = IAirnodeVerifier(deployVyper('AirnodeVerifier'));
+    verifier = new AirnodeVerifier();
     callback = new MockCallback();
     airnodeAddress = vm.addr(AIRNODE_KEY);
     vm.warp(1_700_000_100);
@@ -50,7 +37,7 @@ contract AirnodeVerifierSymbolicTest is VyperDeploy {
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(AIRNODE_KEY, ethSignedHash);
     bytes memory sig = abi.encodePacked(r, s, v);
 
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       endpointId,
       timestamp,
@@ -78,7 +65,7 @@ contract AirnodeVerifierSymbolicTest is VyperDeploy {
     vm.assume(!verifier.fulfilled(requestHash));
 
     // First call succeeds
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       endpointId,
       timestamp,
@@ -90,7 +77,7 @@ contract AirnodeVerifierSymbolicTest is VyperDeploy {
 
     // Second call must revert
     try
-      verifier.verify_and_fulfill(
+      verifier.verifyAndFulfill(
         airnodeAddress,
         endpointId,
         timestamp,

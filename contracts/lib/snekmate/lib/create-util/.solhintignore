@@ -1,7 +1,0 @@
-node_modules
-pnpm-lock.yaml
-cache
-artifacts
-typechain-types
-coverage
-deployments

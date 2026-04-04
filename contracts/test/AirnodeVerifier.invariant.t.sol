@@ -2,28 +2,14 @@
 pragma solidity ^0.8.24;
 
 import { Test } from 'forge-std/Test.sol';
-import { VyperDeploy } from './VyperDeploy.sol';
+import { AirnodeVerifier } from '../src/AirnodeVerifier.sol';
 import { MockCallback } from './MockCallback.sol';
-
-interface IAirnodeVerifier {
-  function verify_and_fulfill(
-    address airnode,
-    bytes32 endpoint_id,
-    uint256 timestamp,
-    bytes calldata data,
-    bytes calldata signature,
-    address callback_address,
-    bytes4 callback_selector
-  ) external;
-
-  function fulfilled(bytes32) external view returns (bool);
-}
 
 // =============================================================================
 // Handler — bounded operations for the fuzzer
 // =============================================================================
 contract VerifierHandler is Test {
-  IAirnodeVerifier public verifier;
+  AirnodeVerifier public verifier;
   MockCallback public callback;
 
   uint256 constant AIRNODE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -33,7 +19,7 @@ contract VerifierHandler is Test {
   uint256 public ghost_fulfillCount;
   mapping(bytes32 => bool) public ghost_fulfilled;
 
-  constructor(IAirnodeVerifier _verifier, MockCallback _callback) {
+  constructor(AirnodeVerifier _verifier, MockCallback _callback) {
     verifier = _verifier;
     callback = _callback;
     airnodeAddress = vm.addr(AIRNODE_KEY);
@@ -55,7 +41,7 @@ contract VerifierHandler is Test {
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(AIRNODE_KEY, ethSignedHash);
     bytes memory sig = abi.encodePacked(r, s, v);
 
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       endpointId,
       timestamp,
@@ -73,14 +59,14 @@ contract VerifierHandler is Test {
 // =============================================================================
 // Invariant test
 // =============================================================================
-contract AirnodeVerifierInvariantTest is VyperDeploy {
-  IAirnodeVerifier verifier;
+contract AirnodeVerifierInvariantTest is Test {
+  AirnodeVerifier verifier;
   MockCallback callback;
   VerifierHandler handler;
 
   function setUp() public {
     vm.warp(1_700_000_100);
-    verifier = IAirnodeVerifier(deployVyper('AirnodeVerifier'));
+    verifier = new AirnodeVerifier();
     callback = new MockCallback();
     handler = new VerifierHandler(verifier, callback);
     targetContract(address(handler));

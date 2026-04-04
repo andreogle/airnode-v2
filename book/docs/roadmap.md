@@ -32,7 +32,6 @@ Monetization, access control, and real-time data delivery.
 
 - **Multi-method auth**: endpoints accept one or more auth methods (any-of semantics)
 - **API key auth**: `X-Api-Key` header with constant-time comparison
-- **NFT key auth**: ERC-721 ownership verification via RPC with cached lookups
 - **x402 payment**: HTTP 402-based pay-per-request. Client pays on-chain, retries with `X-Payment-Proof` tx hash. Server
   verifies the receipt, checks amount/recipient/recency, prevents replay.
 - **Async requests**: endpoints with `mode: async` return 202 immediately. Client polls `GET /requests/{requestId}`

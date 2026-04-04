@@ -1,5 +1,6 @@
 import { type Hex, encodePacked, keccak256 } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
+import { mnemonicToAccount } from 'viem/accounts';
 
 // =============================================================================
 // Types
@@ -14,6 +15,10 @@ interface SignedResponse {
 // =============================================================================
 function createAirnodeAccount(privateKey: Hex): PrivateKeyAccount {
   return privateKeyToAccount(privateKey);
+}
+
+function createAirnodeAccountFromMnemonic(mnemonic: string): PrivateKeyAccount {
+  return mnemonicToAccount(mnemonic) as unknown as PrivateKeyAccount;
 }
 
 // =============================================================================
@@ -42,5 +47,5 @@ async function signResponse(
   return { signature, airnode: account.address };
 }
 
-export { createAirnodeAccount, deriveMessageHash, signResponse };
+export { createAirnodeAccount, createAirnodeAccountFromMnemonic, deriveMessageHash, signResponse };
 export type { SignedResponse };

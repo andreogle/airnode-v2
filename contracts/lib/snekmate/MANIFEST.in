@@ -1,3 +1,0 @@
-include LICENSE README.md CHANGELOG.md pyproject.toml
-graft src
-prune src/snekmate/**/mocks

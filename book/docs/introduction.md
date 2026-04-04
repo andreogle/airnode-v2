@@ -89,7 +89,7 @@ Download the `airnode` binary for your platform from the
 ### 2. Generate a key
 
 ```bash
-airnode generate-key
+airnode generate-mnemonic
 ```
 
 This prints a new private key and its corresponding airnode address. Save the private key to a `.env` file:

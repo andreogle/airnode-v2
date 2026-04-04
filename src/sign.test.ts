@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { type Hex, encodePacked, hashMessage, keccak256 } from 'viem';
 import { recoverAddress } from 'viem';
-import { createAirnodeAccount, deriveMessageHash, signResponse } from './sign';
+import { createAirnodeAccount, createAirnodeAccountFromMnemonic, deriveMessageHash, signResponse } from './sign';
 
 const TEST_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const TEST_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -54,5 +54,25 @@ describe('signResponse', () => {
 
   test('createAirnodeAccount derives correct address', () => {
     expect(TEST_ACCOUNT.address).toBe(TEST_ADDRESS);
+  });
+
+  test('createAirnodeAccountFromMnemonic derives a valid account', () => {
+    const mnemonic = 'test test test test test test test test test test test junk';
+    const account = createAirnodeAccountFromMnemonic(mnemonic);
+    expect(account.address).toMatch(/^0x[\dA-Fa-f]{40}$/);
+  });
+
+  test('mnemonic account can sign and verify round-trip', async () => {
+    const mnemonic = 'test test test test test test test test test test test junk';
+    const account = createAirnodeAccountFromMnemonic(mnemonic);
+    const result = await signResponse(account, ENDPOINT_ID, TIMESTAMP, DATA);
+
+    const messageHash = deriveMessageHash(ENDPOINT_ID, TIMESTAMP, DATA);
+    const recovered = await recoverAddress({
+      hash: hashMessage({ raw: messageHash }),
+      signature: result.signature,
+    });
+
+    expect(recovered).toBe(account.address);
   });
 });

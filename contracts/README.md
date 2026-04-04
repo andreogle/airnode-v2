@@ -2,12 +2,12 @@
 
 ## Overview
 
-One contract that verifies signed data and forwards it to a callback (pull). Vyper 0.4+, targeting the **prague** EVM
+One contract that verifies signed data and forwards it to a callback (pull). Solidity, targeting the **prague** EVM
 version.
 
-| Contract             | Purpose                                               | Use case               |
-| -------------------- | ----------------------------------------------------- | ---------------------- |
-| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback | One-shot data delivery |
+| Contract              | Purpose                                               | Use case               |
+| --------------------- | ----------------------------------------------------- | ---------------------- |
+| `AirnodeVerifier.sol` | Verify signature, prevent replay, forward to callback | One-shot data delivery |
 
 ## Architecture
 
@@ -32,13 +32,13 @@ Client → HTTP request → Airnode → upstream API → sign response → HTTP 
 The contract verifies:
 
 ```
-message_hash = keccak256(encodePacked(endpoint_id, timestamp, data))
-signature = EIP-191 personal sign over message_hash
+messageHash = keccak256(encodePacked(endpointId, timestamp, data))
+signature = EIP-191 personal sign over messageHash
 ```
 
 The fields:
 
-- **endpoint_id** — a specification-bound hash committing to the API URL, path, method, parameters, and encoding rules.
+- **endpointId** — a specification-bound hash committing to the API URL, path, method, parameters, and encoding rules.
   Two independent airnodes serving the same API with the same config produce the same endpoint ID.
 - **timestamp** — unix timestamp (seconds) of when the data was produced.
 - **data** — ABI-encoded response, up to 4096 bytes.
@@ -50,14 +50,14 @@ verifiers — can inspect it directly and check it against a proven API specific
 
 ## AirnodeVerifier
 
-**Location:** `src/AirnodeVerifier.vy`
+**Location:** `src/AirnodeVerifier.sol`
 
 Verifies an airnode's signature and forwards the data to a callback contract. This is the on-chain primitive for the
 pull path — a client gets signed data from the HTTP server and submits it to trigger logic in their own contract.
 
 ### How it works
 
-1. Anyone calls `verify_and_fulfill()` with signed data and a callback target.
+1. Anyone calls `verifyAndFulfill()` with signed data and a callback target.
 2. The contract recovers the signer from the signature.
 3. If the signer matches the provided airnode address, and the data hasn't been submitted before (replay protection),
    the data is forwarded to the callback contract.
@@ -66,16 +66,16 @@ pull path — a client gets signed data from the HTTP server and submits it to t
 
 ### Function
 
-```vyper
-verify_and_fulfill(
-    airnode: address,          # expected signer
-    endpoint_id: bytes32,      # specification-bound endpoint hash
-    timestamp: uint256,        # data timestamp
-    data: Bytes[4096],         # ABI-encoded response (up to 4KB)
-    signature: Bytes[65],      # EIP-191 personal signature
-    callback_address: address, # contract to forward data to
-    callback_selector: bytes4, # function selector on the callback
-)
+```solidity
+function verifyAndFulfill(
+    address airnode,          // expected signer
+    bytes32 endpointId,       // specification-bound endpoint hash
+    uint256 timestamp,        // data timestamp
+    bytes calldata data,      // ABI-encoded response (up to 4KB)
+    bytes calldata signature, // EIP-191 personal signature
+    address callbackAddress,  // contract to forward data to
+    bytes4 callbackSelector   // function selector on the callback
+) external
 ```
 
 The callback receives:
@@ -92,9 +92,9 @@ function fulfill(
 
 ### Replay protection
 
-The `requestHash` (which is the `message_hash` from the signature) serves as the replay key. Each unique combination of
-`(endpoint_id, timestamp, data)` can only be fulfilled once. The `fulfilled` mapping is public — anyone can check
-whether a particular hash has been submitted.
+The `requestHash` (which is the `messageHash` from the signature) serves as the replay key. Each unique combination of
+`(endpointId, timestamp, data)` can only be fulfilled once. The `fulfilled` mapping is public — anyone can check whether
+a particular hash has been submitted.
 
 ### Trust model
 
@@ -137,29 +137,16 @@ contract MyConsumer {
 
 ### Prerequisites
 
-| Tool                                  | Version  | Install                                                     |
-| ------------------------------------- | -------- | ----------------------------------------------------------- |
-| [Foundry](https://book.getfoundry.sh) | >= 1.0   | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
-| [Vyper](https://docs.vyperlang.org)   | >= 0.4.0 | `pip install vyper`                                         |
+| Tool                                  | Version | Install                                                     |
+| ------------------------------------- | ------- | ----------------------------------------------------------- |
+| [Foundry](https://book.getfoundry.sh) | >= 1.0  | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
 
 ### Install dependencies
 
 ```bash
 cd contracts
-forge install pcaversaccio/snekmate
+forge install
 ```
-
-[snekmate](https://github.com/pcaversaccio/snekmate) provides ECDSA signature recovery and EIP-191 message hashing for
-Vyper.
-
-### How Vyper compilation works
-
-Foundry cannot resolve Vyper imports across packages. The workaround:
-
-1. `foundry.toml` skips `.vy` and `.vyi` files: `skip = ["src/**/*.vy", "src/**/*.vyi"]`
-2. Tests inherit from `test/VyperDeploy.sol` and call `deployVyper("ContractName")`
-3. `VyperDeploy` FFI-calls `vyper` directly with `-p lib/snekmate/src` to resolve snekmate imports
-4. The compiled bytecode is returned and deployed via `CREATE`
 
 ---
 
@@ -190,7 +177,6 @@ after each sequence. **Symbolic tests** prove properties hold for ALL possible i
 
 | File               | Purpose                                             |
 | ------------------ | --------------------------------------------------- |
-| `VyperDeploy.sol`  | FFI-based Vyper compilation and deployment          |
 | `MockCallback.sol` | Records callback arguments for assertion.           |
 |                    | Also includes `RevertingCallback` for failure tests |
 
@@ -201,15 +187,13 @@ after each sequence. **Symbolic tests** prove properties hold for ALL possible i
 ```
 contracts/
   src/
-    AirnodeVerifier.vy                  Signature verification + callback forwarding
+    AirnodeVerifier.sol                 Signature verification + callback forwarding
   test/
     AirnodeVerifier.t.sol               Unit tests
     AirnodeVerifier.invariant.t.sol     Invariant (stateful fuzz) tests
     AirnodeVerifier.symbolic.t.sol      Symbolic execution tests (Halmos)
     MockCallback.sol                    Mock + reverting callback contracts
-    VyperDeploy.sol                     Vyper compilation via FFI
   lib/
     forge-std/                          Foundry standard library
-    snekmate/                           ECDSA + EIP-191 for Vyper
-  foundry.toml                          Foundry config (prague EVM, FFI enabled)
+  foundry.toml                          Foundry config (prague EVM)
 ```

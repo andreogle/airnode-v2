@@ -45,14 +45,6 @@ const freeClientAuthSchema = z.object({
   type: z.literal('free'),
 });
 
-const nftKeyClientAuthSchema = z.object({
-  type: z.literal('nftKey'),
-  chain: z.number().int().positive(),
-  rpc: z.url(),
-  contract: evmAddressSchema,
-  cacheTtl: z.number().int().positive().default(60_000),
-});
-
 const x402ClientAuthSchema = z.object({
   type: z.literal('x402'),
   network: z.number().int().positive(),
@@ -66,7 +58,6 @@ const x402ClientAuthSchema = z.object({
 export const clientAuthMethodSchema = z.discriminatedUnion('type', [
   apiKeyClientAuthSchema,
   freeClientAuthSchema,
-  nftKeyClientAuthSchema,
   x402ClientAuthSchema,
 ]);
 

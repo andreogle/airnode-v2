@@ -34,7 +34,7 @@ deliberate design choice:
 - **TLS proof verification** can match the endpoint ID against the observed HTTP request without needing to reconstruct
   a nested hash structure.
 - **Simplicity** -- the signed message is a single `keccak256(encodePacked(...))`, which maps directly to how Solidity
-  and Vyper compute hashes with `abi.encodePacked`.
+  computes hashes with `abi.encodePacked`.
 
 ### Raw responses
 
@@ -97,7 +97,7 @@ On-chain contracts verify signatures using `ecrecover` with the EIP-191 prefix. 
 signed data:
 
 ```solidity
-// Pseudocode -- actual implementation is in Vyper
+// AirnodeVerifier.sol
 hash = keccak256(abi.encodePacked(endpointId, timestamp, data))
 prefixed = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash))
 signer = ecrecover(prefixed, v, r, s)
@@ -105,8 +105,8 @@ require(signer == airnode)
 ```
 
 The EIP-191 prefix (`\x19Ethereum Signed Message:\n32`) is applied automatically by the `personal_sign` method. Both the
-off-chain signer (viem's `signMessage`) and the on-chain verifier (snekmate's `message_hash_utils`) apply the same
-prefix, so signatures are interoperable.
+off-chain signer (viem's `signMessage`) and the on-chain verifier (AirnodeVerifier's `ecrecover`) apply the same prefix,
+so signatures are interoperable.
 
 ## Timestamp
 

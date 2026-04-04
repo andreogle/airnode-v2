@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import type { Hex } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
 import { authenticateRequest, isPaymentRequired } from './auth';
 import type { AuthResult } from './auth';
 import type { ClientAuth } from './types';
@@ -100,67 +98,6 @@ describe('multi-method auth', () => {
 
     const r2 = await authenticateRequest(makeRequest(), resolveAuth());
     expect(r2.authenticated).toBe(false);
-  });
-});
-
-// =============================================================================
-// NFT key auth
-// =============================================================================
-describe('nftKey auth', () => {
-  const TEST_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-  const TEST_ACCOUNT = privateKeyToAccount(TEST_KEY);
-
-  async function signAuthMessage(address: Hex, timestamp: number): Promise<Hex> {
-    const message = `airnode-auth:${address}:${String(timestamp)}`;
-    return TEST_ACCOUNT.signMessage({ message });
-  }
-
-  const nftConfig: ClientAuth = {
-    type: 'nftKey',
-    chain: 1,
-    rpc: 'http://localhost:8545',
-    contract: '0x1234567890abcdef1234567890abcdef12345678',
-    cacheTtl: 60_000,
-  };
-
-  test('rejects missing Authorization header', async () => {
-    const result = await authenticateRequest(makeRequest(), nftConfig);
-    const error = expectError(result);
-    expect(error).toContain('Missing Authorization');
-  });
-
-  test('rejects malformed bearer token', async () => {
-    const result = await authenticateRequest(makeRequest({ Authorization: 'Bearer garbage' }), nftConfig);
-    const error = expectError(result);
-    expect(error).toContain('Invalid NFT key format');
-  });
-
-  test('rejects expired timestamp', async () => {
-    const oldTimestamp = Date.now() - 10 * 60 * 1000;
-    const sig = await signAuthMessage(TEST_ACCOUNT.address, oldTimestamp);
-    const header = `Bearer ${TEST_ACCOUNT.address}:${String(oldTimestamp)}:${sig}`;
-    const result = await authenticateRequest(makeRequest({ Authorization: header }), nftConfig);
-    const error = expectError(result);
-    expect(error).toContain('expired');
-  });
-
-  test('rejects signature from wrong address', async () => {
-    const timestamp = Date.now();
-    const wrongAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Hex;
-    const sig = await signAuthMessage(wrongAddress, timestamp);
-    const header = `Bearer ${wrongAddress}:${String(timestamp)}:${sig}`;
-    const result = await authenticateRequest(makeRequest({ Authorization: header }), nftConfig);
-    const error = expectError(result);
-    expect(error).toContain('does not match');
-  });
-
-  test('valid signature proceeds to NFT ownership check', async () => {
-    const timestamp = Date.now();
-    const sig = await signAuthMessage(TEST_ACCOUNT.address, timestamp);
-    const header = `Bearer ${TEST_ACCOUNT.address}:${String(timestamp)}:${sig}`;
-    const result = await authenticateRequest(makeRequest({ Authorization: header }), nftConfig);
-    const error = expectError(result);
-    expect(error).toContain('does not hold');
   });
 });
 

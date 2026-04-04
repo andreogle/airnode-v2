@@ -21,7 +21,7 @@ provider's. See the [Trust Model](/docs/security/trust-model) for details.
 ## 1. Generate a key
 
 ```bash
-airnode generate-key
+airnode generate-mnemonic
 ```
 
 This outputs a private key and its corresponding Ethereum address. The address is your Airnode's on-chain identity.

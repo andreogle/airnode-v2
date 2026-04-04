@@ -40,15 +40,15 @@ v1 had 30+ Solidity contracts across multiple modules: request-response (Airnode
 authorization (RequesterAuthorizerWithAirnode, AccessControlRegistry), sponsor wallets, allocators, subscription slots,
 data feeds (Api3ServerV1), OEV auctions, proxies, and more.
 
-v2 has one Vyper contract:
+v2 has one Solidity contract:
 
 - **AirnodeVerifier** — verifies a signature, prevents replay, and forwards data to a callback contract.
 
 Permissionless, stateless (beyond replay tracking), and no admin functions.
 
 **Why:** Most of v1's contract complexity existed to manage trust between sponsors, requesters, and airnodes on-chain.
-With v2's HTTP model, trust is handled at the HTTP layer (API keys, NFT keys, x402 payment). The contract only needs to
-verify signatures — everything else is unnecessary.
+With v2's HTTP model, trust is handled at the HTTP layer (API keys, x402 payment). The contract only needs to verify
+signatures — everything else is unnecessary.
 
 ## YAML config instead of OIS
 
@@ -89,8 +89,8 @@ and future TLS proof verifiers can inspect each field independently.
 ### Authentication
 
 v1 had on-chain authorization via `RequesterAuthorizerWithAirnode` with role-based access control trees. v2 handles auth
-at the HTTP layer with four methods: `free`, `apiKey`, `nftKey` (ERC-721 ownership), and `x402` (pay-per-request).
-Multiple methods can be combined per endpoint (any-of semantics).
+at the HTTP layer with three methods: `free`, `apiKey`, and `x402` (pay-per-request). Multiple methods can be combined
+per endpoint (any-of semantics).
 
 ### Response modes
 
@@ -107,11 +107,10 @@ the node.
 
 v2 caches responses in memory with configurable TTL.
 
-### Vyper contracts
+### Solidity contract
 
-v2 contracts are written in Vyper 0.4+ instead of Solidity. Vyper has no function overloading, no inheritance surprises,
-built-in reentrancy protection, and bounds checking on all array accesses. The test suite includes unit, invariant
-(stateful fuzz), and symbolic (Halmos) tests.
+v2 uses a single minimal Solidity contract (AirnodeVerifier) instead of v1's 30+ contracts. The test suite includes
+unit, invariant (stateful fuzz), and symbolic (Halmos) tests.
 
 ### Language and runtime
 

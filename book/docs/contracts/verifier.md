@@ -10,7 +10,7 @@ pull path -- a client gets signed data from the HTTP server and submits it to tr
 
 ## How it works
 
-1. Anyone calls `verify_and_fulfill()` with signed data and a callback target.
+1. Anyone calls `verifyAndFulfill()` with signed data and a callback target.
 2. The contract recovers the signer from the signature.
 3. If the signer matches the provided airnode address, and the data hasn't been submitted before (replay protection),
    the data is forwarded to the callback contract.
@@ -19,16 +19,16 @@ pull path -- a client gets signed data from the HTTP server and submits it to tr
 
 ## Function
 
-```vyper
-verify_and_fulfill(
-    airnode: address,          # expected signer
-    endpoint_id: bytes32,      # specification-bound endpoint hash
-    timestamp: uint256,        # data timestamp
-    data: Bytes[4096],         # ABI-encoded response (up to 4KB)
-    signature: Bytes[65],      # EIP-191 personal signature
-    callback_address: address, # contract to forward data to
-    callback_selector: bytes4, # function selector on the callback
-)
+```solidity
+function verifyAndFulfill(
+    address airnode,          // expected signer
+    bytes32 endpointId,       // specification-bound endpoint hash
+    uint256 timestamp,        // data timestamp
+    bytes calldata data,      // ABI-encoded response (up to 4KB)
+    bytes calldata signature, // EIP-191 personal signature
+    address callbackAddress,  // contract to forward data to
+    bytes4 callbackSelector   // function selector on the callback
+) external
 ```
 
 ## Callback format
@@ -47,8 +47,8 @@ function fulfill(
 
 ## Replay protection
 
-The `requestHash` (the `message_hash` from the signature) serves as the replay key. Each unique combination of
-`(endpoint_id, timestamp, data)` can only be fulfilled once. The `fulfilled` mapping is public -- anyone can check
+The `requestHash` (the `messageHash` from the signature) serves as the replay key. Each unique combination of
+`(endpointId, timestamp, data)` can only be fulfilled once. The `fulfilled` mapping is public -- anyone can check
 whether a particular hash has been submitted.
 
 ## Trust model

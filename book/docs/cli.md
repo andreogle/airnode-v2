@@ -54,16 +54,16 @@ airnode config validate -c examples/configs/complete/config.yaml
 airnode config validate -c config.yaml --interpolate
 ```
 
-## `airnode generate-key`
+## `airnode generate-mnemonic`
 
-Generate a new Ethereum private key and display the corresponding address. Use this as `AIRNODE_PRIVATE_KEY` in your
+Generate a new BIP-39 mnemonic phrase and display the corresponding address. Use this as `AIRNODE_MNEMONIC` in your
 `.env` file.
 
 ```bash
-airnode generate-key
+airnode generate-mnemonic
 ```
 
-No options. Outputs the private key and address.
+No options. Outputs the mnemonic and address.
 
 ## `airnode address`
 
@@ -124,6 +124,7 @@ Exits with code 0 when all addresses are verified, 1 if any are missing.
 
 | Variable              | Description                                           |
 | --------------------- | ----------------------------------------------------- |
+| `AIRNODE_MNEMONIC`    | The airnode's BIP-39 mnemonic phrase (12 words)       |
 | `AIRNODE_PRIVATE_KEY` | The airnode's private key (hex, with `0x` prefix)     |
 | `LOG_FORMAT`          | Log format: `text` (default) or `json`                |
 | `LOG_LEVEL`           | Log level: `debug`, `info` (default), `warn`, `error` |

@@ -109,23 +109,6 @@ apis:
     expect(result.apis[0]?.auth).toEqual({ type: 'free' });
   });
 
-  test('validates nftKey client auth', () => {
-    const raw = MINIMAL_CONFIG.replace(
-      'url: https://api.example.com',
-      `url: https://api.example.com
-    auth:
-      type: nftKey
-      chain: 8453
-      rpc: https://mainnet.base.org
-      contract: '0x1234567890abcdef1234567890abcdef12345678'`
-    );
-    const result = configSchema.parse(parseYaml(raw));
-    const auth = result.apis[0]?.auth as { type: string; chain: number; contract: string; cacheTtl: number };
-    expect(auth.type).toBe('nftKey');
-    expect(auth.chain).toBe(8453);
-    expect(auth.cacheTtl).toBe(60_000);
-  });
-
   test('validates x402 client auth', () => {
     const raw = MINIMAL_CONFIG.replace(
       'url: https://api.example.com',

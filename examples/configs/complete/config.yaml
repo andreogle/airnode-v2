@@ -67,15 +67,10 @@ apis:
           type: int256
           path: $.market_data.current_price.usd
           times: '1e18'
-        auth: # endpoint-level override — NFT holders or API key holders
-          - type: nftKey
-            chain: 8453
-            rpc: https://mainnet.base.org
-            contract: '0x1234567890abcdef1234567890abcdef12345678'
-            cacheTtl: 60000
-          - type: apiKey
-            keys:
-              - ${CLIENT_API_KEY}
+        auth: # endpoint-level override
+          type: apiKey
+          keys:
+            - ${CLIENT_API_KEY}
 
       - name: coinPriceMulti
         path: /simple/price

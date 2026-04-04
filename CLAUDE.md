@@ -35,7 +35,7 @@ examples/
   configs/          Example YAML configs (must always pass validation)
   plugins/          Example plugins (heartbeat, logger, slack-alerts, encrypted-channel)
 contracts/
-  src/              Vyper 0.4+ contracts (AirnodeVerifier)
+  src/              Solidity contracts (AirnodeVerifier)
   test/             Foundry tests (unit, invariant, symbolic)
 book/               Docusaurus documentation site
 ```
@@ -151,23 +151,19 @@ Test conventions:
 
 ## Contracts
 
-Vyper 0.4+ contracts in `contracts/src/`, tested with Foundry. EVM target is `prague` (Pectra). See
-`contracts/README.md` for full architecture docs.
+Solidity contracts in `contracts/src/`, tested with Foundry. EVM target is `prague` (Pectra). See `contracts/README.md`
+for full architecture docs.
 
-- Foundry skips `.vy` files — Vyper is compiled via FFI through `test/VyperDeploy.sol`.
-- Tests inherit from `VyperDeploy` and call `deployVyper("ContractName")` in `setUp()`.
-- snekmate imports (`from snekmate.utils import ...`) resolve via `-p lib/snekmate/src` passed to vyper CLI.
-- macOS has `python3` not `python` — snekmate's VyperDeployer won't work directly, use custom VyperDeploy.
-- Slither needs `--foundry-ignore-compile` after stripping Vyper build info files.
-- Single blank lines between sections (no double blanks). Follow the Vyper style guide.
+- Tests deploy contracts directly with `new AirnodeVerifier()` in `setUp()`.
+- Single blank lines between sections (no double blanks).
 
 ### Contract architecture
 
 One contract:
 
-| Contract             | Purpose                                               |
-| -------------------- | ----------------------------------------------------- |
-| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
+| Contract              | Purpose                                               |
+| --------------------- | ----------------------------------------------------- |
+| `AirnodeVerifier.sol` | Verify signature, prevent replay, forward to callback |
 
 Signature: `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. Permissionless — anyone
 can submit. No admin, no registry, no roles.

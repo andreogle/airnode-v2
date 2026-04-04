@@ -4,16 +4,11 @@ out = "out"
 libs = ["lib"]
 evm_version = "prague"
 optimizer_runs = 200
-ffi = true
-skip = ["src/**/*.vy", "src/**/*.vyi"]
 fuzz = { runs = 1000 }
 invariant = { runs = 256, depth = 64 }
-fs_permissions = [{ access = "read-write", path = "./" }]
 
 [lint]
-# Vyper uses snake_case — test interfaces/ghost variables follow that convention.
-# Foundry's Vm cheatcode constant is lowercase by convention.
-exclude_lints = ["mixed-case-function", "mixed-case-variable", "screaming-snake-case-const"]
+exclude_lints = ["mixed-case-function", "mixed-case-variable"]
 
 [profile.ci]
 fuzz = { runs = 10000 }

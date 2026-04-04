@@ -26,7 +26,7 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 
 ```bash
 bun install
-bun airnode generate-key           # prints private key + address
+bun airnode generate-mnemonic           # prints private key + address
 cp examples/configs/minimal/config.yaml config.yaml
 cp examples/configs/minimal/.env.example .env
 # paste your private key into .env
@@ -55,7 +55,7 @@ curl -X POST http://localhost:3000/endpoints/{endpointId} \
 
 - **Sign any API response** with your key — turn untrusted data into a verifiable attestation
 - **Serve data to smart contracts** — ABI-encoded responses ready for on-chain submission
-- **Monetize access** — API keys, NFT-gated endpoints, or pay-per-request via x402
+- **Monetize access** — API keys or pay-per-request via x402
 - **Control encoding at request time** — clients pass `_type`, `_path`, `_times` to choose what to extract
 - **Extend with plugins** — hooks at every pipeline stage for custom logic
 
@@ -107,11 +107,11 @@ multi-value encoding, and all available fields.
 
 ## Contracts
 
-One Vyper 0.4+ contract (EVM target: `prague`):
+One Solidity contract (EVM target: `prague`):
 
-| Contract             | Purpose                                               |
-| -------------------- | ----------------------------------------------------- |
-| `AirnodeVerifier.vy` | Verify signature, prevent replay, forward to callback |
+| Contract              | Purpose                                               |
+| --------------------- | ----------------------------------------------------- |
+| `AirnodeVerifier.sol` | Verify signature, prevent replay, forward to callback |
 
 Verifies `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign. See
 [`contracts/README.md`](contracts/README.md) for integration examples.
@@ -124,15 +124,6 @@ Verifies `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 per
 | ------------------------------------- | ----------------------------------------------------------- |
 | [Bun](https://bun.sh)                 | `curl -fsSL https://bun.sh/install \| bash`                 |
 | [Foundry](https://book.getfoundry.sh) | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
-| [uv](https://docs.astral.sh/uv/)      | `curl -LsSf https://astral.sh/uv/install.sh \| sh`          |
-
-Vyper, Slither, and Halmos are installed via uv:
-
-```bash
-uv tool install vyper
-uv tool install slither-analyzer
-uv tool install halmos
-```
 
 ### Scripts
 
@@ -161,16 +152,16 @@ bun run build:linux-x64  # Linux x86_64
 
 ```
 src/
-  cli/            CLI commands (start, generate-key, etc.)
+  cli/            CLI commands (start, generate-mnemonic, etc.)
   config/         Zod schema, YAML parser, env interpolation
   api/            Upstream API calls and response processing
   server.ts       Bun.serve HTTP server
   pipeline.ts     Request pipeline (auth → validate → cache → API → encode → sign)
-  auth.ts         Authentication (free, apiKey, nftKey, x402)
+  auth.ts         Authentication (free, apiKey, x402)
   sign.ts         EIP-191 signing
   endpoint.ts     Specification-bound endpoint ID derivation
   plugins.ts      Plugin hooks and budget tracking
-contracts/        Vyper contracts and Foundry tests
+contracts/        Solidity contracts and Foundry tests
 examples/
   configs/        Reference configs (complete, minimal)
   plugins/        Example plugins (heartbeat, logger, slack-alerts)

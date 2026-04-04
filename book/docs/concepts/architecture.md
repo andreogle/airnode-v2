@@ -29,7 +29,7 @@ giving plugins the ability to observe, filter, or modify data at each stage.
 2. **Plugin: onHttpRequest** -- plugins can reject requests early (IP filtering, custom auth). A rejected request never
    reaches the API.
 3. **Authenticate** -- verify client credentials based on the configured method: free access (no check), API key via
-   `X-Api-Key` header, NFT key via ERC-721 ownership verification, or x402 payment via on-chain transfer.
+   `X-Api-Key` header, or x402 payment via on-chain transfer.
 4. **Validate parameters** -- check that all required parameters (those without `fixed` or `default` values) are present
    in the request body.
 5. **Check cache** -- if the endpoint has cache config, return a cached response when the TTL has not expired.
@@ -93,7 +93,7 @@ When Airnode starts:
 
 1. Load and validate `config.yaml` against the Zod schema.
 2. Interpolate environment variables (`${VAR}` references in the config).
-3. Derive the airnode address from `AIRNODE_PRIVATE_KEY`.
+3. Derive the airnode address from `AIRNODE_PRIVATE_KEY` or `AIRNODE_MNEMONIC`.
 4. Build the endpoint map: compute each endpoint ID and register it.
 5. Load plugins from their `source` paths.
 6. Start the HTTP server on the configured port and host.

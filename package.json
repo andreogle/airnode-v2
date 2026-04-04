@@ -14,10 +14,10 @@
     "build:windows": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode.exe",
     "dev": "bun --watch src/cli/index.ts start",
     "fmt": "prettier . --write && eslint . --fix",
-    "lint": "bun run lint:prettier && bun run lint:eslint",
+    "lint": "bun run lint:prettier && bun run lint:eslint && bun run lint:slither",
     "lint:eslint": "eslint . --cache",
     "lint:prettier": "prettier . --check",
-    "lint:slither": "(cd contracts && forge build --build-info --force && slither .)",
+    "lint:slither": "(cd contracts && slither .)",
     "test:contracts": "(cd contracts && forge test -vvv)",
     "test:integration": "bun run integration/run-sequential.ts",
     "test:unit": "bun test"

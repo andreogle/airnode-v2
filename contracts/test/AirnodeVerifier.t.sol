@@ -1,25 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { VyperDeploy } from './VyperDeploy.sol';
+import { Test } from 'forge-std/Test.sol';
+import { AirnodeVerifier } from '../src/AirnodeVerifier.sol';
 import { MockCallback, RevertingCallback } from './MockCallback.sol';
 
-interface IAirnodeVerifier {
-  function verify_and_fulfill(
-    address airnode,
-    bytes32 endpoint_id,
-    uint256 timestamp,
-    bytes calldata data,
-    bytes calldata signature,
-    address callback_address,
-    bytes4 callback_selector
-  ) external;
-
-  function fulfilled(bytes32) external view returns (bool);
-}
-
-contract AirnodeVerifierTest is VyperDeploy {
-  IAirnodeVerifier verifier;
+contract AirnodeVerifierTest is Test {
+  AirnodeVerifier verifier;
   MockCallback callback;
   RevertingCallback revertingCallback;
 
@@ -32,7 +19,7 @@ contract AirnodeVerifierTest is VyperDeploy {
   bytes4 constant CALLBACK_SELECTOR = MockCallback.fulfill.selector;
 
   function setUp() public {
-    verifier = IAirnodeVerifier(deployVyper('AirnodeVerifier'));
+    verifier = new AirnodeVerifier();
     callback = new MockCallback();
     revertingCallback = new RevertingCallback();
     airnodeAddress = vm.addr(AIRNODE_KEY);
@@ -53,21 +40,13 @@ contract AirnodeVerifierTest is VyperDeploy {
   }
 
   // ===========================================================================
-  // verify_and_fulfill
+  // verifyAndFulfill
   // ===========================================================================
 
   function test_fulfills_with_valid_signature() public {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
 
-    verifier.verify_and_fulfill(
-      airnodeAddress,
-      ENDPOINT_ID,
-      TIMESTAMP,
-      DATA,
-      sig,
-      address(callback),
-      CALLBACK_SELECTOR
-    );
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
 
     assertEq(callback.callCount(), 1);
     assertEq(callback.lastAirnode(), airnodeAddress);
@@ -82,15 +61,7 @@ contract AirnodeVerifierTest is VyperDeploy {
 
     assertFalse(verifier.fulfilled(requestHash));
 
-    verifier.verify_and_fulfill(
-      airnodeAddress,
-      ENDPOINT_ID,
-      TIMESTAMP,
-      DATA,
-      sig,
-      address(callback),
-      CALLBACK_SELECTOR
-    );
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
 
     assertTrue(verifier.fulfilled(requestHash));
   }
@@ -98,26 +69,10 @@ contract AirnodeVerifierTest is VyperDeploy {
   function test_reverts_on_replay() public {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
 
-    verifier.verify_and_fulfill(
-      airnodeAddress,
-      ENDPOINT_ID,
-      TIMESTAMP,
-      DATA,
-      sig,
-      address(callback),
-      CALLBACK_SELECTOR
-    );
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
 
     vm.expectRevert('Already fulfilled');
-    verifier.verify_and_fulfill(
-      airnodeAddress,
-      ENDPOINT_ID,
-      TIMESTAMP,
-      DATA,
-      sig,
-      address(callback),
-      CALLBACK_SELECTOR
-    );
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
   }
 
   function test_reverts_on_wrong_airnode() public {
@@ -125,7 +80,7 @@ contract AirnodeVerifierTest is VyperDeploy {
     address wrongAirnode = address(0xdead);
 
     vm.expectRevert('Signature mismatch');
-    verifier.verify_and_fulfill(wrongAirnode, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
+    verifier.verifyAndFulfill(wrongAirnode, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
   }
 
   function test_reverts_on_tampered_data() public {
@@ -133,7 +88,7 @@ contract AirnodeVerifierTest is VyperDeploy {
     bytes memory tamperedData = abi.encode(int256(9999e18));
 
     vm.expectRevert('Signature mismatch');
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
       TIMESTAMP,
@@ -149,7 +104,7 @@ contract AirnodeVerifierTest is VyperDeploy {
     bytes32 requestHash = keccak256(abi.encodePacked(ENDPOINT_ID, TIMESTAMP, DATA));
 
     // Should not revert — the callback reverts but the fulfillment is recorded
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
       TIMESTAMP,
@@ -168,7 +123,7 @@ contract AirnodeVerifierTest is VyperDeploy {
     bytes memory sig1 = _sign(ENDPOINT_ID, TIMESTAMP, data1);
     bytes memory sig2 = _sign(ENDPOINT_ID, TIMESTAMP, data2);
 
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
       TIMESTAMP,
@@ -179,7 +134,7 @@ contract AirnodeVerifierTest is VyperDeploy {
     );
 
     // Same endpoint + timestamp but different data — should succeed (not replay)
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
       TIMESTAMP,
@@ -192,21 +147,20 @@ contract AirnodeVerifierTest is VyperDeploy {
     assertEq(callback.callCount(), 2);
   }
 
+  function test_reverts_on_zero_callback_address() public {
+    bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
+
+    vm.expectRevert('Callback address is zero');
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(0), CALLBACK_SELECTOR);
+  }
+
   function test_different_timestamps_produce_different_request_hash() public {
     bytes memory sig1 = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
     bytes memory sig2 = _sign(ENDPOINT_ID, TIMESTAMP + 1, DATA);
 
-    verifier.verify_and_fulfill(
-      airnodeAddress,
-      ENDPOINT_ID,
-      TIMESTAMP,
-      DATA,
-      sig1,
-      address(callback),
-      CALLBACK_SELECTOR
-    );
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig1, address(callback), CALLBACK_SELECTOR);
 
-    verifier.verify_and_fulfill(
+    verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
       TIMESTAMP + 1,

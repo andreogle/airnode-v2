@@ -80,23 +80,6 @@ auth:
 Keys are checked against the `X-Api-Key` request header using constant-time comparison. Multiple keys are supported for
 key rotation.
 
-### NFT key
-
-Clients prove they hold an NFT from the operator's collection. The airnode checks on-chain ownership via RPC:
-
-```yaml
-auth:
-  type: nftKey
-  chain: 8453 # chain ID where the NFT contract lives
-  rpc: https://mainnet.base.org
-  contract: '0x...' # ERC-721 contract address
-  cacheTtl: 60000 # cache ownership checks for 60 seconds
-```
-
-The client sends `Authorization: Bearer <address>:<timestamp>:<signature>` where the signature is an EIP-191 personal
-sign over `airnode-auth:<address>:<timestamp>`. The server verifies the signature, checks the timestamp is within 5
-minutes, and calls `balanceOf(address)` on the NFT contract. Ownership is cached for `cacheTtl` milliseconds.
-
 ### x402 (HTTP-native payment)
 
 Pay-per-request using on-chain transfers. When a client requests without payment, the server returns a 402:

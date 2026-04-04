@@ -14,7 +14,7 @@ afterAll(() => {
 
 describe('S29 — Multi-method auth integration', () => {
   test('endpoint with multi-method auth rejects unauthenticated requests', async () => {
-    // coinMarketData has auth: [nftKey, apiKey]
+    // coinMarketData has auth: apiKey
     const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinMarketData');
     const response = await post(ctx.baseUrl, endpointId, { coinId: 'bitcoin' });
 
