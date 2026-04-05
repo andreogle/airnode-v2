@@ -330,6 +330,33 @@ describe('callApi', () => {
     expect(options.body).toBe(JSON.stringify({ amount: '1000' }));
   });
 
+  test('sends cookie parameters as Cookie header', async () => {
+    const api = makeApi();
+    const endpoint = makeEndpoint({
+      parameters: [
+        { name: 'session', in: 'cookie', required: true, secret: false, fixed: 'abc123' },
+        { name: 'tracking', in: 'cookie', required: false, secret: false },
+      ],
+    });
+
+    await callApi(api, endpoint, { tracking: 'xyz' });
+
+    const { options } = fetchCallArguments();
+    expect((options.headers as Record<string, string>)['Cookie']).toBe('session=abc123; tracking=xyz');
+  });
+
+  test('omits Cookie header when no cookie parameters have values', async () => {
+    const api = makeApi();
+    const endpoint = makeEndpoint({
+      parameters: [{ name: 'session', in: 'cookie', required: false, secret: false }],
+    });
+
+    await callApi(api, endpoint, {});
+
+    const { options } = fetchCallArguments();
+    expect((options.headers as Record<string, string>)['Cookie']).toBeUndefined();
+  });
+
   test('returns null data for empty response body (204 No Content)', async () => {
     fetchMock.mockResolvedValue({
       text: () => Promise.resolve(''),

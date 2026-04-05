@@ -43,6 +43,7 @@ async function callApi(
   const headerParameters = Object.fromEntries(
     resolvedParameters.filter((p) => p.in === 'header' && !isNil(p.value)).map((p) => [p.name, p.value as string])
   );
+  const cookieParameters = resolvedParameters.filter((p) => p.in === 'cookie' && !isNil(p.value));
   const bodyParameters = Object.fromEntries(
     resolvedParameters.filter((p) => p.in === 'body' && !isNil(p.value)).map((p) => [p.name, p.value])
   );
@@ -64,6 +65,12 @@ async function callApi(
     ...headerParameters,
     ...api.headers,
   };
+
+  if (cookieParameters.length > 0) {
+    const cookieString = cookieParameters.map((p) => `${p.name}=${p.value as string}`).join('; ');
+    const existing = headers['Cookie'];
+    headers['Cookie'] = existing ? `${existing}; ${cookieString}` : cookieString; // eslint-disable-line functional/immutable-data
+  }
 
   const hasBody = endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH';
   const body = hasBody && Object.keys(bodyParameters).length > 0 ? JSON.stringify(bodyParameters) : undefined;
