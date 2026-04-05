@@ -84,7 +84,8 @@ Tested 2026-04-04 on M1 MacBook Pro, Node.js v22.19.0, local Docker attestor.
 |----------|--------|---------|
 | API call through attestor produces signed proof | **PASS** | Full CoinGecko call, attestor signature verified |
 | API key redacted from proof | **PASS** | `secretParams.headers` values not present in proof output |
-| Latency | **3.85s total** | 0.4s API call + 3.3s ZK proofs (snarkjs) + 0.1s attestor verification |
+| Latency (gnark) | **3.48s total** | 0.5s API call + 1.9s ZK proofs (gnark) + 1.0s attestor verification |
+| Latency (snarkjs) | **3.85s total** | 0.4s API call + 3.3s ZK proofs (snarkjs) + 0.1s attestor verification |
 | Proof verifiable off-chain | **PASS** | Identifier hash matches, ECDSA signature recovery matches attestor address |
 | JSON field extraction | **PASS** | `extractedParameters.price: 2064.01` via regex named capture group |
 
@@ -101,14 +102,15 @@ Reclaim proofs contain:
 ### Latency breakdown
 
 ```
-Connect to attestor:        ~0.00s
-TLS tunnel + API call:      ~0.35s
-ZK proof generation (2x):   ~3.30s  (snarkjs, chacha20)
-Attestor verification:      ~0.12s
-Total:                      ~3.85s
+                            gnark       snarkjs
+Connect to attestor:        ~0.00s      ~0.00s
+TLS tunnel + API call:      ~0.50s      ~0.35s
+ZK proof generation (2x):   ~1.90s      ~3.30s
+Attestor verification:      ~1.00s      ~0.12s
+Total:                      ~3.48s      ~3.85s
 ```
 
-The ZK proofs dominate. The gnark backend (native Go) is reportedly ~10x faster (~0.3s). The
+gnark (native Go) is the default. Set `ZK_ENGINE=snarkjs` to use the JS backend. The
 TLS 1.3 key-update method avoids ZK entirely for request redaction but still requires ZK for
 response verification.
 

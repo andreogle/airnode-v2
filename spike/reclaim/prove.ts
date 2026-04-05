@@ -21,6 +21,7 @@ import { generatePrivateKey } from 'viem/accounts';
 const ATTESTOR_URL = process.env.ATTESTOR_URL ?? 'ws://localhost:8001/ws';
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 const REDACT = process.argv.includes('--redact');
+const ZK_ENGINE = (process.env.ZK_ENGINE ?? 'gnark') as 'gnark' | 'snarkjs' | 'stwo';
 
 // =============================================================================
 // Helpers
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   console.log(`Attestor:  ${ATTESTOR_URL}`);
   console.log(`API URL:   ${COINGECKO_URL}`);
   console.log(`Redaction: ${REDACT ? 'yes (fake API key in header)' : 'no'}`);
+  console.log(`ZK Engine: ${ZK_ENGINE}`);
   console.log();
 
   // Generate a throwaway owner key for this spike
@@ -91,8 +93,9 @@ async function main(): Promise<void> {
       params,
       secretParams,
       ownerPrivateKey,
+      zkEngine: ZK_ENGINE,
       client: { url: ATTESTOR_URL },
-      onStep: (step) => {
+      onStep: (step: { name: string; proofsDone?: number; proofsTotal?: number }) => {
         console.log(`  [${elapsed(startMs)}] Step: ${step.name}${'proofsDone' in step ? ` (${step.proofsDone}/${step.proofsTotal})` : ''}`);
       },
     });
