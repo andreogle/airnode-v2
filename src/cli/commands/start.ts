@@ -68,6 +68,7 @@ export const start = new Command('start')
       plugins,
       cache,
       asyncStore,
+      settings: config.settings,
       handleRequest: handleEndpointRequest,
     });
 

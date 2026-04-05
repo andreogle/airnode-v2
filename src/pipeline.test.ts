@@ -77,6 +77,7 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     endpointMap: new Map(),
     plugins: createEmptyRegistry(),
     cache: createCache(),
+    settings: { timeout: 10_000, proof: 'none', plugins: [] },
     ...overrides,
   };
 }

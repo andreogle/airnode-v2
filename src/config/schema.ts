@@ -127,9 +127,16 @@ const pluginEntrySchema = z.object({
   timeout: z.number().int().positive(),
 });
 
+const reclaimProofSchema = z.object({
+  type: z.literal('reclaim'),
+  gatewayUrl: z.url(),
+});
+
+const proofSchema = z.union([z.literal('none'), reclaimProofSchema]);
+
 export const settingsSchema = z.object({
   timeout: z.number().int().positive().default(10_000),
-  proof: z.literal('none'),
+  proof: proofSchema.default('none'),
   plugins: z.array(pluginEntrySchema).default([]),
 });
 

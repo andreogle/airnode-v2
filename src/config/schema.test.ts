@@ -281,6 +281,45 @@ apis:
   });
 });
 
+describe('proof settings', () => {
+  test('accepts proof: none (string)', () => {
+    const result = configSchema.parse(parseYaml(MINIMAL_CONFIG));
+    expect(result.settings.proof).toBe('none');
+  });
+
+  test('accepts proof: reclaim with gatewayUrl', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'proof: none',
+      `proof:
+    type: reclaim
+    gatewayUrl: https://prove.chainapi.com`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    const proof = result.settings.proof as { type: string; gatewayUrl: string };
+    expect(proof.type).toBe('reclaim');
+    expect(proof.gatewayUrl).toBe('https://prove.chainapi.com');
+  });
+
+  test('rejects reclaim proof without gatewayUrl', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'proof: none',
+      `proof:
+    type: reclaim`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
+  test('rejects invalid gatewayUrl', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'proof: none',
+      `proof:
+    type: reclaim
+    gatewayUrl: not-a-url`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+});
+
 describe('parameterSchema', () => {
   test('rejects required parameter with a default value', () => {
     expect(() => parameterSchema.parse({ name: 'q', required: true, default: 'usd' })).toThrow(

@@ -22,6 +22,7 @@ interface ServerDependencies {
   readonly plugins: PluginRegistry;
   readonly cache: ResponseCache;
   readonly asyncStore?: AsyncRequestStore;
+  readonly settings: Config['settings'];
   readonly handleRequest: (
     request: Request,
     endpointId: Hex,

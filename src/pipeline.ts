@@ -10,8 +10,10 @@ import type { ResolvedEndpoint } from './endpoint';
 import { isNil } from './guards';
 import { logger, runWithContext } from './logger';
 import type { PluginRegistry } from './plugins';
+import type { ReclaimProof } from './proof';
+import { requestProof } from './proof';
 import { signResponse } from './sign';
-import type { ClientAuth, Encoding } from './types';
+import type { ClientAuth, Encoding, Settings } from './types';
 
 // =============================================================================
 // Types
@@ -23,6 +25,7 @@ interface PipelineDependencies {
   readonly plugins: PluginRegistry;
   readonly cache: ResponseCache;
   readonly asyncStore?: AsyncRequestStore;
+  readonly settings: Settings;
 }
 
 interface SignedResponseBody {
@@ -31,6 +34,7 @@ interface SignedResponseBody {
   readonly timestamp: number;
   readonly data: Hex;
   readonly signature: Hex;
+  readonly proof?: ReclaimProof;
 }
 
 interface RawResponseBody {
@@ -39,6 +43,7 @@ interface RawResponseBody {
   readonly timestamp: number;
   readonly rawData: unknown;
   readonly signature: Hex;
+  readonly proof?: ReclaimProof;
 }
 
 // =============================================================================
@@ -120,6 +125,32 @@ async function buildRawResponse(
     rawData: rawData ?? null, // eslint-disable-line unicorn/no-null
     signature: signed.signature,
   };
+}
+
+// =============================================================================
+// TLS proof
+// =============================================================================
+async function fetchProofIfEnabled(
+  resolved: ResolvedEndpoint,
+  deps: PipelineDependencies
+): Promise<ReclaimProof | undefined> {
+  const proof = deps.settings.proof;
+  if (proof === 'none') return undefined;
+
+  const result = await go(() =>
+    requestProof(proof.gatewayUrl, {
+      url: `${resolved.api.url}${resolved.endpoint.path}`,
+      method: resolved.endpoint.method,
+      headers: resolved.api.headers,
+    })
+  );
+
+  if (!result.success) {
+    logger.warn(`TLS proof failed (non-fatal): ${result.error.message}`);
+    return undefined;
+  }
+
+  return result.data;
 }
 
 // =============================================================================
@@ -224,12 +255,14 @@ async function executeApiCall(
       return jsonResponse({ error: 'Request dropped by plugin' }, 403);
     }
 
+    const proof = await fetchProofIfEnabled(resolved, deps);
     const responseBody = await buildSignedResponse(endpointId, signResult.data, deps);
-    return jsonResponse(responseBody);
+    return jsonResponse(proof ? { ...responseBody, proof } : responseBody);
   }
 
+  const proof = await fetchProofIfEnabled(resolved, deps);
   const responseBody = await buildRawResponse(endpointId, apiResponse.data, deps);
-  return jsonResponse(responseBody);
+  return jsonResponse(proof ? { ...responseBody, proof } : responseBody);
 }
 
 // =============================================================================
