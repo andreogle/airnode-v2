@@ -130,18 +130,56 @@ async function buildRawResponse(
 // =============================================================================
 // TLS proof
 // =============================================================================
+function buildProveUrl(resolved: ResolvedEndpoint, parameters: Record<string, string>): string {
+  const parameterDefs = resolved.endpoint.parameters;
+  const resolvedParams = parameterDefs.map((p) => {
+    const value = isNil(p.fixed)
+      ? (parameters[p.name] ?? (isNil(p.default) ? undefined : String(p.default)))
+      : String(p.fixed);
+    return { ...p, value };
+  });
+
+  // Resolve path parameters
+  // eslint-disable-next-line functional/no-let
+  let path = resolved.endpoint.path;
+  // eslint-disable-next-line functional/no-loop-statements
+  for (const p of resolvedParams.filter((rp) => rp.in === 'path' && !isNil(rp.value))) {
+    path = path.replaceAll(`{${p.name}}`, encodeURIComponent(p.value as string));
+  }
+
+  const url = new URL(`${resolved.api.url}${path}`);
+
+  // Add query parameters
+  // eslint-disable-next-line functional/no-loop-statements
+  for (const p of resolvedParams.filter((rp) => rp.in === 'query' && !isNil(rp.value))) {
+    url.searchParams.set(p.name, p.value as string);
+  }
+
+  return url.toString();
+}
+
 async function fetchProofIfEnabled(
   resolved: ResolvedEndpoint,
+  parameters: Record<string, string>,
   deps: PipelineDependencies
 ): Promise<ReclaimProof | undefined> {
   const proof = deps.settings.proof;
   if (proof === 'none') return undefined;
 
+  const responseMatches = resolved.endpoint.responseMatches;
+  if (!responseMatches) {
+    logger.debug('Skipping TLS proof — no responseMatches configured for this endpoint');
+    return undefined;
+  }
+
+  const proveUrl = buildProveUrl(resolved, parameters);
+
   const result = await go(() =>
     requestProof(proof.gatewayUrl, {
-      url: `${resolved.api.url}${resolved.endpoint.path}`,
+      url: proveUrl,
       method: resolved.endpoint.method,
       headers: resolved.api.headers,
+      responseMatches,
     })
   );
 
@@ -255,12 +293,12 @@ async function executeApiCall(
       return jsonResponse({ error: 'Request dropped by plugin' }, 403);
     }
 
-    const proof = await fetchProofIfEnabled(resolved, deps);
+    const proof = await fetchProofIfEnabled(resolved, resolvedParameters, deps);
     const responseBody = await buildSignedResponse(endpointId, signResult.data, deps);
     return jsonResponse(proof ? { ...responseBody, proof } : responseBody);
   }
 
-  const proof = await fetchProofIfEnabled(resolved, deps);
+  const proof = await fetchProofIfEnabled(resolved, resolvedParameters, deps);
   const responseBody = await buildRawResponse(endpointId, apiResponse.data, deps);
   return jsonResponse(proof ? { ...responseBody, proof } : responseBody);
 }
