@@ -1,0 +1,8 @@
+services:
+  attestor:
+    image: ghcr.io/reclaimprotocol/attestor-core:b372f225cba5af1bbbaa061c31a3f2ae31490982
+    env_file:
+      - .env
+    ports:
+      - '8001:8001'
+    restart: on-failure
