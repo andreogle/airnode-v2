@@ -84,6 +84,21 @@ v2 signs `keccak256(encodePacked(endpointId, timestamp, data))` where the endpoi
 endpoint ID, timestamp, and data are separate top-level fields — not nested inside another hash — so on-chain contracts
 and future TLS proof verifiers can inspect each field independently.
 
+## TLS proofs
+
+v1 had no mechanism to prove where data came from. The EIP-191 signature proved who signed the data, but consumers had
+to trust that the operator faithfully relayed the API response. A malicious operator could fabricate responses and sign
+them with a valid key.
+
+v2 integrates TLS proofs via the [Reclaim protocol](/docs/concepts/proofs). An independent attestor participates in the
+TLS session (via MPC-TLS) and produces a cryptographic attestation that the response came from the claimed HTTPS
+endpoint. The proof is attached to the response alongside the signature — consumers can verify both who signed and where
+the data came from.
+
+**Why:** Specification-bound endpoint IDs prove what API an airnode committed to calling. TLS proofs prove it actually
+called that API. Together, they eliminate the trust assumption on the operator entirely — the data is verifiable
+end-to-end.
+
 ## Other improvements
 
 ### Authentication
