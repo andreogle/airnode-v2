@@ -26,12 +26,17 @@ When the endpoint has `encoding` configured, the response contains ABI-encoded d
   "endpointId": "0xa1b2...endpoint-id-hash",
   "timestamp": 1711234567,
   "data": "0x00000000000000000000000000000000000000000000006c6b935b8bbd400000",
-  "signature": "0x1234...65-byte-ecdsa-signature"
+  "signature": "0x1234...65-byte-ecdsa-signature",
+  "proof": { "...": "present when TLS proofs are enabled" }
 }
 ```
 
 The `data` field is the ABI-encoded value extracted from the API response at the configured `path`, multiplied by
 `times` if specified, and encoded as the configured `type` (e.g., `int256`).
+
+The `proof` field is present only when [TLS proofs](/docs/concepts/proofs) are enabled and the endpoint has
+`responseMatches` configured. It contains the attestor's cryptographic attestation that the data came from the claimed
+API over TLS.
 
 ## Response (raw)
 
@@ -49,13 +54,14 @@ covers the keccak256 hash of the JSON:
       "usd_24h_vol": 12345678901.23
     }
   },
-  "signature": "0x1234...65-byte-ecdsa-signature"
+  "signature": "0x1234...65-byte-ecdsa-signature",
+  "proof": { "...": "present when TLS proofs are enabled" }
 }
 ```
 
 Raw mode is useful when the consumer needs the full JSON structure or when multiple values from the same response are
 needed. The signature still proves the data came from this airnode, but the data itself is not ABI-encoded for on-chain
-use.
+use. The `proof` field appears when [TLS proofs](/docs/concepts/proofs) are enabled for the endpoint.
 
 ## Response (empty)
 

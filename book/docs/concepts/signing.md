@@ -42,10 +42,15 @@ For endpoints without encoding, Airnode returns the full JSON in a `rawData` fie
 hash of the JSON-serialized response:
 
 ```
-dataHash = keccak256(toHex(JSON.stringify(rawData)))
+dataHash = keccak256(toHex(stableStringify(rawData)))
 hash = keccak256(encodePacked(endpointId, timestamp, dataHash))
 signature = EIP-191 personal sign over hash
 ```
+
+**Important:** `stableStringify` is not `JSON.stringify`. It produces deterministic output by sorting object keys
+alphabetically at every level. This ensures that `{ "b": 1, "a": 2 }` and `{ "a": 2, "b": 1 }` produce the same hash. If
+you verify a raw response signature, you must sort keys the same way. See the
+[verification example](#off-chain-verification) below.
 
 The consumer receives both `rawData` (the full JSON) and `signature` (over the hash of that JSON). To verify, hash the
 raw data yourself and check it against the signature.
@@ -80,12 +85,24 @@ const valid = await verifyMessage({
 console.log(valid); // true
 ```
 
-For raw responses, compute `dataHash` first:
+For raw responses, compute `dataHash` first. You must use stable (sorted-key) JSON serialization to match what the
+airnode produces:
 
 ```typescript
 import { keccak256, toHex } from 'viem';
 
-const dataHash = keccak256(toHex(JSON.stringify(response.rawData)));
+// Stable stringify: sorts object keys alphabetically at every level
+function stableStringify(value: unknown): string {
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  const sorted = Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+  return `{${sorted.join(',')}}`;
+}
+
+const dataHash = keccak256(toHex(stableStringify(response.rawData)));
 const messageHash = keccak256(
   encodePacked(['bytes32', 'uint256', 'bytes'], [response.endpointId, BigInt(response.timestamp), dataHash])
 );

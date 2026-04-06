@@ -34,13 +34,15 @@ function makeConfig(overrides: Partial<Config['server']> = {}): Config {
 }
 
 function makeDeps(overrides: Partial<ServerDependencies> = {}): ServerDependencies {
+  const config = overrides.config ?? makeConfig();
   return {
-    config: makeConfig(),
+    config,
     account: TEST_ACCOUNT,
     airnode: TEST_AIRNODE,
     endpointMap: new Map(),
     plugins: createEmptyRegistry(),
     cache: createCache(),
+    settings: config.settings,
     handleRequest: mock(() => Promise.resolve(Response.json({ ok: true }, { status: 200 }))),
     ...overrides,
   };

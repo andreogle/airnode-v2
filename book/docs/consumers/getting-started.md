@@ -32,8 +32,9 @@ trust guarantees. See the [Trust Model](/docs/security/trust-model) for why this
 
 ## Step 3: Find your endpoint ID
 
-The airnode operator provides the endpoint ID for each API route. It is a `bytes32` hash derived from the endpoint's OIS
-specification. The operator's documentation lists available endpoint IDs and their expected parameters.
+The airnode operator provides the endpoint ID for each API route. It is a `bytes32` hash derived from the endpoint's API
+specification (URL, path, method, non-secret parameters, and encoding). The operator's documentation lists available
+endpoint IDs and their expected parameters.
 
 ## Step 4: Make a request
 
@@ -97,12 +98,24 @@ if (recovered.toLowerCase() !== expectedAirnode.toLowerCase()) {
 }
 ```
 
-For raw responses, hash the JSON before verifying:
+For raw responses, hash the JSON before verifying. You must use stable (sorted-key) JSON serialization to match what the
+airnode produces:
 
 ```typescript
-import { toBytes, keccak256 as keccak } from 'viem';
+import { keccak256, toHex } from 'viem';
 
-const rawDataHash = keccak(toBytes(JSON.stringify(rawData)));
+// Stable stringify: sorts object keys alphabetically at every level
+function stableStringify(value: unknown): string {
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  const sorted = Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+  return `{${sorted.join(',')}}`;
+}
+
+const rawDataHash = keccak256(toHex(stableStringify(rawData)));
 // Use rawDataHash in place of `data` in the encodePacked call above
 ```
 

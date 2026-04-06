@@ -75,6 +75,11 @@ export const cacheSchema = z.object({
 // =============================================================================
 const endpointModeSchema = z.enum(['sync', 'async', 'stream']).default('sync');
 
+const responseMatchSchema = z.object({
+  type: z.literal('regex'),
+  value: z.string().min(1),
+});
+
 export const endpointSchema = z.object({
   name: z.string().min(1),
   path: z.string().min(1),
@@ -82,6 +87,7 @@ export const endpointSchema = z.object({
   mode: endpointModeSchema,
   parameters: z.array(parameterSchema).default([]),
   encoding: encodingSchema.optional(),
+  responseMatches: z.array(responseMatchSchema).min(1).optional(),
   auth: clientAuthSchema.optional(),
   cache: cacheSchema.optional(),
   description: z.string().optional(),
@@ -127,9 +133,16 @@ const pluginEntrySchema = z.object({
   timeout: z.number().int().positive(),
 });
 
+const reclaimProofSchema = z.object({
+  type: z.literal('reclaim'),
+  gatewayUrl: z.url(),
+});
+
+const proofSchema = z.union([z.literal('none'), reclaimProofSchema]);
+
 export const settingsSchema = z.object({
   timeout: z.number().int().positive().default(10_000),
-  proof: z.literal('none'),
+  proof: proofSchema.default('none'),
   plugins: z.array(pluginEntrySchema).default([]),
 });
 

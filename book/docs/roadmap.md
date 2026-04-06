@@ -77,14 +77,20 @@ only interface.
 
 Reducing trust assumptions with cryptographic proofs.
 
+**Delivered:**
+
+- **TLS proofs (Reclaim)**: Cryptographic proof that the data came from a specific HTTPS endpoint via MPC-TLS. An
+  independent attestor verifies the TLS session and signs a claim. Proofs are non-fatal -- responses are returned
+  without proofs if the attestor is unavailable. Configured via `settings.proof` and per-endpoint `responseMatches`. See
+  [TLS Proofs](/docs/concepts/proofs).
+
+**Planned:**
+
 - **Deterministic replay**: Prove that the response processing (path extraction, type casting, encoding) was applied
   correctly to the raw API response. Uses zkVM (SP1, RISC Zero) to generate a proof that can be verified on-chain.
 - **TEE attestation**: Run the airnode in a Trusted Execution Environment (AWS Nitro Enclaves, Intel SGX, AMD SEV-SNP).
   Remote attestation proves the running code matches a specific binary hash. Combined with DNS identity verification,
   this proves both who operates the airnode and what code it runs.
-- **TLS proofs**: When TLSNotary matures, generate cryptographic proof that the data came from a specific HTTPS
-  endpoint. The endpoint ID is a separate field in the signature so on-chain verifiers can check it against the proven
-  HTTP request.
 
 ## Phase 5: ChainAPI platform
 

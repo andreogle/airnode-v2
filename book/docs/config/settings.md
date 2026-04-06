@@ -10,7 +10,7 @@ The `settings` section configures global behavior. It is placed immediately afte
 ```yaml
 settings:
   timeout: 10000 # default, ms
-  proof: none # only option for now
+  proof: none
   plugins:
     - source: ./plugins/heartbeat.ts
       timeout: 5000
@@ -18,11 +18,11 @@ settings:
 
 ## Fields
 
-| Field     | Type     | Required | Default | Description                                            |
-| --------- | -------- | -------- | ------- | ------------------------------------------------------ |
-| `timeout` | `number` | No       | `10000` | Global upstream API request timeout in milliseconds.   |
-| `proof`   | `string` | Yes      | --      | Proof mode. Currently only `'none'` is supported.      |
-| `plugins` | `array`  | No       | `[]`    | Plugin entries. See [Plugin Configuration](./plugins). |
+| Field     | Type               | Required | Default  | Description                                            |
+| --------- | ------------------ | -------- | -------- | ------------------------------------------------------ |
+| `timeout` | `number`           | No       | `10000`  | Global upstream API request timeout in milliseconds.   |
+| `proof`   | `string \| object` | No       | `'none'` | Proof mode. See [Proof](#proof).                       |
+| `plugins` | `array`            | No       | `[]`     | Plugin entries. See [Plugin Configuration](./plugins). |
 
 ## `timeout`
 
@@ -36,16 +36,42 @@ settings:
 
 ## `proof`
 
-Proof mode for response verification. Currently only `'none'` is supported. Future modes will include:
+Controls whether TLS proofs are attached to responses. Two modes are supported:
 
-- `replay` -- deterministic replay proofs
-- `tee` -- trusted execution environment attestation
-- `tlsnotary` -- TLS session proofs via TLSNotary
+### No proof (default)
 
 ```yaml
 settings:
   proof: none
 ```
+
+Responses contain only the EIP-191 signature. No proof is generated.
+
+### Reclaim TLS proof
+
+```yaml
+settings:
+  proof:
+    type: reclaim
+    gatewayUrl: http://localhost:5177/v1/prove
+```
+
+| Field        | Type     | Required | Description                                                  |
+| ------------ | -------- | -------- | ------------------------------------------------------------ |
+| `type`       | `string` | Yes      | Must be `'reclaim'`.                                         |
+| `gatewayUrl` | `string` | Yes      | Full URL of the proof gateway endpoint. Must be a valid URL. |
+
+When enabled, Airnode requests a TLS proof from the gateway after each API call. The proof is attached to the response
+in a `proof` field alongside the signature. See [TLS Proofs](/docs/concepts/proofs) for details on how proofs work.
+
+**Important:** `gatewayUrl` must be the **full URL** to the proof endpoint (e.g., `http://localhost:5177/v1/prove`), not
+just a base URL. Airnode sends the request directly to this URL.
+
+Proof generation is **non-fatal**. If the proof gateway is unavailable or returns an error, the response is still
+returned without the `proof` field and a warning is logged. This ensures proof failures do not block data delivery.
+
+Endpoints must have [`responseMatches`](/docs/config/apis#responsematches) configured for proof generation to be
+requested. Endpoints without `responseMatches` skip proof generation even when proof is enabled globally.
 
 ## `plugins`
 

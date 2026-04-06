@@ -16,7 +16,7 @@ If you operate an API, running an Airnode lets you serve your data to smart cont
 changing your existing infrastructure. Your API stays exactly as it is — Airnode sits in front of it as a signing proxy.
 
 - **Monetize your API on-chain.** Smart contracts can't call HTTP APIs directly. Airnode bridges this gap. Developers
-  pay per-request via API keys, NFT access passes, or x402 HTTP-native payments — you choose the model.
+  pay per-request via API keys or x402 HTTP-native payments — you choose the model.
 - **No blockchain expertise required.** You don't run a node, manage wallets, or write smart contracts. Airnode is a
   stateless HTTP server that signs responses. The on-chain verification contract is already deployed.
 - **Your data, your key.** Every response is signed with your private key, creating a verifiable attestation: "this API
@@ -38,8 +38,8 @@ cryptographic guarantees.
   back. Any HTTP client works — `curl`, `fetch`, Axios, or your smart contract's off-chain component.
 - **Flexible encoding.** Get raw JSON for off-chain use, or ABI-encoded data ready for on-chain submission. You can even
   choose the encoding at request time with `_type`, `_path`, and `_times` parameters.
-- **Multiple access models.** Free endpoints for public data, API keys for authenticated access, NFT-gated endpoints for
-  token holders, or pay-per-request via x402. Use whatever fits your use case.
+- **Multiple access models.** Free endpoints for public data, API keys for authenticated access, or pay-per-request via
+  x402. Use whatever fits your use case.
 - **Aggregation and quorum.** Multiple first-party airnodes from different API providers serving comparable data produce
   the same endpoint ID. Collect signatures from several providers and submit them to a quorum verifier — no single
   provider can fabricate data.

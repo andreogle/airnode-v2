@@ -22,7 +22,7 @@ CORS preflight (`OPTIONS`) is handled automatically. Rate limiting uses a token 
 
 ## Request Processing Pipeline
 
-Every `POST /endpoints/{endpointId}` request runs through a 13-step pipeline. Plugin hooks fire at defined points,
+Every `POST /endpoints/{endpointId}` request runs through a 14-step pipeline. Plugin hooks fire at defined points,
 giving plugins the ability to observe, filter, or modify data at each stage.
 
 1. **Resolve endpoint** -- look up the endpoint by ID in the endpoint map. Returns 404 if not found.
@@ -42,8 +42,11 @@ giving plugins the ability to observe, filter, or modify data at each stage.
 10. **Plugin: onBeforeSign** -- plugins can modify the encoded data before signing.
 11. **Sign** -- EIP-191 personal sign over `keccak256(encodePacked(endpointId, timestamp, data))`. The signature proves
     the data came from this airnode at this time for this endpoint.
-12. **Cache** -- store the response if cache config is present. The `maxAge` field controls TTL.
-13. **Plugin: onResponseSent** -- observation hook for logging, monitoring, or heartbeats. Cannot modify the response.
+12. **TLS proof** -- if proof is enabled in settings and the endpoint has `responseMatches`, request a TLS proof from
+    the proof gateway. Proof failures are non-fatal -- the response is returned without a proof. See
+    [TLS Proofs](/docs/concepts/proofs).
+13. **Cache** -- store the response if cache config is present. The `maxAge` field controls TTL.
+14. **Plugin: onResponseSent** -- observation hook for logging, monitoring, or heartbeats. Cannot modify the response.
 
 Error hooks (`onError`) fire when any stage fails, providing plugins with error context for alerting.
 
@@ -64,6 +67,7 @@ Client                    Airnode                   Upstream API
   │                         │                           │
   │                         ├── Encode (ABI or raw)     │
   │                         ├── Sign (EIP-191)          │
+  │                         ├── TLS proof (optional)    │
   │                         │                           │
   │◀────── signed response ─│                           │
   │                         │                           │
@@ -84,8 +88,8 @@ signature = EIP-191 personal sign over hash
 The three fields (`endpointId`, `timestamp`, `data`) are packed separately -- not nested in another hash. This enables
 on-chain contracts to inspect each field independently for freshness checks and TLS proof verification.
 
-For raw (unencoded) responses, `data` is the keccak256 hash of the JSON-serialized response. The full JSON is returned
-in the `rawData` field alongside the signature over its hash.
+For raw (unencoded) responses, `data` is the keccak256 hash of the stable-stringified (sorted-key) JSON response. The
+full JSON is returned in the `rawData` field alongside the signature over its hash.
 
 ## Startup
 
