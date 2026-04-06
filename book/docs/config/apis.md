@@ -160,17 +160,18 @@ endpoints:
     description: Get the current price of a coin
 ```
 
-| Field         | Type     | Required | Default | Description                                                         |
-| ------------- | -------- | -------- | ------- | ------------------------------------------------------------------- |
-| `name`        | `string` | Yes      | --      | Endpoint name. Used in logging. Not part of endpoint ID derivation. |
-| `path`        | `string` | Yes      | --      | URL path appended to the API's `url`.                               |
-| `method`      | `string` | No       | `GET`   | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.            |
-| `mode`        | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                        |
-| `parameters`  | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).               |
-| `encoding`    | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.               |
-| `auth`        | `object` | No       | --      | Overrides API-level auth for this endpoint.                         |
-| `cache`       | `object` | No       | --      | Overrides API-level cache for this endpoint.                        |
-| `description` | `string` | No       | --      | Human-readable description. Does not affect runtime behavior.       |
+| Field             | Type     | Required | Default | Description                                                                              |
+| ----------------- | -------- | -------- | ------- | ---------------------------------------------------------------------------------------- |
+| `name`            | `string` | Yes      | --      | Endpoint name. Used in logging. Not part of endpoint ID derivation.                      |
+| `path`            | `string` | Yes      | --      | URL path appended to the API's `url`.                                                    |
+| `method`          | `string` | No       | `GET`   | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.                                 |
+| `mode`            | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                                             |
+| `parameters`      | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).                                    |
+| `encoding`        | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.                                    |
+| `responseMatches` | `array`  | No       | --      | Regex patterns for TLS proof response matching. See [responseMatches](#responsematches). |
+| `auth`            | `object` | No       | --      | Overrides API-level auth for this endpoint.                                              |
+| `cache`           | `object` | No       | --      | Overrides API-level cache for this endpoint.                                             |
+| `description`     | `string` | No       | --      | Human-readable description. Does not affect runtime behavior.                            |
 
 ### `mode`
 
@@ -333,6 +334,25 @@ parameters:
     fixed: ${SESSION_TOKEN}
     secret: true
 ```
+
+## `responseMatches`
+
+Defines regex patterns that a TLS proof attestor checks against the API response. Required for
+[TLS proof](/docs/concepts/proofs) generation. Endpoints without `responseMatches` skip proof generation even when proof
+is enabled globally in `settings`.
+
+```yaml
+responseMatches:
+  - type: regex
+    value: '"usd":\s*(?<price>[\d.]+)'
+```
+
+| Field   | Type     | Required | Description                             |
+| ------- | -------- | -------- | --------------------------------------- |
+| `type`  | `string` | Yes      | Must be `'regex'`.                      |
+| `value` | `string` | Yes      | Regex pattern to match in the response. |
+
+Multiple patterns can be specified. The attestor must match all of them for the proof to be generated.
 
 ## Encoding
 

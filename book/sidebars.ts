@@ -7,7 +7,13 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Concepts',
-      items: ['concepts/architecture', 'concepts/request-response', 'concepts/endpoint-ids', 'concepts/signing'],
+      items: [
+        'concepts/architecture',
+        'concepts/request-response',
+        'concepts/endpoint-ids',
+        'concepts/signing',
+        'concepts/proofs',
+      ],
     },
     {
       type: 'category',

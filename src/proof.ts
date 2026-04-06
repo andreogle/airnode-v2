@@ -39,7 +39,7 @@ async function requestProof(gatewayUrl: string, request: ProofRequest): Promise<
   logger.debug(`Requesting TLS proof from ${gatewayUrl}`);
 
   const result = await go(async () => {
-    const response = await fetch(`${gatewayUrl}/prove`, {
+    const response = await fetch(gatewayUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

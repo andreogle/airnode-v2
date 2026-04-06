@@ -36,7 +36,7 @@ forwards data to a callback contract. See [Verifier](/docs/contracts/verifier).
 4. Airnode encodes the response (ABI encoding or raw JSON) and signs it with EIP-191.
 5. Client receives the signed response containing `airnode`, `endpointId`, `timestamp`, `data`, and `signature`.
 6. Client verifies the signature off-chain by recovering the signer address.
-7. (Optional) Client submits the signed data to `AirnodeVerifier.verify_and_fulfill()` on-chain.
+7. (Optional) Client submits the signed data to `AirnodeVerifier.verifyAndFulfill()` on-chain.
 8. AirnodeVerifier recovers the signer, enforces replay protection, and calls the consumer contract's callback.
 
 ## Single-operator setup

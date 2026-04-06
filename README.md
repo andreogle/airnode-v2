@@ -26,7 +26,7 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 
 ```bash
 bun install
-bun airnode generate-mnemonic           # prints private key + address
+bun airnode generate-mnemonic           # prints mnemonic phrase + address
 cp examples/configs/minimal/config.yaml config.yaml
 cp examples/configs/minimal/.env.example .env
 # paste your private key into .env
@@ -103,7 +103,8 @@ apis:
 ```
 
 See [`examples/configs/complete/config.yaml`](examples/configs/complete/config.yaml) for auth methods, caching,
-multi-value encoding, and all available fields.
+multi-value encoding, and all available fields. See [`examples/configs/reclaim-proof/`](examples/configs/reclaim-proof/)
+for TLS proof configuration.
 
 ## Contracts
 
@@ -156,14 +157,14 @@ src/
   config/         Zod schema, YAML parser, env interpolation
   api/            Upstream API calls and response processing
   server.ts       Bun.serve HTTP server
-  pipeline.ts     Request pipeline (auth → validate → cache → API → encode → sign)
+  pipeline.ts     Request pipeline (auth → validate → cache → API → encode → sign → proof)
   auth.ts         Authentication (free, apiKey, x402)
   sign.ts         EIP-191 signing
   endpoint.ts     Specification-bound endpoint ID derivation
   plugins.ts      Plugin hooks and budget tracking
 contracts/        Solidity contracts and Foundry tests
 examples/
-  configs/        Reference configs (complete, minimal)
+  configs/        Reference configs (complete, minimal, reclaim-proof)
   plugins/        Example plugins (heartbeat, logger, slack-alerts)
 book/             Documentation site (Docusaurus)
 ```

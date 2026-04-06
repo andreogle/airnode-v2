@@ -21,7 +21,9 @@ src/
   abi-encode.ts     ABI encoding (0x01 + string[] name-value pairs)
   server.ts         Bun.serve HTTP server (routes, CORS, rate limiting)
   pipeline.ts       Request processing pipeline (auth → validate → cache → plugins → API call → encode → sign)
-  auth.ts           Client-facing request authentication (free / apiKey)
+  proof.ts          TLS proof gateway client (Reclaim)
+  async.ts          Async request store (mode: async)
+  auth.ts           Client-facing request authentication (free / apiKey / x402)
   cache.ts          In-memory TTL response cache with periodic sweep
   sign.ts           EIP-191 response signing and request ID derivation
   identity.ts       DNS identity verification (ERC-7529) — public API
@@ -82,18 +84,20 @@ The pipeline runs per-request in `src/pipeline.ts`:
 8. **Plugin: onAfterApiCall** → plugins can modify the response
 9. **Encode** → if endpoint has `encoding`, ABI-encode using type/path/times via `src/api/process.ts`
 10. **Plugin: onBeforeSign** → plugins can modify encoded data before signing
-11. **Sign** → EIP-191 sign `keccak256(requestId || keccak256(data))` via `src/sign.ts`
-12. **Cache** → store response if cache config is present
-13. **Plugin: onResponseSent** → observation hook for logging/monitoring
+11. **Sign** → EIP-191 sign `keccak256(encodePacked(endpointId, timestamp, data))` via `src/sign.ts`
+12. **TLS proof** → if proof is enabled and endpoint has `responseMatches`, request a proof from the gateway (non-fatal)
+13. **Cache** → store response if cache config is present
+14. **Plugin: onResponseSent** → observation hook for logging/monitoring
 
 ### Config format
 
 Version `'1.0'`. Top-level sections: `version`, `server`, `settings`, `apis`.
 
 - `server` contains `port`, `host` (default `'0.0.0.0'`), `cors` (optional), `rateLimit` (optional).
-- `settings` contains `timeout` (default 10s), `proof` (`'none'` for Phase 1), `plugins`.
+- `settings` contains `timeout` (default 10s), `proof` (`'none'` or `{ type: 'reclaim', gatewayUrl }` for TLS proofs),
+  `plugins`.
 - `apis[].url` is the upstream API base URL. Upstream credentials go in `apis[].headers`.
-- `apis[].auth` is client-facing: `{ type: 'free' }` or `{ type: 'apiKey', keys: [...] }`.
+- `apis[].auth` is client-facing: `{ type: 'free' }`, `{ type: 'apiKey', keys: [...] }`, or `{ type: 'x402', ... }`.
 - Endpoints use `encoding: { type, path, times? }` instead of `reservedParameters`. Encoding is optional — endpoints
   without it return raw JSON with a signature over the JSON hash.
 - Auth and cache config inherit from API level; endpoint-level overrides take precedence.

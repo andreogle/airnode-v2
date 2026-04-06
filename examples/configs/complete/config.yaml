@@ -12,7 +12,7 @@ server:
 
 settings:
   timeout: 15000
-  proof: none # or: { type: reclaim, gatewayUrl: 'https://prove.chainapi.com' }
+  proof: none # or: { type: reclaim, gatewayUrl: 'http://localhost:5177/v1/prove' }
   plugins:
     - source: ../../plugins/heartbeat.ts
       timeout: 5000

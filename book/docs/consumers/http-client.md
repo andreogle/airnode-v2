@@ -35,7 +35,8 @@ is the format you submit to on-chain contracts.
   "endpointId": "0x...",
   "timestamp": 1700000000,
   "data": "0x...",
-  "signature": "0x..."
+  "signature": "0x...",
+  "proof": { "...": "present when TLS proofs are enabled" }
 }
 ```
 
@@ -50,9 +51,13 @@ the hash of the JSON data.
   "endpointId": "0x...",
   "timestamp": 1700000000,
   "rawData": { "bitcoin": { "usd": 67432 } },
-  "signature": "0x..."
+  "signature": "0x...",
+  "proof": { "...": "present when TLS proofs are enabled" }
 }
 ```
+
+The `proof` field is only present when [TLS proofs](/docs/concepts/proofs) are enabled and the endpoint has
+`responseMatches` configured.
 
 ## Signature format
 

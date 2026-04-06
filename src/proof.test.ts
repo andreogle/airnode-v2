@@ -5,7 +5,7 @@ import type { ReclaimProof } from './proof';
 const originalFetch = globalThis.fetch;
 const fetchMock = mock();
 
-const GATEWAY_URL = 'https://prove.chainapi.com';
+const GATEWAY_URL = 'https://prove.example.com/v1/prove';
 
 const MOCK_PROOF: ReclaimProof = {
   claim: {
@@ -44,7 +44,7 @@ describe('requestProof', () => {
     });
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://prove.chainapi.com/prove');
+    expect(url).toBe('https://prove.example.com/v1/prove');
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body as string)).toEqual({
       url: 'https://api.example.com/price',

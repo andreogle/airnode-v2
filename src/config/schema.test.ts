@@ -279,6 +279,19 @@ apis:
     expect(result.apis).toHaveLength(1);
     expect(result.apis[0]?.endpoints[0]?.encoding?.type).toBe('int256');
   });
+
+  test('parses reclaim-proof example config successfully', async () => {
+    const file = Bun.file(`${import.meta.dirname}/../../examples/configs/reclaim-proof/config.yaml`);
+    const content = await file.text();
+    const result = configSchema.parse(parseYaml(content));
+
+    expect(result.version).toBe('1.0');
+    expect(result.apis).toHaveLength(1);
+    expect(result.settings.proof).toEqual({ type: 'reclaim', gatewayUrl: 'http://localhost:5177/v1/prove' });
+    expect(result.apis[0]?.endpoints[0]?.responseMatches).toEqual([
+      { type: 'regex', value: String.raw`"usd":\s*(?<price>[\d.]+)` },
+    ]);
+  });
 });
 
 describe('proof settings', () => {
@@ -292,12 +305,12 @@ describe('proof settings', () => {
       'proof: none',
       `proof:
     type: reclaim
-    gatewayUrl: https://prove.chainapi.com`
+    gatewayUrl: https://prove.example.com/v1/prove`
     );
     const result = configSchema.parse(parseYaml(raw));
     const proof = result.settings.proof as { type: string; gatewayUrl: string };
     expect(proof.type).toBe('reclaim');
-    expect(proof.gatewayUrl).toBe('https://prove.chainapi.com');
+    expect(proof.gatewayUrl).toBe('https://prove.example.com/v1/prove');
   });
 
   test('rejects reclaim proof without gatewayUrl', () => {

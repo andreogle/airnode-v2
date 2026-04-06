@@ -1,0 +1,34 @@
+version: '1.0'
+
+server:
+  port: 3000
+
+settings:
+  proof:
+    type: reclaim
+    gatewayUrl: http://localhost:5177/v1/prove
+  plugins: []
+
+apis:
+  - name: CoinGecko
+    url: https://api.coingecko.com/api/v3
+    endpoints:
+      - name: coinPrice
+        path: /simple/price
+        method: GET
+        parameters:
+          - name: ids
+            in: query
+            required: true
+            description: Coin ID (e.g. ethereum, bitcoin)
+          - name: vs_currencies
+            in: query
+            default: usd
+        encoding:
+          type: int256
+          path: $.ethereum.usd
+          times: '1e18'
+        responseMatches:
+          - type: regex
+            value: '"usd":\s*(?<price>[\d.]+)'
+        description: Get the current price of a coin with TLS proof
