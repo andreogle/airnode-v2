@@ -198,37 +198,51 @@ const plugin: AirnodePlugin = {
         return;
       }
 
+      console.info(
+        `${PREFIX} ${ctx.api}/${ctx.endpoint}: encrypting ${String(ctx.data.length / 2 - 1)} bytes of ABI data`
+      );
+      const start = Date.now();
+
       const instance = await getInstance();
 
       // Interpret the ABI-encoded data as a uint256 value
       const value = BigInt(ctx.data.length > 2 ? ctx.data : '0x0');
+
+      console.info(
+        `${PREFIX} ${ctx.api}/${ctx.endpoint}: plaintext value ${value.toString()} → encrypting for contract ${FHE_CONTRACT_ADDRESS}`
+      );
 
       // Encrypt with the chain's FHE public key. The encrypted input is bound
       // to the target contract and the airnode's address, preventing replay of
       // encrypted values across different contexts.
       const input = instance.createEncryptedInput(FHE_CONTRACT_ADDRESS, AIRNODE_ADDRESS);
       input.add256(value);
+
+      const encryptStart = Date.now();
       const { handles, inputProof } = await input.encrypt();
+      const encryptMs = Date.now() - encryptStart;
 
       const handle = handles[0];
       if (!handle) {
-        console.error(`${PREFIX} FHE encryption produced no handles`);
+        console.error(`${PREFIX} ${ctx.api}/${ctx.endpoint}: FHE encryption produced no handles`);
         return;
       }
 
-      const packed = abiEncodeHandleAndProof(bytesToHex(handle), inputProof);
+      const handleHex = bytesToHex(handle);
+      const packed = abiEncodeHandleAndProof(handleHex, inputProof);
+      const totalMs = Date.now() - start;
 
       console.info(
-        `${PREFIX} ${ctx.api}/${ctx.endpoint}: encrypted data → FHE ciphertext (${String(Math.floor(packed.length / 2) - 1)} bytes)`
+        `${PREFIX} ${ctx.api}/${ctx.endpoint}: encrypted → handle ${handleHex.slice(0, 18)}... proof ${String(inputProof.length)} bytes (encrypt: ${String(encryptMs)}ms, total: ${String(totalMs)}ms)`
       );
 
       return { data: packed };
     },
 
     onError: (ctx: ErrorContext) => {
-      if (ctx.stage === 'plugin' || ctx.stage === 'sign') {
-        console.error(`${PREFIX} Error during ${ctx.stage}: ${ctx.error.message}`);
-      }
+      console.error(
+        `${PREFIX} Error in ${ctx.stage}${ctx.endpointId ? ` (endpoint ${ctx.endpointId.slice(0, 18)}...)` : ''}: ${ctx.error.message}`
+      );
     },
   },
 };
