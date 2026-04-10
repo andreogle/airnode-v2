@@ -7,7 +7,16 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['book/', 'contracts/cache/', 'contracts/lib/', 'contracts/out/', 'coverage/', 'dist/']),
+  globalIgnores([
+    'book/',
+    'contracts/cache/',
+    'contracts/lib/',
+    'contracts/out/',
+    'coverage/',
+    'dist/',
+    'examples/plugins/*/dist/',
+    'examples/plugins/*/node_modules/',
+  ]),
 
   ...tseslint.configs.strictTypeChecked,
   unicornPlugin.configs.recommended,
