@@ -106,7 +106,7 @@ settings:
 | Variable               | Required | Description                                                                 |
 | ---------------------- | -------- | --------------------------------------------------------------------------- |
 | `FHE_NETWORK`          | No       | `'sepolia'` or `'mainnet'` — selects the chain preset. Default: `'sepolia'` |
-| `FHE_API_KEY`          | Yes      | API key for Zama's hosted relayer                                           |
+| `FHE_API_KEY`          | No       | API key for Zama's relayer (not required for Sepolia testnet)               |
 | `FHE_NETWORK_URL`      | Yes      | Ethereum JSON-RPC endpoint for the target chain (e.g. Sepolia RPC)          |
 | `FHE_CONTRACT_ADDRESS` | Yes      | Contract that will receive the encrypted data                               |
 | `AIRNODE_ADDRESS`      | Yes      | The airnode's address (binds encrypted inputs to signer)                    |
