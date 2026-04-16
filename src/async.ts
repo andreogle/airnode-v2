@@ -1,5 +1,4 @@
-import type { Hex } from 'viem';
-import { keccak256, toHex } from 'viem';
+import { type Hex, bytesToHex } from 'viem';
 import { createBoundedMap } from './bounded-map';
 
 // =============================================================================
@@ -8,7 +7,7 @@ import { createBoundedMap } from './bounded-map';
 type RequestStatus = 'pending' | 'processing' | 'complete' | 'failed';
 
 interface PendingRequest {
-  readonly requestId: string;
+  readonly requestId: Hex;
   status: RequestStatus;
   result?: unknown;
   error?: string;
@@ -18,9 +17,9 @@ interface PendingRequest {
 interface AsyncRequestStore {
   readonly create: (endpointId: Hex) => PendingRequest | undefined;
   readonly get: (requestId: string) => PendingRequest | undefined;
-  readonly setProcessing: (requestId: string) => void;
-  readonly setComplete: (requestId: string, result: unknown) => void;
-  readonly setFailed: (requestId: string, error: string) => void;
+  readonly setProcessing: (requestId: Hex) => void;
+  readonly setComplete: (requestId: Hex, result: unknown) => void;
+  readonly setFailed: (requestId: Hex, error: string) => void;
   readonly stop: () => void;
 }
 
@@ -38,9 +37,9 @@ function createAsyncRequestStore(): AsyncRequestStore {
   });
 
   return {
-    create: (endpointId) => {
+    create: (_endpointId) => {
       if (store.size() >= MAX_PENDING) return;
-      const requestId = keccak256(toHex(`async:${endpointId}:${String(Date.now())}:${String(Math.random())}`));
+      const requestId: Hex = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
       const entry: PendingRequest = { requestId, status: 'pending', createdAt: Date.now() };
       store.set(requestId, entry);
       return entry;

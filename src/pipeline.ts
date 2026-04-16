@@ -1,7 +1,7 @@
 import { go } from '@api3/promise-utils';
-import { type Hex, keccak256, toHex } from 'viem';
+import { type Hex, bytesToHex, keccak256, toHex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
-import { callApi } from './api/call';
+import { buildApiRequest, callApi } from './api/call';
 import { processResponse } from './api/process';
 import type { AsyncRequestStore } from './async';
 import { authenticateRequest, isPaymentRequired } from './auth';
@@ -129,35 +129,11 @@ async function buildRawResponse(
 
 // =============================================================================
 // TLS proof
+//
+// The proof gateway must attest the same HTTP request Airnode actually made.
+// We reuse the exact request shape (URL, headers, cookies, body) produced by
+// buildApiRequest so the TLS transcript cannot diverge from the signed data.
 // =============================================================================
-function buildProveUrl(resolved: ResolvedEndpoint, parameters: Record<string, string>): string {
-  const parameterDefs = resolved.endpoint.parameters;
-  const resolvedParams = parameterDefs.map((p) => {
-    const value = isNil(p.fixed)
-      ? (parameters[p.name] ?? (isNil(p.default) ? undefined : String(p.default)))
-      : String(p.fixed);
-    return { ...p, value };
-  });
-
-  // Resolve path parameters
-  // eslint-disable-next-line functional/no-let
-  let path = resolved.endpoint.path;
-  // eslint-disable-next-line functional/no-loop-statements
-  for (const p of resolvedParams.filter((rp) => rp.in === 'path' && !isNil(rp.value))) {
-    path = path.replaceAll(`{${p.name}}`, encodeURIComponent(p.value as string));
-  }
-
-  const url = new URL(`${resolved.api.url}${path}`);
-
-  // Add query parameters
-  // eslint-disable-next-line functional/no-loop-statements
-  for (const p of resolvedParams.filter((rp) => rp.in === 'query' && !isNil(rp.value))) {
-    url.searchParams.set(p.name, p.value as string);
-  }
-
-  return url.toString();
-}
-
 async function fetchProofIfEnabled(
   resolved: ResolvedEndpoint,
   parameters: Record<string, string>,
@@ -172,13 +148,14 @@ async function fetchProofIfEnabled(
     return undefined;
   }
 
-  const proveUrl = buildProveUrl(resolved, parameters);
+  const built = buildApiRequest(resolved.api, resolved.endpoint, parameters);
 
   const result = await go(() =>
     requestProof(proof.gatewayUrl, {
-      url: proveUrl,
-      method: resolved.endpoint.method,
-      headers: resolved.api.headers,
+      url: built.url,
+      method: built.method,
+      headers: built.headers,
+      body: built.body,
       responseMatches,
     })
   );
@@ -234,11 +211,13 @@ function resolveEncoding(
 // =============================================================================
 async function executeApiCall(
   resolved: ResolvedEndpoint,
+  requestId: Hex,
   endpointId: Hex,
   parameters: Record<string, string>,
   deps: PipelineDependencies
 ): Promise<Response> {
   const beforeResult = await deps.plugins.callBeforeApiCall({
+    requestId,
     endpointId,
     api: resolved.api.name,
     endpoint: resolved.endpoint.name,
@@ -253,11 +232,12 @@ async function executeApiCall(
   const apiResult = await go(() => callApi(resolved.api, resolved.endpoint, resolvedParameters));
   if (!apiResult.success) {
     logger.error(`API call failed for endpoint ${endpointId}: ${apiResult.error.message}`);
-    void deps.plugins.callError({ error: apiResult.error, stage: 'apiCall', endpointId });
+    void deps.plugins.callError({ requestId, error: apiResult.error, stage: 'apiCall', endpointId });
     return jsonResponse({ error: 'API call failed' }, 502);
   }
 
   const afterResult = await deps.plugins.callAfterApiCall({
+    requestId,
     endpointId,
     api: resolved.api.name,
     endpoint: resolved.endpoint.name,
@@ -284,6 +264,7 @@ async function executeApiCall(
     const encodedData = processResponse(apiResponse.data, encoding);
 
     const signResult = await deps.plugins.callBeforeSign({
+      requestId,
       endpointId,
       api: resolved.api.name,
       endpoint: resolved.endpoint.name,
@@ -320,21 +301,29 @@ function handleAsyncRequest(
     return jsonResponse({ error: 'Too many pending requests' }, 503);
   }
 
-  // Process in background
-  void (async () => {
-    store.setProcessing(pending.requestId);
-    const result = await go(() => executeApiCall(resolved, endpointId, parameters, deps));
+  const requestId = pending.requestId;
+
+  // Process in background. Wrap in logger context so async-mode logs carry
+  // the requestId just like sync-mode, and route plugin-observable errors
+  // through callError so heartbeat/alerting plugins see async failures.
+  void runWithContext({ requestId }, async () => {
+    store.setProcessing(requestId);
+    const result = await go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
     if (!result.success) {
-      store.setFailed(pending.requestId, 'Pipeline execution failed');
+      logger.error(`Async pipeline failed for endpoint ${endpointId}: ${result.error.message}`);
+      void deps.plugins.callError({ requestId, error: result.error, stage: 'pipeline', endpointId });
+      store.setFailed(requestId, 'Pipeline execution failed');
       return;
     }
     if (result.data.status !== 200) {
+      const statusError = new Error(`Upstream returned status ${String(result.data.status)}`);
+      void deps.plugins.callError({ requestId, error: statusError, stage: 'api-call', endpointId });
       store.setFailed(pending.requestId, 'API call returned an error');
       return;
     }
     const body = await result.data.json();
     store.setComplete(pending.requestId, body);
-  })();
+  });
 
   return jsonResponse(
     {
@@ -357,12 +346,13 @@ function handleAsyncRequest(
 // =============================================================================
 async function handleStreamingRequest(
   resolved: ResolvedEndpoint,
+  requestId: Hex,
   endpointId: Hex,
   parameters: Record<string, string>,
   deps: PipelineDependencies
 ): Promise<Response> {
   // Run the full pipeline (same as sync, with all plugin hooks)
-  const result = await go(() => executeApiCall(resolved, endpointId, parameters, deps));
+  const result = await go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
   if (!result.success) {
     return jsonResponse({ error: 'API call failed' }, 502);
   }
@@ -404,11 +394,17 @@ async function handleEndpointRequest(
     return jsonResponse({ error: 'Endpoint not found' }, 404);
   }
 
+  // Per-request correlation ID — threaded into every plugin hook and logger
+  // context so plugins can key per-request state (instead of relying on
+  // endpointId, which races when multiple clients hit the same endpoint).
+  const requestId: Hex = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+
   // Reset plugin budgets per request so hooks don't degrade over time
   deps.plugins.resetBudgets();
 
   // Plugin: onHttpRequest
   const httpResult = await deps.plugins.callHttpRequest({
+    requestId,
     endpointId,
     api: resolved.api.name,
     endpoint: resolved.endpoint.name,
@@ -420,7 +416,7 @@ async function handleEndpointRequest(
 
   // Authenticate
   const auth = resolveAuth(resolved);
-  const authResult = await authenticateRequest(request, auth);
+  const authResult = await authenticateRequest(request, { airnode: deps.airnode, endpointId }, auth);
   if (!authResult.authenticated) {
     if (isPaymentRequired(authResult)) {
       return jsonResponse(authResult.paymentDetails, 402);
@@ -444,7 +440,7 @@ async function handleEndpointRequest(
 
   // Dispatch by endpoint mode
   if (resolved.endpoint.mode === 'stream') {
-    return handleStreamingRequest(resolved, endpointId, parameters, deps);
+    return handleStreamingRequest(resolved, requestId, endpointId, parameters, deps);
   }
 
   if (resolved.endpoint.mode === 'async' && deps.asyncStore) {
@@ -452,16 +448,14 @@ async function handleEndpointRequest(
   }
 
   // Synchronous execution (mode === 'sync' or default)
-  const logRequestId = keccak256(toHex(`${endpointId}${String(Date.now())}${String(Math.random())}`));
-
-  const pipelineResult = await runWithContext({ requestId: logRequestId }, async () => {
+  const pipelineResult = await runWithContext({ requestId }, async () => {
     logger.info(`Processing ${resolved.api.name}/${resolved.endpoint.name}`);
-    return go(() => executeApiCall(resolved, endpointId, parameters, deps));
+    return go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
   });
 
   if (!pipelineResult.success) {
     logger.error(`Pipeline failed for endpoint ${endpointId}: ${pipelineResult.error.message}`);
-    void deps.plugins.callError({ error: pipelineResult.error, stage: 'pipeline', endpointId });
+    void deps.plugins.callError({ requestId, error: pipelineResult.error, stage: 'pipeline', endpointId });
     return jsonResponse({ error: 'Internal processing error' }, 502);
   }
 
@@ -473,6 +467,7 @@ async function handleEndpointRequest(
     deps.cache.set(endpointId, parameters, body, maxAge);
 
     void deps.plugins.callResponseSent({
+      requestId,
       endpointId,
       api: resolved.api.name,
       endpoint: resolved.endpoint.name,
@@ -484,6 +479,7 @@ async function handleEndpointRequest(
 
   if (response.status === 200) {
     void deps.plugins.callResponseSent({
+      requestId,
       endpointId,
       api: resolved.api.name,
       endpoint: resolved.endpoint.name,
