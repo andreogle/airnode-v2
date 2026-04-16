@@ -76,6 +76,43 @@ that multiple airnodes signed data for the same endpoint ID — meaning they all
 same way. TLS proofs extend this: the endpoint ID can be cross-checked against the proven HTTP request that backs the
 response.
 
+### Fixed and client-controlled encoding, both committed to by the ID
+
+One upstream API can serve many different consumers. A lending protocol might want ETH/USD as `int256 × 1e18` at
+`$.ethereum.usd`; a different consumer might want the same feed as `uint128 × 1e8` at `$.ethereum.usd`; a third might
+want the `last_updated_at` timestamp from the same response. Forcing the operator to pre-declare every projection as a
+separate endpoint would explode config and require coordination with every downstream consumer before they could
+integrate.
+
+v2 resolves this by letting the operator decide **per field** whether to fix a value or leave it client-controlled.
+Clients fill unfixed fields via `_type`, `_path`, and `_times` request parameters. Crucially, the endpoint ID commits to
+that choice — every field is either a concrete value or the literal `*`:
+
+```
+type=int256,path=$.ethereum.usd,times=1e18   # operator fully fixed — all consumers get the same projection
+type=int256,path=*,times=1e18                 # operator fixed type and multiplier, consumers pick the JSON path
+type=*,path=*,times=*                         # operator lets consumers fully specify encoding
+```
+
+The wildcards are in the hash, so any change — narrowing or widening — produces a different endpoint ID. A consumer
+contract that hard-codes `keccak256(...|type=int256,path=$.ethereum.usd,times=1e18)` will refuse a signed response where
+the operator later widened the endpoint, because the ID no longer matches. A consumer that hard-codes
+`keccak256(...|type=int256,path=*,times=1e18)` has knowingly accepted that the submitter chooses the JSON path — they've
+signed up for that trust model by picking that specific ID.
+
+**Why not force operators to fully fix encoding?** It would break the shared-infrastructure model. One airnode serves
+many downstream use cases; each consumer has a different view of the same response. Forcing every projection into config
+turns the operator into a bottleneck for consumer-side design changes.
+
+**Why not leave encoding fully unbound?** Then the signature over `(endpointId, timestamp, data)` would prove only that
+_some_ upstream was called — it would carry no guarantee about what the bytes mean. On-chain consumers could not safely
+trust signed data without an out-of-band schema. The wildcard-in-hash approach preserves that cryptographic binding
+while allowing flexibility; the ID tells consumers exactly how much they're trusting the submitter and how much they're
+trusting the operator.
+
+See [Endpoint IDs](/docs/concepts/endpoint-ids) for the full derivation, canonical string format, and consumer-side
+verification guidance.
+
 ## Signature format
 
 v1 signed `keccak256(requestId, timestamp, airnodeAddress, data)` where the request ID was derived from on-chain state

@@ -43,10 +43,88 @@ apis:
 The canonical string is:
 
 ```
-https://api.coingecko.com/api/v3|/simple/price|GET|ids,vs_currencies=usd|int256|$.ethereum.usd|1e18
+https://api.coingecko.com/api/v3|/simple/price|GET|ids,vs_currencies=usd|type=int256,path=$.ethereum.usd,times=1e18
 ```
 
 And the endpoint ID is `keccak256` of that string encoded as hex bytes.
+
+### Fixed vs. client-controlled encoding
+
+One upstream API usually serves many different consumers. A CoinGecko price endpoint can be projected as `int256 × 1e18`
+for a lending protocol, as `uint128 × 1e8` for a DEX, or read for its `last_updated_at` timestamp by a staleness check.
+These are legitimate, simultaneous uses of the same HTTP call.
+
+Airnode supports this by letting the operator decide **per field** whether to fix a value or leave it client-controlled.
+Clients fill unfixed fields at request time via reserved parameters `_type`, `_path`, and `_times` in the request body.
+The endpoint ID commits to exactly which fields were fixed and which were left open — any field the operator did not fix
+in config is encoded as `*` in the canonical string.
+
+Four common configurations:
+
+| Operator config                                          | Encoding spec in ID                           | Who controls what                                     |
+| -------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| `encoding: { type, path, times }` — all three fields set | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
+| `encoding: { type, times }` — type and multiplier only   | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
+| `encoding: {}` — block present, no fields set            | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
+| No `encoding` block at all                               | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
+
+Client-supplied fields **cannot override** operator-fixed values. If the operator sets `type: int256`, the request's
+`_type` parameter is ignored for encoding (though it still counts as a request parameter). The operator's fixes are
+authoritative.
+
+### Why this design
+
+A colleague-reviewed version of this page: the obvious alternatives both fail.
+
+**"Force operators to fully fix every projection."** This sounds safer, but it turns the operator into a gatekeeper for
+every consumer-side design change. Each new downstream use case (new type, new JSON path, new multiplier) would require
+an operator config push, a new endpoint ID, and coordination across teams that have no business reason to coordinate. In
+practice, operators would either (a) refuse to add endpoints, killing adoption, or (b) add every imaginable projection
+upfront, which is neither maintainable nor knowable in advance.
+
+**"Leave encoding fully unbound and stop including it in the ID."** This is what v1 effectively did. The endpoint ID
+becomes a loose identifier of "which upstream was called," and the signature over `(endpointId, timestamp, data)`
+carries no guarantee about what `data` means. On-chain consumers then need out-of-band schema agreements to interpret
+the bytes safely — which reintroduces the registry and coordination problems that specification-bound IDs were
+introduced to solve.
+
+**The middle ground.** The endpoint ID commits to the _contract_ between operator and consumer: which fields the
+operator stands behind, and which fields the submitter is trusted to choose. A consumer contract hard-coding a specific
+endpoint ID implicitly accepts exactly that trust split:
+
+- `keccak256(...|type=int256,path=$.price,times=1e18)` — the consumer is trusting only the operator. The submitter
+  cannot influence what the bytes mean.
+- `keccak256(...|type=int256,path=*,times=1e18)` — the consumer is trusting the operator for type & multiplier, and
+  trusting the submitter to pick a meaningful JSON path. This is a weaker guarantee and should be used deliberately.
+- `keccak256(...|type=*,path=*,times=*)` — the consumer is trusting the submitter for everything about the projection.
+  Only reasonable in contexts where the submitter is the consumer itself (they sign the transaction that submits, so
+  they're only lying to themselves).
+
+If the operator later widens or narrows an endpoint (e.g. removes the fixed `type`), the endpoint ID changes and any
+consumer hard-coding the old ID stops matching new signatures — exactly the behavior you want. The operator cannot
+silently alter the trust split of an existing endpoint.
+
+**Security properties this gives you:**
+
+1. **Clients cannot widen an endpoint.** `_type`/`_path`/`_times` only fill fields the operator left open; they cannot
+   override fixed values. A malicious submitter cannot turn a fully-fixed `type=int256,path=$.price` endpoint into
+   something that projects volume or timestamp instead.
+2. **Consumers explicitly opt into any flexibility.** By hard-coding a specific ID, a consumer is accepting the exact
+   encoding contract baked into that ID. A consumer who wants no submitter-side flexibility simply refuses to recognize
+   any ID whose encoding spec contains `*`.
+3. **Cross-operator comparability still works.** Two operators serving the same API with the same `encoding: {}` produce
+   the same ID, regardless of whether the block is fully-fixed or fully-wildcard. Quorum verifiers can still compare
+   signed data from different airnodes under the same ID.
+
+### Endpoints with no `encoding` block
+
+An endpoint with no `encoding` block in config does not include an encoding spec in the canonical string. Its signature
+covers `keccak256(json_hash)` of the raw upstream response when called without request-side encoding parameters.
+
+Note that the canonical string for such an endpoint carries **no commitment to encoding** at all — not even a wildcard.
+If a consumer contract wants a guarantee that the ID binds the response shape, the operator should declare at least an
+empty `encoding: {}` block, which puts `type=*,path=*,times=*` into the ID. An endpoint without any `encoding` block
+should be treated as raw-JSON-only from a consumer perspective.
 
 ## What Is Included
 
@@ -58,9 +136,9 @@ These fields are part of the hash:
 | `endpoint.path`       | `/simple/price`                    | Different paths on the same API are different endpoints        |
 | `endpoint.method`     | `GET`                              | A GET and POST to the same path are different operations       |
 | Non-secret parameters | `ids,vs_currencies=usd`            | Parameters define what data is being requested                 |
-| `encoding.type`       | `int256`                           | Different encodings of the same data produce different outputs |
-| `encoding.path`       | `$.ethereum.usd`                   | Extracting different fields produces different data            |
-| `encoding.times`      | `1e18`                             | Different multipliers produce different values                 |
+| `encoding.type`       | `int256` or `*`                    | Different encodings of the same data produce different outputs |
+| `encoding.path`       | `$.ethereum.usd` or `*`            | Extracting different fields produces different data            |
+| `encoding.times`      | `1e18` or `*`                      | Different multipliers produce different values                 |
 
 ### Parameter rules
 
@@ -139,7 +217,7 @@ const canonical = [
   '/simple/price',
   'GET',
   'ids,vs_currencies=usd',
-  'int256|$.ethereum.usd|1e18',
+  'type=int256,path=$.ethereum.usd,times=1e18',
 ].join('|');
 
 const endpointId = keccak256(toHex(canonical));

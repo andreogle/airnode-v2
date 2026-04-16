@@ -125,8 +125,9 @@ describe('deriveEndpointId', () => {
 
     const id1 = deriveEndpointId(api, withEncoding);
     const id2 = deriveEndpointId(api, withEncodingAndTimes);
-    expect(id1).toBe('0x12a635dd4619e0a165500b7fae7b286bed5ac67f85779e658c14cdf552df53bc');
-    expect(id2).toBe('0xd22eb446fcd545f9b2f4beecf8008fedc90fce978aa1d48256dd28bbdce4b171');
+    expect(id1).toBe('0xfb31eaae55bac2e9be9da60c0e56d004c66a435f21250ce62045679c95ae78c8');
+    expect(id1).toBe(keccak256(toHex('https://api.example.com|/price|GET||type=int256,path=$.price,times=*')));
+    expect(id2).toBe(keccak256(toHex('https://api.example.com|/price|GET||type=int256,path=$.price,times=1e18')));
     expect(id1).not.toBe(id2);
   });
 
@@ -140,6 +141,29 @@ describe('deriveEndpointId', () => {
     const withoutEncoding = makeEndpoint({ name: 'getPrice', path: '/price' });
 
     expect(deriveEndpointId(api, withEncoding)).not.toBe(deriveEndpointId(api, withoutEncoding));
+  });
+
+  test('partial encoding uses * wildcards for client-controlled fields', () => {
+    const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
+
+    const typeOnly = makeEndpoint({ name: 'e', path: '/p', encoding: { type: 'int256' } });
+    expect(deriveEndpointId(api, typeOnly)).toBe(
+      keccak256(toHex('https://api.example.com|/p|GET||type=int256,path=*,times=*'))
+    );
+
+    const pathAndTimes = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      encoding: { path: '$.price', times: '1e18' },
+    });
+    expect(deriveEndpointId(api, pathAndTimes)).toBe(
+      keccak256(toHex('https://api.example.com|/p|GET||type=*,path=$.price,times=1e18'))
+    );
+
+    const empty = makeEndpoint({ name: 'e', path: '/p', encoding: {} });
+    expect(deriveEndpointId(api, empty)).toBe(
+      keccak256(toHex('https://api.example.com|/p|GET||type=*,path=*,times=*'))
+    );
   });
 });
 

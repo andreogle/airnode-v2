@@ -38,10 +38,7 @@ function buildEncodingSpec(encoding?: {
   readonly times?: string;
 }): string {
   if (!encoding) return '';
-  if (!encoding.type || !encoding.path) return '';
-  const { type, path, times } = encoding;
-  const parts = times === undefined ? [type, path] : [type, path, times];
-  return parts.join('|');
+  return `type=${encoding.type ?? '*'},path=${encoding.path ?? '*'},times=${encoding.times ?? '*'}`;
 }
 
 function deriveEndpointId(api: Api, endpoint: Endpoint): Hex {
