@@ -19,14 +19,18 @@ interface ResponseCache {
 
 // =============================================================================
 // Key derivation
+//
+// Parameters are encoded as a sorted array of [key, value] tuples and passed
+// through JSON.stringify so that special characters in names or values (=, &,
+// |, ", \) cannot collide across distinct parameter sets. Length-prefixed
+// encoding via JSON ensures injective serialization.
 // =============================================================================
 function deriveCacheKey(endpointId: string, parameters: Record<string, string>): string {
-  const sortedParamString = Object.keys(parameters)
+  const sortedEntries = Object.keys(parameters)
     .toSorted()
-    .map((key) => `${key}=${String(parameters[key])}`)
-    .join('&');
+    .map((key) => [key, parameters[key] ?? ''] as const);
 
-  return keccak256(toHex(`${endpointId}|${sortedParamString}`));
+  return keccak256(toHex(JSON.stringify([endpointId, sortedEntries])));
 }
 
 // =============================================================================

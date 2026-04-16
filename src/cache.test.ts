@@ -68,6 +68,17 @@ describe('createCache', () => {
     expect(cache.size()).toBe(1);
   });
 
+  test('special characters in values cannot collide across parameter sets', () => {
+    const cache = createCache();
+    // Before the canonical encoding fix, both of these would produce the same
+    // key="a=b&c=d" concatenation and collide in the cache.
+    cache.set(ENDPOINT_ID, { a: 'b&c=d' }, { which: 'first' }, 60_000);
+    cache.set(ENDPOINT_ID, { a: 'b', c: 'd' }, { which: 'second' }, 60_000);
+
+    expect(cache.get(ENDPOINT_ID, { a: 'b&c=d' })).toEqual({ which: 'first' });
+    expect(cache.get(ENDPOINT_ID, { a: 'b', c: 'd' })).toEqual({ which: 'second' });
+  });
+
   test('size() returns correct count', () => {
     const cache = createCache();
     expect(cache.size()).toBe(0);
