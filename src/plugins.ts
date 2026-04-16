@@ -15,6 +15,7 @@ interface ApiCallResult {
 // Hook context types
 // =============================================================================
 interface HttpRequestContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -23,6 +24,7 @@ interface HttpRequestContext {
 }
 
 interface BeforeApiCallContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -31,6 +33,7 @@ interface BeforeApiCallContext {
 }
 
 interface AfterApiCallContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -40,6 +43,7 @@ interface AfterApiCallContext {
 }
 
 interface BeforeSignContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -48,6 +52,7 @@ interface BeforeSignContext {
 }
 
 interface ResponseSentContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -56,6 +61,7 @@ interface ResponseSentContext {
 }
 
 interface ErrorContext {
+  readonly requestId?: Hex;
   readonly error: Error;
   readonly stage: string;
   readonly endpointId?: Hex;
@@ -467,6 +473,21 @@ async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDi
 
   if (registry.hasApiHooks) {
     logger.warn('Plugins with API/sign hooks detected — inline execution enabled for hook interception');
+  }
+
+  // Surface plugins that can rewrite signed payload bytes. These plugins can
+  // cause the airnode to sign arbitrary data of their choosing and should be
+  // audited as carefully as the signing key itself.
+  const signMutators = loaded.filter((l) => l.plugin.hooks.onBeforeSign).map((l) => l.plugin.name);
+  if (signMutators.length > 0) {
+    logger.warn(
+      `SECURITY: ${String(signMutators.length)} plugin(s) can substitute bytes before signing. ` +
+        `These plugins effectively share signing-key authority — audit them like you would the private key:`
+    );
+    // eslint-disable-next-line functional/no-loop-statements
+    for (const name of signMutators) {
+      logger.warn(`  - ${name} (onBeforeSign)`);
+    }
   }
 
   return registry;

@@ -54,6 +54,7 @@ import { randomBytes } from '@noble/hashes/utils';
 type Hex = `0x${string}`;
 
 interface BeforeApiCallContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -61,6 +62,7 @@ interface BeforeApiCallContext {
 }
 
 interface BeforeSignContext {
+  readonly requestId: Hex;
   readonly endpointId: Hex;
   readonly api: string;
   readonly endpoint: string;
@@ -68,6 +70,7 @@ interface BeforeSignContext {
 }
 
 interface ErrorContext {
+  readonly requestId?: Hex;
   readonly error: Error;
   readonly stage: string;
   readonly endpointId?: Hex;
@@ -155,7 +158,9 @@ function bytesToHex(bytes: Uint8Array): Hex {
 }
 
 // =============================================================================
-// State — the requester's response public key, set during decryption
+// State — the requester's response public key, keyed by requestId so that
+// concurrent clients of the same endpoint cannot race and receive each
+// other's encrypted responses.
 // =============================================================================
 const responseKeys = new Map<string, Uint8Array>();
 
@@ -202,13 +207,13 @@ const plugin: AirnodePlugin = {
       // Extract and store the response public key if provided
       const responsePublicKey = decoded['_responsePublicKey'];
       if (responsePublicKey) {
-        responseKeys.set(ctx.endpointId, hexToBytes(responsePublicKey)); // eslint-disable-line functional/immutable-data
+        responseKeys.set(ctx.requestId, hexToBytes(responsePublicKey)); // eslint-disable-line functional/immutable-data
         console.info(
-          `${PREFIX} Endpoint ${ctx.endpointId.slice(0, 10)}...: decrypted parameters for ${ctx.api}/${ctx.endpoint}, response encryption enabled`
+          `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response encryption enabled`
         );
       } else {
         console.info(
-          `${PREFIX} Endpoint ${ctx.endpointId.slice(0, 10)}...: decrypted parameters for ${ctx.api}/${ctx.endpoint}, response will be plaintext (no _responsePublicKey)`
+          `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response will be plaintext (no _responsePublicKey)`
         );
       }
 
@@ -227,18 +232,18 @@ const plugin: AirnodePlugin = {
     // The requester must decrypt client-side to access the actual data.
     // =========================================================================
     onBeforeSign: (ctx: BeforeSignContext): BeforeSignResult => {
-      const responsePubKey = responseKeys.get(ctx.endpointId);
+      const responsePubKey = responseKeys.get(ctx.requestId);
       if (!responsePubKey) return;
 
       // Clean up stored key
-      responseKeys.delete(ctx.endpointId); // eslint-disable-line functional/immutable-data
+      responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data
 
       const plainData = hexToBytes(ctx.data);
       const encryptedData = encrypt(plainData, responsePubKey);
       const encryptedHex = bytesToHex(encryptedData);
 
       console.info(
-        `${PREFIX} Endpoint ${ctx.endpointId.slice(0, 10)}...: encrypted data for ${ctx.api}/${ctx.endpoint} (${String(plainData.length)} → ${String(encryptedData.length)} bytes)`
+        `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): encrypted data (${String(plainData.length)} → ${String(encryptedData.length)} bytes)`
       );
 
       return { data: encryptedHex };
@@ -246,8 +251,8 @@ const plugin: AirnodePlugin = {
 
     onError: (ctx: ErrorContext) => {
       // Clean up any stored keys on error to prevent memory leaks
-      if (ctx.endpointId) {
-        responseKeys.delete(ctx.endpointId); // eslint-disable-line functional/immutable-data
+      if (ctx.requestId) {
+        responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data
       }
     },
   },
