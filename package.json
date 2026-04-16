@@ -13,6 +13,7 @@
     "build:osx": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode",
     "build:windows": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode.exe",
     "dev": "bun --watch src/cli/index.ts start",
+    "examples:build": "for dir in examples/plugins/*/; do [ -f \"$dir/package.json\" ] && (cd \"$dir\" && bun install && bun run build); done",
     "fmt": "prettier . --write && eslint . --fix",
     "lint": "bun run lint:prettier && bun run lint:eslint && bun run lint:slither",
     "lint:eslint": "eslint . --cache",

@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
         'concepts/endpoint-ids',
         'concepts/signing',
         'concepts/proofs',
+        'concepts/fhe-encryption',
       ],
     },
     {
