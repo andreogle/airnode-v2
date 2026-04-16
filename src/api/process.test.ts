@@ -141,7 +141,7 @@ describe('processResponse', () => {
 
     test('throws for invalid number conversion', () => {
       expect(() => processResponse({ value: 'not-a-number' }, { type: 'uint256', path: '$.value' })).toThrow(
-        'Cannot convert "not-a-number" to uint256'
+        'Cannot parse numeric value: not-a-number'
       );
     });
 
@@ -149,6 +149,63 @@ describe('processResponse', () => {
       expect(() => processResponse({ value: 1 }, { type: 'float', path: '$.value' })).toThrow(
         'Invalid Solidity type: float'
       );
+    });
+
+    test('rejects negative value for uint256', () => {
+      expect(() => processResponse({ value: -5 }, { type: 'uint256', path: '$.value' })).toThrow(
+        'Cannot encode negative value -5 as uint256'
+      );
+    });
+
+    test('rejects int256 overflow', () => {
+      const tooBig = '57896044618658097711785492504343953926634992332820282019728792003956564819968';
+      expect(() => processResponse({ value: tooBig }, { type: 'int256', path: '$.value' })).toThrow(
+        'does not fit in int256'
+      );
+    });
+
+    test('rejects malformed address', () => {
+      expect(() => processResponse({ wallet: '0xdeadbeef' }, { type: 'address', path: '$.wallet' })).toThrow(
+        'Invalid EVM address'
+      );
+    });
+
+    test('rejects bytes32 longer than 32 bytes', () => {
+      const tooLong = `0x${'ab'.repeat(33)}`;
+      expect(() => processResponse({ id: tooLong }, { type: 'bytes32', path: '$.id' })).toThrow('exceeds 32 bytes');
+    });
+
+    test('rejects malformed hex in bytes', () => {
+      expect(() => processResponse({ payload: '0xnothex' }, { type: 'bytes', path: '$.payload' })).toThrow(
+        'Invalid hex bytes'
+      );
+    });
+  });
+
+  describe('precision', () => {
+    test('multiplies 18-decimal string value losslessly (exceeds JS safe integer range)', () => {
+      // 3000.123456789012345678 * 1e18 = 3000123456789012345678 — losslessly
+      const result = processResponse(
+        { price: '3000.123456789012345678' },
+        { type: 'uint256', path: '$.price', times: '1e18' }
+      );
+      // 3000123456789012345678 in hex
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000a2a313a49d4210f34e' as Hex);
+    });
+
+    test('accepts stringified large uint256 values', () => {
+      // 2^128 = 340282366920938463463374607431768211456
+      const result = processResponse(
+        { value: '340282366920938463463374607431768211456' },
+        { type: 'uint256', path: '$.value' }
+      );
+      expect(result).toBe('0x0000000000000000000000000000000100000000000000000000000000000000' as Hex);
+    });
+
+    test('scientific notation in times multiplier parses without float error', () => {
+      // 1.5 * 1e6 = 1500000
+      const result = processResponse({ v: '1.5' }, { type: 'uint256', path: '$.v', times: '1e6' });
+      expect(result).toBe('0x000000000000000000000000000000000000000000000000000000000016e360');
     });
   });
 });

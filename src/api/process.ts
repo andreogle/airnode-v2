@@ -1,7 +1,8 @@
-import { type Hex, encodeAbiParameters, toHex } from 'viem';
+import { type Hex, encodeAbiParameters, getAddress, toHex } from 'viem';
 import { isNil } from '../guards';
 import { query } from '../json-path';
 import type { JsonValue } from '../json-path';
+
 // Accepts both operator-fixed encoding (from config) and resolved encoding
 // (merged config + requester params). Only requires the fields that are
 // needed for processing — type and path must be present.
@@ -15,58 +16,161 @@ type SolidityType = 'int256' | 'uint256' | 'bool' | 'bytes32' | 'address' | 'str
 
 const VALID_SOLIDITY_TYPES = new Set<string>(['int256', 'uint256', 'bool', 'bytes32', 'address', 'string', 'bytes']);
 
-function applyMultiplier(value: number, multiply: string | undefined): bigint {
-  if (isNil(multiply) || multiply === '') return BigInt(Math.trunc(value));
+const DECIMAL_REGEX = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+const ADDRESS_REGEX = /^0x[\da-fA-F]{40}$/;
+const HEX_BYTES_REGEX = /^0x([\da-fA-F]{2})*$/;
 
-  const multiplier = Number(multiply);
-  const result = value * multiplier;
+const INT256_MAX = 2n ** 255n - 1n;
+const INT256_MIN = -(2n ** 255n);
+const UINT256_MAX = 2n ** 256n - 1n;
 
-  return BigInt(Math.trunc(result));
+// =============================================================================
+// Lossless decimal math
+//
+// Multiplication is performed on BigInt mantissas to avoid JS float truncation
+// above 2^53. Both the extracted value and the `times` multiplier are parsed
+// as (mantissa, exp) pairs where value = mantissa * 10^exp. The product is
+// scaled to an integer by truncating toward zero — matching v1 behaviour.
+// =============================================================================
+function parseDecimal(input: string): { readonly mantissa: bigint; readonly exp: number } {
+  if (!DECIMAL_REGEX.test(input)) {
+    throw new Error(`Cannot parse numeric value: ${input}`);
+  }
+
+  const negative = input.startsWith('-');
+  const unsigned = negative ? input.slice(1) : input;
+
+  const [baseRaw = '', expRaw] = unsigned.split(/[eE]/);
+  const scientificExp = expRaw ? Number(expRaw) : 0;
+
+  const [intPart = '0', fracPart = ''] = baseRaw.split('.');
+  const mantissaDigits = `${intPart}${fracPart}`.replace(/^0+(?=\d)/, '') || '0';
+  const mantissa = (negative ? -1n : 1n) * BigInt(mantissaDigits);
+
+  return { mantissa, exp: scientificExp - fracPart.length };
+}
+
+function scaleToBigInt(mantissa: bigint, exp: number): bigint {
+  if (exp >= 0) return mantissa * 10n ** BigInt(exp);
+  return mantissa / 10n ** BigInt(-exp); // truncates toward zero
+}
+
+function applyMultiplier(value: string, multiply: string | undefined): bigint {
+  const valueParts = parseDecimal(value);
+  if (isNil(multiply) || multiply === '') {
+    return scaleToBigInt(valueParts.mantissa, valueParts.exp);
+  }
+  const timesParts = parseDecimal(multiply);
+  return scaleToBigInt(valueParts.mantissa * timesParts.mantissa, valueParts.exp + timesParts.exp);
+}
+
+// =============================================================================
+// Raw value → canonical string
+//
+// Converting via `String(raw)` loses precision for JS numbers outside
+// Number.MAX_SAFE_INTEGER. Upstream APIs that need full uint256 precision
+// should return numeric values as JSON strings, which preserve every digit
+// through JSON.parse and into parseDecimal.
+// =============================================================================
+function numericToString(raw: JsonValue): string {
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) {
+      throw new TypeError(`Cannot convert ${String(raw)} to numeric`);
+    }
+    return raw.toString();
+  }
+  if (typeof raw === 'boolean') return raw ? '1' : '0';
+  throw new TypeError(`Cannot convert ${typeof raw} to numeric`);
+}
+
+// =============================================================================
+// Solidity value coercion
+// =============================================================================
+function castToInt256(raw: JsonValue, multiply: string | undefined): bigint {
+  const value = applyMultiplier(numericToString(raw), multiply);
+  if (value > INT256_MAX || value < INT256_MIN) {
+    throw new RangeError(`Value ${value.toString()} does not fit in int256`);
+  }
+  return value;
+}
+
+function castToUint256(raw: JsonValue, multiply: string | undefined): bigint {
+  const value = applyMultiplier(numericToString(raw), multiply);
+  if (value < 0n) {
+    throw new RangeError(`Cannot encode negative value ${value.toString()} as uint256`);
+  }
+  if (value > UINT256_MAX) {
+    throw new RangeError(`Value ${value.toString()} does not fit in uint256`);
+  }
+  return value;
+}
+
+function castToBool(raw: JsonValue): boolean {
+  return raw === true || raw === 'true' || raw === 1 || raw === '1';
+}
+
+function castToBytes32(raw: JsonValue): Hex {
+  if (typeof raw === 'string' && raw.startsWith('0x')) {
+    if (!HEX_BYTES_REGEX.test(raw)) throw new Error(`Invalid hex bytes32: ${raw}`);
+    if ((raw.length - 2) / 2 > 32) throw new RangeError(`Value exceeds 32 bytes: ${raw}`);
+    return raw as Hex;
+  }
+  return toHex(String(raw as string | number | boolean), { size: 32 });
+}
+
+function castToAddress(raw: JsonValue): Hex {
+  if (typeof raw !== 'string' || !ADDRESS_REGEX.test(raw)) {
+    throw new Error(`Invalid EVM address: ${String(raw as string | number | boolean)}`);
+  }
+  return getAddress(raw);
+}
+
+function castToBytes(raw: JsonValue): Hex {
+  if (typeof raw === 'string' && raw.startsWith('0x')) {
+    if (!HEX_BYTES_REGEX.test(raw)) throw new Error(`Invalid hex bytes: ${raw}`);
+    return raw as Hex;
+  }
+  return toHex(String(raw as string | number | boolean));
 }
 
 function castToSolidityValue(
   raw: JsonValue,
-  type: SolidityType,
+  solidityType: SolidityType,
   multiply: string | undefined
 ): bigint | boolean | string {
-  if (isNil(raw)) {
-    throw new Error('Cannot encode nil value');
-  }
+  if (isNil(raw)) throw new Error('Cannot encode nil value');
 
-  switch (type) {
-    case 'int256':
+  switch (solidityType) {
+    case 'int256': {
+      return castToInt256(raw, multiply);
+    }
     case 'uint256': {
-      const number_ = typeof raw === 'number' ? raw : Number(raw);
-      if (Number.isNaN(number_)) {
-        throw new TypeError(`Cannot convert "${String(raw as string | number | boolean)}" to ${type}`);
-      }
-      return applyMultiplier(number_, multiply);
+      return castToUint256(raw, multiply);
     }
     case 'bool': {
-      return raw === true || raw === 'true' || raw === 1;
+      return castToBool(raw);
     }
     case 'bytes32': {
-      return typeof raw === 'string' && raw.startsWith('0x')
-        ? raw
-        : toHex(String(raw as string | number | boolean), { size: 32 });
+      return castToBytes32(raw);
     }
     case 'address': {
-      return raw as string;
+      return castToAddress(raw);
     }
     case 'string': {
       return String(raw as string | number | boolean);
     }
     case 'bytes': {
-      return typeof raw === 'string' && raw.startsWith('0x') ? raw : toHex(String(raw as string | number | boolean));
+      return castToBytes(raw);
     }
   }
 }
 
-function validateSolidityType(type: string): SolidityType {
-  if (!VALID_SOLIDITY_TYPES.has(type)) {
-    throw new Error(`Invalid Solidity type: ${type}`);
+function validateSolidityType(solidityType: string): SolidityType {
+  if (!VALID_SOLIDITY_TYPES.has(solidityType)) {
+    throw new Error(`Invalid Solidity type: ${solidityType}`);
   }
-  return type as SolidityType;
+  return solidityType as SolidityType;
 }
 
 function processResponse(data: unknown, encoding: ProcessEncoding): Hex {
@@ -79,7 +183,7 @@ function processResponse(data: unknown, encoding: ProcessEncoding): Hex {
   }
 
   const extractions = types.map((typeString, index) => {
-    const type = validateSolidityType(typeString.trim());
+    const solidityType = validateSolidityType(typeString.trim());
     const path = paths[index]?.trim() ?? '';
     const multiply = times[index]?.trim();
 
@@ -88,8 +192,8 @@ function processResponse(data: unknown, encoding: ProcessEncoding): Hex {
       throw new Error(`No value found at path: ${path}`);
     }
 
-    const value = castToSolidityValue(raw, type, multiply);
-    return { type, value };
+    const value = castToSolidityValue(raw, solidityType, multiply);
+    return { type: solidityType, value };
   });
 
   const abiTypes = extractions.map((extraction) => ({ type: extraction.type }));
