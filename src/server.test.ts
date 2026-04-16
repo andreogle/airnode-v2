@@ -113,15 +113,37 @@ describe('createServer', () => {
     expect(body.error).toBe('Method Not Allowed');
   });
 
-  test('CORS headers are set', async () => {
+  test('CORS echoes request Origin when it matches the allow-list', async () => {
     const deps = makeDeps({
       config: makeConfig({ cors: { origins: ['https://example.com', 'https://app.example.com'] } }),
     });
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
-    const response = await fetch(`${baseUrl}/health`);
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://example.com, https://app.example.com');
+    const response = await fetch(`${baseUrl}/health`, { headers: { Origin: 'https://app.example.com' } });
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    expect(response.headers.get('Vary')).toBe('Origin');
+  });
+
+  test('CORS returns null origin when request Origin is not allowed', async () => {
+    const deps = makeDeps({
+      config: makeConfig({ cors: { origins: ['https://app.example.com'] } }),
+    });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/health`, { headers: { Origin: 'https://evil.com' } });
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('null');
+    expect(response.headers.get('Vary')).toBe('Origin');
+  });
+
+  test('CORS defaults to wildcard when no allow-list is configured', async () => {
+    const deps = makeDeps({ config: makeConfig({}) });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/health`, { headers: { Origin: 'https://anywhere.com' } });
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
   test('rate limiting returns 429 after max requests', async () => {

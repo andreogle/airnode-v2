@@ -40,17 +40,42 @@ interface ServerHandle {
 const MAX_BODY_BYTES = 64 * 1024;
 
 // =============================================================================
-// Response helpers
+// CORS
+//
+// When no allow-list is configured, emit `Access-Control-Allow-Origin: *` so
+// public endpoints work from any origin. When an allow-list is configured,
+// reflect the request's `Origin` header only if it matches the list — never
+// concatenate multiple origins into a single header, since that is invalid
+// CORS syntax and browsers reject it. `Vary: Origin` signals caches that the
+// response depends on the requesting origin.
 // =============================================================================
-function jsonResponse(data: unknown, status = 200, corsOrigins = '*'): Response {
-  return Response.json(data, {
-    status,
-    headers: { 'Access-Control-Allow-Origin': corsOrigins },
-  });
+interface CorsHeaders {
+  readonly 'Access-Control-Allow-Origin': string;
+  readonly Vary?: string;
 }
 
-function errorResponse(message: string, status: number, corsOrigins = '*'): Response {
-  return jsonResponse({ error: message }, status, corsOrigins);
+const DEFAULT_CORS: CorsHeaders = { 'Access-Control-Allow-Origin': '*' };
+
+function resolveCorsHeaders(request: Request, allowedOrigins: readonly string[] | undefined): CorsHeaders {
+  if (!allowedOrigins || allowedOrigins.length === 0 || allowedOrigins.includes('*')) {
+    return DEFAULT_CORS;
+  }
+  const requestOrigin = request.headers.get('Origin');
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    return { 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
+  }
+  return { 'Access-Control-Allow-Origin': 'null', Vary: 'Origin' };
+}
+
+// =============================================================================
+// Response helpers
+// =============================================================================
+function jsonResponse(data: unknown, status = 200, cors: CorsHeaders = DEFAULT_CORS): Response {
+  return Response.json(data, { status, headers: { ...cors } });
+}
+
+function errorResponse(message: string, status: number, cors: CorsHeaders = DEFAULT_CORS): Response {
+  return jsonResponse({ error: message }, status, cors);
 }
 
 function parseEndpointRoute(pathname: string): Hex | undefined {
@@ -88,11 +113,20 @@ async function parseRequestBody(request: Request): Promise<Record<string, string
   return result.data.parameters ?? {};
 }
 
-function handlePreflight(corsOrigins: string): Response {
+function withCorsHeaders(response: Response, cors: CorsHeaders): Response {
+  const headers = new Headers(response.headers);
+  // eslint-disable-next-line functional/no-loop-statements
+  for (const [key, value] of Object.entries(cors)) {
+    if (typeof value === 'string') headers.set(key, value);
+  }
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function handlePreflight(cors: CorsHeaders): Response {
   return new Response(undefined, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': corsOrigins,
+      ...cors,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key, Authorization, X-Payment-Proof',
       'Access-Control-Max-Age': '86400',
@@ -104,7 +138,7 @@ function handlePreflight(corsOrigins: string): Response {
 // Server factory
 // =============================================================================
 function createServer(deps: ServerDependencies): ServerHandle {
-  const corsOrigins = deps.config.server.cors?.origins.join(', ') ?? '*';
+  const allowedOrigins = deps.config.server.cors?.origins;
   const rateLimitConfig = deps.config.server.rateLimit;
   const rateBuckets = new Map<string, TokenBucket>();
 
@@ -113,21 +147,22 @@ function createServer(deps: ServerDependencies): ServerHandle {
     hostname: deps.config.server.host,
     fetch: async (request: Request, bunServer): Promise<Response> => {
       const url = new URL(request.url);
+      const cors = resolveCorsHeaders(request, allowedOrigins);
 
       if (request.method === 'OPTIONS') {
-        return handlePreflight(corsOrigins);
+        return handlePreflight(cors);
       }
 
       if (rateLimitConfig) {
         const ip = bunServer.requestIP(request)?.address ?? 'unknown';
         const allowed = checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max);
         if (!allowed) {
-          return errorResponse('Too Many Requests', 429, corsOrigins);
+          return errorResponse('Too Many Requests', 429, cors);
         }
       }
 
       if (url.pathname === '/health' && request.method === 'GET') {
-        return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, corsOrigins);
+        return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, cors);
       }
 
       // Async request polling
@@ -135,47 +170,43 @@ function createServer(deps: ServerDependencies): ServerHandle {
       if (asyncRequestId && request.method === 'GET' && deps.asyncStore) {
         const pending = deps.asyncStore.get(asyncRequestId);
         if (!pending) {
-          return errorResponse('Request not found', 404, corsOrigins);
+          return errorResponse('Request not found', 404, cors);
         }
         if (pending.status === 'complete') {
           return jsonResponse(
             { requestId: pending.requestId, status: 'complete', ...(pending.result as object) },
             200,
-            corsOrigins
+            cors
           );
         }
         if (pending.status === 'failed') {
-          return jsonResponse(
-            { requestId: pending.requestId, status: 'failed', error: pending.error },
-            200,
-            corsOrigins
-          );
+          return jsonResponse({ requestId: pending.requestId, status: 'failed', error: pending.error }, 200, cors);
         }
         return jsonResponse(
           { requestId: pending.requestId, status: pending.status, pollUrl: `/requests/${pending.requestId}` },
           200,
-          corsOrigins
+          cors
         );
       }
 
       const endpointId = parseEndpointRoute(url.pathname);
       if (endpointId) {
         if (request.method !== 'POST') {
-          return errorResponse('Method Not Allowed', 405, corsOrigins);
+          return errorResponse('Method Not Allowed', 405, cors);
         }
 
         const body = await parseRequestBody(request);
         if (body === 'too_large') {
-          return errorResponse('Request body too large', 413, corsOrigins);
+          return errorResponse('Request body too large', 413, cors);
         }
         if (body === 'bad_content_type') {
-          return errorResponse('Content-Type must be application/json', 415, corsOrigins);
+          return errorResponse('Content-Type must be application/json', 415, cors);
         }
 
-        return deps.handleRequest(request, endpointId, body, deps);
+        return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps), cors);
       }
 
-      return errorResponse('Not Found', 404, corsOrigins);
+      return errorResponse('Not Found', 404, cors);
     },
   });
 
