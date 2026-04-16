@@ -26,6 +26,7 @@ interface ProofRequest {
   readonly url: string;
   readonly method: string;
   readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
   readonly responseMatches?: readonly { readonly type: string; readonly value: string }[];
   readonly responseRedactions?: readonly { readonly jsonPath?: string }[];
 }

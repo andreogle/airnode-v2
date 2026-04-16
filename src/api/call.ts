@@ -8,6 +8,13 @@ interface ApiCallResult {
   readonly status: number;
 }
 
+interface BuiltRequest {
+  readonly url: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
 function buildUrl(url: string, path: string, pathParameters: Record<string, string>): string {
   // eslint-disable-next-line functional/no-let
   let resolvedPath = path;
@@ -19,14 +26,13 @@ function buildUrl(url: string, path: string, pathParameters: Record<string, stri
   return `${url}${resolvedPath}`;
 }
 
-async function callApi(
-  api: Api,
-  endpoint: Endpoint,
-  requestParameters: Record<string, string>
-): Promise<ApiCallResult> {
-  const parameterDefs = endpoint.parameters;
-
-  const resolvedParameters = parameterDefs.map((parameter) => {
+// =============================================================================
+// Resolve endpoint parameters into fetch-compatible URL, headers, and body.
+// Used both for the real upstream call and for building identical proof-gateway
+// requests so the attested transcript matches what Airnode actually sent.
+// =============================================================================
+function buildApiRequest(api: Api, endpoint: Endpoint, requestParameters: Record<string, string>): BuiltRequest {
+  const resolvedParameters = endpoint.parameters.map((parameter) => {
     const value = isNil(parameter.fixed)
       ? (requestParameters[parameter.name] ?? (isNil(parameter.default) ? undefined : String(parameter.default)))
       : String(parameter.fixed);
@@ -79,12 +85,23 @@ async function callApi(
     headers['Content-Type'] = 'application/json'; // eslint-disable-line functional/immutable-data
   }
 
-  logger.debug(`Calling ${endpoint.method} ${url.origin}${url.pathname}`);
+  return { url: url.toString(), method: endpoint.method, headers, body };
+}
 
-  const response = await fetch(url.toString(), {
-    method: endpoint.method,
-    headers,
-    body,
+async function callApi(
+  api: Api,
+  endpoint: Endpoint,
+  requestParameters: Record<string, string>
+): Promise<ApiCallResult> {
+  const built = buildApiRequest(api, endpoint, requestParameters);
+  const parsedUrl = new URL(built.url);
+
+  logger.debug(`Calling ${built.method} ${parsedUrl.origin}${parsedUrl.pathname}`);
+
+  const response = await fetch(built.url, {
+    method: built.method,
+    headers: built.headers,
+    body: built.body,
     signal: AbortSignal.timeout(api.timeout),
   });
 
@@ -103,5 +120,5 @@ async function callApi(
   return { data: jsonResult.data, status: response.status };
 }
 
-export { callApi };
-export type { ApiCallResult };
+export { buildApiRequest, callApi };
+export type { ApiCallResult, BuiltRequest };
