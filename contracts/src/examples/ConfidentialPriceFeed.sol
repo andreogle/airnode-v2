@@ -46,9 +46,9 @@ contract ConfidentialPriceFeed {
   // ===========================================================================
   // Storage
   // ===========================================================================
-  address public immutable OWNER;
-  address public immutable VERIFIER;
-  ITFHE public immutable TFHE;
+  address public immutable owner;
+  address public immutable verifier;
+  ITFHE public immutable tfhe;
 
   /// @notice Trusted airnode addresses. Only data signed by these airnodes is accepted.
   mapping(address => bool) public trustedAirnodes;
@@ -59,6 +59,16 @@ contract ConfidentialPriceFeed {
   /// @notice Timestamp of the latest price update per endpoint.
   mapping(bytes32 => uint256) public timestamps;
 
+  /// @dev Reentrancy guard. 1 = not entered, 2 = entered.
+  uint256 private locked = 1;
+
+  modifier nonReentrant() {
+    require(locked == 1, 'Reentrant call');
+    locked = 2;
+    _;
+    locked = 1;
+  }
+
   // ===========================================================================
   // Constructor
   // ===========================================================================
@@ -66,9 +76,11 @@ contract ConfidentialPriceFeed {
   /// @param _verifier The AirnodeVerifier contract address.
   /// @param _tfhe The TFHE interface implementation (mock for testing, precompile on fhEVM).
   constructor(address _verifier, address _tfhe) {
-    OWNER = msg.sender;
-    VERIFIER = _verifier;
-    TFHE = ITFHE(_tfhe);
+    require(_verifier != address(0), 'Verifier is zero');
+    require(_tfhe != address(0), 'TFHE is zero');
+    owner = msg.sender;
+    verifier = _verifier;
+    tfhe = ITFHE(_tfhe);
   }
 
   // ===========================================================================
@@ -76,13 +88,13 @@ contract ConfidentialPriceFeed {
   // ===========================================================================
 
   function trustAirnode(address airnode) external {
-    require(msg.sender == OWNER, 'Only owner');
+    require(msg.sender == owner, 'Only owner');
     trustedAirnodes[airnode] = true;
     emit AirnodeTrusted(airnode);
   }
 
   function removeAirnode(address airnode) external {
-    require(msg.sender == OWNER, 'Only owner');
+    require(msg.sender == owner, 'Only owner');
     trustedAirnodes[airnode] = false;
     emit AirnodeRemoved(airnode);
   }
@@ -104,21 +116,27 @@ contract ConfidentialPriceFeed {
     bytes32 endpointId,
     uint256 timestamp,
     bytes calldata data
-  ) external {
-    require(msg.sender == VERIFIER, 'Only verifier');
+  ) external nonReentrant {
+    require(msg.sender == verifier, 'Only verifier');
     require(trustedAirnodes[airnode], 'Untrusted airnode');
     require(timestamp > timestamps[endpointId], 'Stale data');
+
+    // Effects before interactions (CEI): bumping the timestamp first blocks any
+    // reentrant call with a stale or equal timestamp from being accepted.
+    timestamps[endpointId] = timestamp;
 
     // Unpack the FHE-encrypted payload
     (bytes32 handleRef, bytes memory inputProof) = abi.decode(data, (bytes32, bytes));
 
     // Register the FHE handle — validates the ZK proof and creates a ciphertext
     // reference in the coprocessor. Only this contract gets initial access.
-    uint256 handle = TFHE.asEuint256(handleRef, inputProof);
-    TFHE.allow(handle, address(this));
+    uint256 handle = tfhe.asEuint256(handleRef, inputProof);
+    tfhe.allow(handle, address(this));
 
+    // The handle is only known after the external call, so this write is unavoidably
+    // after the interaction. Reentrancy is prevented by the nonReentrant modifier.
+    // slither-disable-next-line reentrancy-benign
     prices[endpointId] = handle;
-    timestamps[endpointId] = timestamp;
 
     emit PriceUpdated(endpointId, handle, timestamp);
   }
@@ -132,20 +150,20 @@ contract ConfidentialPriceFeed {
   ///         will check this on-chain ACL before cooperating.
   /// @param endpointId The endpoint whose price to grant access to.
   /// @param account The address to authorize for decryption.
-  function grantAccess(bytes32 endpointId, address account) external {
-    require(msg.sender == OWNER, 'Only owner');
+  function grantAccess(bytes32 endpointId, address account) external nonReentrant {
+    require(msg.sender == owner, 'Only owner');
     require(prices[endpointId] != 0, 'No price for endpoint');
-    TFHE.allow(prices[endpointId], account);
+    tfhe.allow(prices[endpointId], account);
     emit AccessGranted(endpointId, account);
   }
 
   /// @notice Revoke an address's permission to decrypt a price.
   /// @param endpointId The endpoint whose price to revoke access from.
   /// @param account The address to revoke.
-  function revokeAccess(bytes32 endpointId, address account) external {
-    require(msg.sender == OWNER, 'Only owner');
+  function revokeAccess(bytes32 endpointId, address account) external nonReentrant {
+    require(msg.sender == owner, 'Only owner');
     require(prices[endpointId] != 0, 'No price for endpoint');
-    TFHE.deny(prices[endpointId], account);
+    tfhe.deny(prices[endpointId], account);
     emit AccessRevoked(endpointId, account);
   }
 }
