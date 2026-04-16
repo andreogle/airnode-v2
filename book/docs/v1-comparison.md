@@ -73,7 +73,8 @@ rules. Two independent operators serving the same API with the same config produ
 
 **Why:** Specification-bound IDs enable cross-operator comparability without a registry. A quorum verifier can confirm
 that multiple airnodes signed data for the same endpoint ID — meaning they all committed to calling the same API the
-same way. When TLS proofs mature, the endpoint ID can be verified against the proven HTTP request on-chain.
+same way. TLS proofs extend this: the endpoint ID can be cross-checked against the proven HTTP request that backs the
+response.
 
 ## Signature format
 
@@ -82,7 +83,126 @@ v1 signed `keccak256(requestId, timestamp, airnodeAddress, data)` where the requ
 
 v2 signs `keccak256(encodePacked(endpointId, timestamp, data))` where the endpoint ID is derived from the API spec. The
 endpoint ID, timestamp, and data are separate top-level fields — not nested inside another hash — so on-chain contracts
-and future TLS proof verifiers can inspect each field independently.
+and TLS proof verifiers can inspect each field independently.
+
+## TLS proofs for data provenance
+
+v1 had no way to prove that signed data actually came from the claimed upstream API. The EIP-191 signature only proved
+_who_ signed — not _where the data came from_. A compromised or dishonest operator could fabricate responses and sign
+them.
+
+v2 integrates [TLS proofs](/docs/concepts/proofs) via [Reclaim Protocol](https://reclaimprotocol.org/). When enabled, an
+independent attestor participates in the upstream TLS session over MPC-TLS and signs a claim that the response actually
+came from the declared HTTPS endpoint and matched the configured `responseMatches` patterns. Airnode attaches the proof
+to the response alongside the signature.
+
+```yaml
+settings:
+  proof:
+    type: reclaim
+    gatewayUrl: http://localhost:5177/v1/prove
+
+apis:
+  - name: CoinGecko
+    # ...
+    endpoints:
+      - name: coinPrice
+        # ...
+        responseMatches:
+          - type: regex
+            value: '"usd":\s*(?<price>[\d.]+)'
+```
+
+Proof generation is **non-fatal** — if the gateway is unavailable, Airnode still returns the signed response without the
+`proof` field and logs a warning. Consumers that require provenance simply reject responses that lack a `proof`.
+
+**Why:** Signatures answer "who endorsed this data." TLS proofs answer "did this data really come from the API." Pairing
+them turns an airnode from a trusted relay into a verifiable relay — the operator can no longer forge upstream responses
+undetected.
+
+## A real plugin system
+
+v1 had no plugin mechanism — custom behaviour meant forking the node. Every custom auth check, metric, or response
+transform bled into a maintenance burden the operator carried alone.
+
+v2 exposes a [plugin system](/docs/plugins) with six hooks that fire at well-defined points in the request pipeline:
+
+| Hook              | Type        | When it fires                          |
+| ----------------- | ----------- | -------------------------------------- |
+| `onHttpRequest`   | Mutation    | After endpoint resolution, before auth |
+| `onBeforeApiCall` | Mutation    | Before the upstream API call           |
+| `onAfterApiCall`  | Mutation    | After the upstream API responds        |
+| `onBeforeSign`    | Mutation    | After encoding, before signing         |
+| `onResponseSent`  | Observation | After the signed response is sent      |
+| `onError`         | Observation | When an error occurs at any stage      |
+
+Plugins are ordinary modules loaded from a path in config, with per-request time budgets enforced by the runtime.
+Mutation hooks that fail or time out **drop** the request (fail-closed — no data leaks past a broken security plugin);
+observation hooks are fire-and-forget.
+
+The pipeline is powerful enough that several headline v2 capabilities are built as plugins rather than core features:
+
+- **`fhe-encrypt`** — encrypts the signed payload for on-chain confidential compute (see below)
+- **`encrypted-channel`** — ECIES-encrypts responses end-to-end to a requester's ephemeral key
+- **`heartbeat`**, **`logger`**, **`slack-alerts`** — operational observability
+
+**Why:** Airnode operators have wildly different needs — custom authorization, bespoke upstream protocols, private
+metrics, paid-data gating. A stable hook surface lets those live alongside the core node instead of forking it, and
+keeps the core small enough to audit.
+
+## FHE encryption for confidential on-chain data
+
+v1 had no notion of confidential data. Every signed value was public the moment it landed on-chain — visible in calldata
+before inclusion (enabling front-running) and readable from storage afterward (making it impossible to sell exclusive
+data or keep valuations private).
+
+v2 ships an [FHE encryption plugin](/docs/concepts/fhe-encryption) built on [Zama's fhEVM](https://docs.zama.ai/fhevm).
+The plugin intercepts the ABI-encoded response in the `onBeforeSign` hook, encrypts it with the target chain's FHE
+public key, and packs the resulting `(einput, inputProof)` pair as the new `data` field. Airnode signs the ciphertext,
+so the signature proves the encrypted data is authentic without ever revealing plaintext.
+
+```
+API response → ABI encode → [fhe-encrypt plugin] → sign(ciphertext) → return to client
+                                    ↓
+                        encrypt with chain's FHE public key
+                        pack (einput, inputProof) into data field
+```
+
+Because FHE is homomorphic, the callback contract can compute directly on the ciphertext —
+`TFHE.gt(price, liquidationThreshold)` returns an encrypted boolean without either value ever becoming public.
+Per-handle on-chain ACLs determine who is allowed to decrypt.
+
+**Why:** Public oracle data leaks value. Searchers front-run price updates, premium data leaks to non-payers the instant
+it's consumed, and confidential valuations can't be delivered at all. FHE lets contracts use oracle data while it stays
+encrypted — enabling MEV-protected feeds, paid-data access control, sealed auctions, and confidential RWA pricing on the
+same signing and verification path as any other Airnode response. The existing `AirnodeVerifier` contract works
+unchanged.
+
+## Response caching
+
+v1 had no response cache. Every request hit the upstream API, which was wasteful for endpoints with long-lived data
+(e.g. daily FX rates) and couldn't absorb bursts without rate-limiting the origin.
+
+v2 has an in-memory response cache with configurable TTL, keyed by `(endpointId, sorted parameters)`. Cache config is
+set per-API and can be overridden per-endpoint:
+
+```yaml
+apis:
+  - name: CoinGecko
+    cache:
+      maxAge: 30000 # 30 seconds
+    endpoints:
+      - name: coinPrice
+        # inherits the 30s cache
+      - name: realtimeTicker
+        cache:
+          maxAge: 1000 # override to 1 second
+```
+
+Entries are bounded (10,000 entries by default) and swept on a periodic timer. No external cache server is required.
+
+**Why:** Long-running processes can hold state — caching is free in this model and valuable in practice. Most oracle
+endpoints are called far more often than their underlying data changes.
 
 ## Other improvements
 
@@ -96,21 +216,6 @@ per endpoint (any-of semantics).
 
 v2 endpoints support three modes: `sync` (default request-response), `async` (return 202, poll for result), and `stream`
 (Server-Sent Events). v1 only supported synchronous request-response.
-
-### Plugin system
-
-v2 has a plugin system with six hooks (`onHttpRequest`, `onBeforeApiCall`, `onAfterApiCall`, `onBeforeSign`,
-`onResponseSent`, `onError`) and per-request time budgets. v1 had no plugin mechanism — custom logic required forking
-the node.
-
-### Caching
-
-v2 caches responses in memory with configurable TTL.
-
-### Solidity contract
-
-v2 uses a single minimal Solidity contract (AirnodeVerifier) instead of v1's 30+ contracts. The test suite includes
-unit, invariant (stateful fuzz), and symbolic (Halmos) tests.
 
 ### Language and runtime
 

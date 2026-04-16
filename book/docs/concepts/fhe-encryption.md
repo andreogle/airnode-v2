@@ -21,14 +21,14 @@ exists as an opaque handle — a reference to encrypted data stored by the FHE c
 arithmetic and comparisons on the encrypted values, but only addresses granted permission by the consuming contract can
 decrypt and read the plaintext.
 
-This is different from regular encryption (like the [encrypted channel plugin](/plugins#encrypted-channel)). Regular
-encryption requires decrypting before doing anything useful. FHE lets the contract use the data while it's still
-encrypted — a lending protocol can check `is price < liquidation threshold` and get a boolean result without either
-value ever being revealed.
+This is different from regular encryption (like the [encrypted channel plugin](/docs/plugins)). Regular encryption
+requires decrypting before doing anything useful. FHE lets the contract use the data while it's still encrypted — a
+lending protocol can check `is price < liquidation threshold` and get a boolean result without either value ever being
+revealed.
 
 ## How it works
 
-FHE encryption is implemented as an Airnode [plugin](/plugins) that intercepts the ABI-encoded response in the
+FHE encryption is implemented as an Airnode [plugin](/docs/plugins) that intercepts the ABI-encoded response in the
 `onBeforeSign` hook:
 
 1. Airnode calls the upstream API and ABI-encodes the response as usual.
