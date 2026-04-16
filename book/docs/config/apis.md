@@ -95,8 +95,16 @@ auth:
   expiry: 300000 # payment window in ms (default 5 min)
 ```
 
-Flow: client POSTs → gets 402 with payment details → sends on-chain transfer → retries with `X-Payment-Proof: <txHash>`
-→ server verifies the receipt → serves the response. Each tx hash can only be used once.
+Flow: client POSTs → gets 402 with payment details (including `airnode`, `endpointId`, `paymentId`, `expiresAt`) → sends
+on-chain transfer → signs `keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))` with the payer's
+EOA → retries with `X-Payment-Proof: <json>` where the JSON is
+`{ "txHash": "0x…", "paymentId": "0x…", "expiresAt": <unix-seconds>, "signature": "0x…" }`.
+
+The server checks that the signature recovers to the transaction's sender, that the proof has not expired, and that the
+transaction matches the configured amount and recipient. This binds the payment to a specific request so mempool
+observers cannot steal it and cross-endpoint upgrade attacks are blocked. Each tx hash can only be used once.
+
+`expiresAt` must be a future unix-seconds timestamp no further ahead than 10 minutes; longer-lived proofs are rejected.
 
 ### Multiple auth methods
 

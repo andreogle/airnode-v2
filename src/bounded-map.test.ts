@@ -85,6 +85,40 @@ describe('createBoundedMap', () => {
     expect(map.has('new')).toBe(true);
   });
 
+  test('refuseEvictionIf prevents FIFO eviction of protected entries and set returns false', () => {
+    const map = createBoundedMap<string, { value: number; createdAt: number }>({
+      maxEntries: 2,
+      sweepIntervalMs: 50,
+      shouldEvict: () => false,
+      refuseEvictionIf: (entry) => entry.value < 100,
+    });
+    handles.push(map);
+
+    expect(map.set('a', { value: 1, createdAt: Date.now() })).toBe(true);
+    expect(map.set('b', { value: 2, createdAt: Date.now() })).toBe(true);
+    // Map is full; oldest entry ('a', value < 100) is protected → refuse eviction.
+    expect(map.set('c', { value: 3, createdAt: Date.now() })).toBe(false);
+    expect(map.size()).toBe(2);
+    expect(map.has('a')).toBe(true);
+    expect(map.has('c')).toBe(false);
+  });
+
+  test('refuseEvictionIf allows eviction of unprotected oldest entry', () => {
+    const map = createBoundedMap<string, { value: number; createdAt: number }>({
+      maxEntries: 2,
+      sweepIntervalMs: 50,
+      shouldEvict: () => false,
+      refuseEvictionIf: (entry) => entry.value < 100,
+    });
+    handles.push(map);
+
+    map.set('a', { value: 500, createdAt: Date.now() }); // not protected
+    map.set('b', { value: 2, createdAt: Date.now() });
+    expect(map.set('c', { value: 3, createdAt: Date.now() })).toBe(true);
+    expect(map.has('a')).toBe(false);
+    expect(map.has('c')).toBe(true);
+  });
+
   test('stop prevents further sweeps', async () => {
     const cutoff = Date.now() + 200;
     const map = create(100, (entry) => entry.createdAt < cutoff);

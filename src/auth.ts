@@ -1,12 +1,26 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { go } from '@api3/promise-utils';
-import { type Hex, createPublicClient, http, keccak256, toHex } from 'viem';
+import { go, goSync } from '@api3/promise-utils';
+import {
+  type Hex,
+  bytesToHex,
+  createPublicClient,
+  encodePacked,
+  http,
+  keccak256,
+  recoverMessageAddress,
+  toHex,
+} from 'viem';
 import { createBoundedMap } from './bounded-map';
 import type { ClientAuth, ClientAuthMethod } from './types';
 
 // =============================================================================
 // Types
 // =============================================================================
+interface AuthContext {
+  readonly endpointId: Hex;
+  readonly airnode: Hex;
+}
+
 interface AuthSuccess {
   readonly authenticated: true;
 }
@@ -20,7 +34,9 @@ interface AuthPaymentRequired {
   readonly authenticated: false;
   readonly paymentRequired: true;
   readonly paymentDetails: {
-    readonly paymentId: string;
+    readonly airnode: Hex;
+    readonly endpointId: Hex;
+    readonly paymentId: Hex;
     readonly amount: string;
     readonly token: string;
     readonly network: number;
@@ -77,27 +93,84 @@ function checkApiKey(request: Request, keys: readonly string[]): AuthResult {
 
 // =============================================================================
 // x402 payment auth
+//
+// Clients authorise a specific request by signing
+//   keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))
+// with the EOA that sends the payment transaction. Airnode recovers the
+// signer, checks tx.from matches, and enforces a tight expiresAt window. This
+// prevents:
+//   - Mempool observers from stealing a victim's payment (they can't produce
+//     a signature from the payer's key).
+//   - Cross-endpoint upgrade attacks (signature binds to endpointId).
+//   - Cross-airnode reuse (signature binds to airnode address).
+//   - Long-lived replay (expiresAt <= MAX_PROOF_LIFETIME_MS).
 // =============================================================================
 interface PaymentProofEntry {
   readonly usedAt: number;
 }
 
+interface PaymentProofHeader {
+  readonly txHash: Hex;
+  readonly paymentId: Hex;
+  readonly expiresAt: number;
+  readonly signature: Hex;
+}
+
+const MAX_TX_AGE_SECONDS = 600;
+const PROOF_RETENTION_MS = (MAX_TX_AGE_SECONDS + 60) * 1000;
+const MAX_PROOF_LIFETIME_MS = 10 * 60 * 1000;
+
+// Replay protection. FIFO eviction is refused for entries that are still
+// within the recency window enforced by verifyPayment — otherwise a flooder
+// could push legitimate entries out and replay them.
 const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
-  maxEntries: 50_000,
+  maxEntries: 500_000,
   sweepIntervalMs: 60_000,
-  shouldEvict: (entry) => Date.now() > entry.usedAt + 24 * 60 * 60 * 1000,
+  shouldEvict: (entry) => Date.now() > entry.usedAt + PROOF_RETENTION_MS,
+  refuseEvictionIf: (entry) => Date.now() - entry.usedAt < PROOF_RETENTION_MS,
 });
 
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const TX_HASH_REGEX = /^0x[\da-fA-F]{64}$/;
-const MAX_TX_AGE_SECONDS = 3600;
+const BYTES32_REGEX = /^0x[\da-fA-F]{64}$/;
+const ADDRESS_REGEX = /^0x[\da-fA-F]{40}$/;
+const HEX_SIGNATURE_REGEX = /^0x[\da-fA-F]+$/;
+
+function buildPaymentAuthHash(airnode: Hex, endpointId: Hex, paymentId: Hex, expiresAt: number): Hex {
+  return keccak256(
+    encodePacked(['address', 'bytes32', 'bytes32', 'uint64'], [airnode, endpointId, paymentId, BigInt(expiresAt)])
+  );
+}
+
+function parsePaymentProof(raw: string): PaymentProofHeader | string {
+  const parsed = goSync(() => JSON.parse(raw) as unknown);
+  if (!parsed.success) return 'X-Payment-Proof must be a JSON object';
+
+  const p = parsed.data as Partial<PaymentProofHeader> | null;
+  if (!p || typeof p !== 'object') return 'X-Payment-Proof must be a JSON object';
+
+  if (typeof p.txHash !== 'string' || !TX_HASH_REGEX.test(p.txHash)) return 'Invalid txHash in payment proof';
+  if (typeof p.paymentId !== 'string' || !BYTES32_REGEX.test(p.paymentId)) return 'Invalid paymentId in payment proof';
+  if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) return 'Invalid expiresAt in payment proof';
+  if (typeof p.signature !== 'string' || !HEX_SIGNATURE_REGEX.test(p.signature)) {
+    return 'Invalid signature in payment proof';
+  }
+
+  return {
+    txHash: p.txHash,
+    paymentId: p.paymentId,
+    expiresAt: p.expiresAt,
+    signature: p.signature,
+  };
+}
 
 async function verifyPayment(
   rpc: string,
   txHash: Hex,
   token: string,
   amount: string,
-  recipient: string
+  recipient: string,
+  expectedPayer: Hex
 ): Promise<boolean> {
   const client = getPublicClient(rpc);
 
@@ -109,12 +182,16 @@ async function verifyPayment(
   if (!block.success) return false;
   if (Math.floor(Date.now() / 1000) - Number(block.data.timestamp) > MAX_TX_AGE_SECONDS) return false;
 
+  // The transaction sender must match the signer of the payment-auth message —
+  // this binds the on-chain payment to the off-chain request authorisation.
+  const tx = await go(() => client.getTransaction({ hash: txHash }), RPC_RETRY_OPTIONS);
+  if (!tx.success) return false;
+  if (tx.data.from.toLowerCase() !== expectedPayer.toLowerCase()) return false;
+
   const requiredAmount = BigInt(amount);
 
   // ETH transfer
   if (token.toLowerCase() === ETH_ZERO_ADDRESS) {
-    const tx = await go(() => client.getTransaction({ hash: txHash }), RPC_RETRY_OPTIONS);
-    if (!tx.success) return false;
     return tx.data.to?.toLowerCase() === recipient.toLowerCase() && tx.data.value >= requiredAmount;
   }
 
@@ -132,6 +209,7 @@ async function verifyPayment(
 
 async function checkX402(
   request: Request,
+  context: AuthContext,
   config: {
     readonly network: number;
     readonly rpc: string;
@@ -141,14 +219,16 @@ async function checkX402(
     readonly expiry: number;
   }
 ): Promise<AuthResult> {
-  const txHash = request.headers.get('X-Payment-Proof');
+  const proofHeader = request.headers.get('X-Payment-Proof');
 
-  if (!txHash) {
+  if (!proofHeader) {
     return {
       authenticated: false,
       paymentRequired: true,
       paymentDetails: {
-        paymentId: keccak256(toHex(`x402:${String(Date.now())}:${String(Math.random())}`)),
+        airnode: context.airnode,
+        endpointId: context.endpointId,
+        paymentId: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
         amount: config.amount,
         token: config.token,
         network: config.network,
@@ -158,15 +238,38 @@ async function checkX402(
     };
   }
 
-  if (!TX_HASH_REGEX.test(txHash)) return { authenticated: false, error: 'Invalid transaction hash format' };
+  const parsed = parsePaymentProof(proofHeader);
+  if (typeof parsed === 'string') return { authenticated: false, error: parsed };
 
-  const normalizedHash = txHash.toLowerCase();
+  // expiresAt is a unix-seconds timestamp from the client. Reject proofs that
+  // have already expired or are valid for longer than MAX_PROOF_LIFETIME_MS —
+  // the latter keeps the signing authorisation tight so a leaked signature is
+  // only dangerous for a short window.
+  const nowMs = Date.now();
+  const expiresAtMs = parsed.expiresAt * 1000;
+  if (expiresAtMs <= nowMs) return { authenticated: false, error: 'Payment proof expired' };
+  if (expiresAtMs > nowMs + MAX_PROOF_LIFETIME_MS) {
+    return { authenticated: false, error: 'Payment proof lifetime exceeds server limit' };
+  }
+
+  const authHash = buildPaymentAuthHash(context.airnode, context.endpointId, parsed.paymentId, parsed.expiresAt);
+  const recovered = await go(() => recoverMessageAddress({ message: { raw: authHash }, signature: parsed.signature }));
+  if (!recovered.success) return { authenticated: false, error: 'Invalid payment proof signature' };
+  if (!ADDRESS_REGEX.test(recovered.data)) return { authenticated: false, error: 'Unrecognised signer address' };
+  const payer = recovered.data;
+
+  const normalizedHash = parsed.txHash.toLowerCase();
   if (usedPaymentProofs.has(normalizedHash)) return { authenticated: false, error: 'Payment proof already used' };
 
-  // Reserve immediately to prevent race conditions
-  usedPaymentProofs.set(normalizedHash, { usedAt: Date.now() });
+  // Reserve immediately to prevent race conditions. If the store is full of
+  // still-live entries the reservation is refused rather than evicting a
+  // legitimate proof — fail closed rather than opening a replay window.
+  const reserved = usedPaymentProofs.set(normalizedHash, { usedAt: Date.now() });
+  if (!reserved) {
+    return { authenticated: false, error: 'Replay cache full — retry shortly' };
+  }
 
-  const valid = await verifyPayment(config.rpc, txHash as Hex, config.token, config.amount, config.recipient);
+  const valid = await verifyPayment(config.rpc, parsed.txHash, config.token, config.amount, config.recipient, payer);
   if (!valid) {
     usedPaymentProofs.delete(normalizedHash);
     return { authenticated: false, error: 'Payment verification failed' };
@@ -184,13 +287,13 @@ function normalizeAuth(auth: ClientAuth | undefined): readonly ClientAuthMethod[
   return [auth];
 }
 
-async function checkMethod(request: Request, method: ClientAuthMethod): Promise<AuthResult> {
+async function checkMethod(request: Request, context: AuthContext, method: ClientAuthMethod): Promise<AuthResult> {
   if (method.type === 'free') return { authenticated: true };
   if (method.type === 'apiKey') return checkApiKey(request, method.keys);
-  return checkX402(request, method);
+  return checkX402(request, context, method);
 }
 
-async function authenticateRequest(request: Request, auth?: ClientAuth): Promise<AuthResult> {
+async function authenticateRequest(request: Request, context: AuthContext, auth?: ClientAuth): Promise<AuthResult> {
   const methods = normalizeAuth(auth);
 
   // eslint-disable-next-line functional/no-let
@@ -198,7 +301,7 @@ async function authenticateRequest(request: Request, auth?: ClientAuth): Promise
 
   // eslint-disable-next-line functional/no-loop-statements
   for (const method of methods) {
-    const result = await checkMethod(request, method);
+    const result = await checkMethod(request, context, method);
     if (result.authenticated) return result;
     lastResult = result;
   }
@@ -206,5 +309,5 @@ async function authenticateRequest(request: Request, auth?: ClientAuth): Promise
   return lastResult;
 }
 
-export { authenticateRequest, isPaymentRequired };
-export type { AuthPaymentRequired, AuthResult };
+export { authenticateRequest, buildPaymentAuthHash, isPaymentRequired };
+export type { AuthContext, AuthPaymentRequired, AuthResult };

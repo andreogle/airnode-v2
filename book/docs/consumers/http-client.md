@@ -153,6 +153,8 @@ For endpoints with x402 auth, the first request returns 402 with payment details
 
 ```json
 {
+  "airnode": "0x...",
+  "endpointId": "0x...",
   "paymentId": "0x...",
   "amount": "1000000",
   "token": "0xA0b8...",
@@ -162,14 +164,28 @@ For endpoints with x402 auth, the first request returns 402 with payment details
 }
 ```
 
-After paying on-chain, retry with the transaction hash:
+After sending the on-chain transfer, the payer signs an authorisation binding the payment to this specific request and
+airnode:
+
+```
+message = keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))
+signature = EIP-191 personal-sign(message) with the EOA that sent the transaction
+```
+
+Retry with a JSON-encoded `X-Payment-Proof` header:
 
 ```bash
+PROOF='{"txHash":"0x...","paymentId":"0x...","expiresAt":1700001000,"signature":"0x..."}'
+
 curl -X POST http://airnode.example.com/endpoints/0x... \
   -H "Content-Type: application/json" \
-  -H "X-Payment-Proof: 0x<txHash>" \
+  -H "X-Payment-Proof: $PROOF" \
   -d '{"parameters":{"ids":"bitcoin"}}'
 ```
+
+The server verifies the signature recovers to the transaction sender and checks that `expiresAt` is in the future and no
+more than 10 minutes ahead. This binds the payment to the specific request so mempool observers cannot steal the call,
+and signatures cannot be reused across different airnodes, endpoints, or (after expiry) time.
 
 ## Error responses
 
