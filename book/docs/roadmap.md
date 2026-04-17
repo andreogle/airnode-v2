@@ -32,8 +32,10 @@ Monetization, access control, and real-time data delivery.
 
 - **Multi-method auth**: endpoints accept one or more auth methods (any-of semantics)
 - **API key auth**: `X-Api-Key` header with constant-time comparison
-- **x402 payment**: HTTP 402-based pay-per-request. Client pays on-chain, retries with `X-Payment-Proof` tx hash. Server
-  verifies the receipt, checks amount/recipient/recency, prevents replay.
+- **x402 payment**: HTTP 402-based pay-per-request. The client pays on-chain, signs an authorisation binding the payment
+  to the specific airnode, endpoint, and payer, and retries with a JSON-encoded `X-Payment-Proof` header. The server
+  verifies the signature, checks the on-chain receipt, and refuses proofs older than the configured lifetime. Mempool
+  observers cannot steal the call, and signatures cannot be reused across endpoints, airnodes, or after expiry.
 - **Async requests**: endpoints with `mode: async` return 202 immediately. Client polls `GET /requests/{requestId}`
   until complete or failed. Background processing with admission limits.
 - **SSE streaming**: endpoints with `mode: stream` return signed data as a Server-Sent Event. Full plugin pipeline runs
@@ -62,6 +64,25 @@ This turns an endpoint into a real-time signed data stream without changing clie
 clients that work with the single-event implementation will automatically receive continuous updates when the server
 upgrades.
 
+## Phase 2.5: Integration-friction fixes
+
+Small, focused additions that directly reduce integration cost for consumers and operators. Each ships independently of
+the others.
+
+- **Multi-value encoding**: one API call, one signature, multiple ABI-encoded values in one response (OHLC bundles,
+  price plus market cap plus volume, weather readings). Without this, each field requires a separate endpoint making the
+  same upstream call.
+- **Request batching**: `POST /batch` accepts an array of endpoint requests and returns an array of independently signed
+  responses. The batch is a transport optimisation, not a semantic unit. Useful for portfolio trackers, DeFi protocols
+  needing multiple prices atomically, and any client fetching N values at once.
+- **Signed errors and proof of absence**: the airnode signs upstream errors and empty results, not just successful data.
+  Downstream use cases include proving a negative ("the sanctions API confirmed this address has no flags"), verifiable
+  SLA reports ("9 signed proofs of failed attempts, upstream was down"), and gap detection in push feeds.
+- **MCP server mode**: the airnode exposes its endpoints as Model Context Protocol tools so AI agents discover and call
+  them through their native tool-use interface. The signed response is attached as metadata for the agent's principal to
+  submit on-chain or verify off-chain. Every airnode endpoint becomes immediately accessible to the AI agent ecosystem
+  without custom integration per framework.
+
 ## Phase 3: Relayer
 
 Bridge for on-chain request-response without an off-chain client.
@@ -73,39 +94,70 @@ touch the chain.
 The relayer is a separate process, not part of the airnode. Anyone can run a relayer -- the airnode's HTTP API is the
 only interface.
 
-## Phase 4: Proof modes
+## Phase 4: Proof and confidentiality modes
 
-Reducing trust assumptions with cryptographic proofs.
+Reducing trust assumptions and enabling confidential data flows.
 
 **Delivered:**
 
-- **TLS proofs (Reclaim)**: Cryptographic proof that the data came from a specific HTTPS endpoint via MPC-TLS. An
+- **TLS proofs (Reclaim)**: cryptographic proof that the data came from a specific HTTPS endpoint via MPC-TLS. An
   independent attestor verifies the TLS session and signs a claim. Proofs are non-fatal -- responses are returned
   without proofs if the attestor is unavailable. Configured via `settings.proof` and per-endpoint `responseMatches`. See
   [TLS Proofs](/docs/concepts/proofs).
+- **FHE encryption (Zama)**: plugin that encrypts the ABI-encoded response before signing, using the target chain's FHE
+  public key. On-chain contracts compute directly on the ciphertext via the Zama coprocessor, with a per-handle ACL
+  controlling decryption. Enables MEV-protected price feeds, paid-data access control, and confidential on-chain
+  computation. See [FHE Encryption](/docs/concepts/fhe-encryption).
+- **Encrypted channel (ECIES)**: plugin that establishes end-to-end encryption between the requester and the airnode.
+  Request parameters and signed response bodies are opaque to observers; only the requester's ephemeral key can decrypt.
 
 **Planned:**
 
-- **Deterministic replay**: Prove that the response processing (path extraction, type casting, encoding) was applied
-  correctly to the raw API response. Uses zkVM (SP1, RISC Zero) to generate a proof that can be verified on-chain.
-- **TEE attestation**: Run the airnode in a Trusted Execution Environment (AWS Nitro Enclaves, Intel SGX, AMD SEV-SNP).
-  Remote attestation proves the running code matches a specific binary hash. Combined with DNS identity verification,
-  this proves both who operates the airnode and what code it runs.
+- **Deterministic replay (SP1 / RISC Zero)**: a zkVM proof that the response processing pipeline -- path extraction,
+  type casting, multiplier math, ABI encoding -- was applied correctly to the raw API response. Both SP1 and RISC Zero
+  are production-ready with on-chain verifiers; the target is a proof small enough to verify in a single transaction
+  alongside the signature. Combined with TLS proofs, this gives end-to-end verifiability from HTTPS byte to on-chain
+  uint256 without trusting the operator's processing.
+- **TEE attestation**: run the airnode inside a Trusted Execution Environment (AWS Nitro Enclaves, Intel TDX, AMD
+  SEV-SNP). Remote attestation proves the running code matches a specific binary hash. Combined with DNS identity
+  verification, this creates a verifiable chain: the domain proves who operates the airnode, the attestation proves what
+  code it runs.
 
 ## Phase 5: ChainAPI platform
 
-Developer experience and ecosystem tooling.
+Operator tooling and discoverability for the first-party oracle ecosystem.
 
-- **Config builder**: Visual interface for building Airnode configs from OpenAPI specs. Replaces manual YAML editing.
-- **Endpoint directory**: Public registry of available airnode endpoints with documentation, pricing, and availability
-  metrics. Endpoint IDs are the common identifier -- operators serving the same API produce the same ID.
-- **Operator dashboard**: Request volume, revenue, uptime metrics.
+- **Endpoint directory**: public registry where API providers publish their airnode endpoints alongside documentation,
+  pricing, and availability metrics. Endpoint IDs serve as the stable identifier consumers integrate against.
+- **Operator dashboard**: request volume, revenue, uptime, and plugin budget metrics for airnode operators.
+
+## Phase 6: Signing layer for existing APIs
+
+Today, becoming an airnode operator means running a separate process. Many API providers already have production HTTP
+servers and would rather add signing to their existing stack than adopt a new one. Phase 6 makes signing a drop-in
+capability for any API provider, without changing how they serve HTTP.
+
+All three paths below produce the same signed response format as the standalone airnode, so consumers integrate the same
+way regardless of how the provider deployed. The provider holds the signing key throughout.
+
+- **Framework middleware**: a small library for Hono, Express, Fastify, FastAPI, Rails, Phoenix, Go `net/http`, and the
+  major serverless runtimes (Lambda, Vercel, Cloudflare Workers). The middleware signs outgoing response bodies with the
+  provider's key and optionally enforces `x402` or API-key auth on incoming requests. The response body is never
+  modified -- signatures go in HTTP headers, so existing clients are unaffected.
+- **API gateway plugins**: drop-in plugins for Kong, AWS API Gateway, and Cloudflare Workers. The provider installs the
+  plugin, configures a signing key, and every response passing through the gateway gets signed. No application changes
+  required.
+- **Reverse proxy / sidecar**: a standalone Docker container that sits in front of an existing API and signs all proxied
+  responses. Zero changes to the API server itself, ideal for legacy stacks or providers without access to their
+  application code.
+
+This is the biggest adoption lever on the roadmap: it turns "add Airnode to your API" from "deploy and operate a new
+service" into "add a dependency."
 
 ## Future
 
-- **Solana support**: Port AirnodeVerifier to Solana programs. The HTTP server and signature format are chain-agnostic
-  -- only the on-chain verification contract needs to be rewritten.
-- **TLS proofs at scale**: Full integration when TLSNotary reaches production readiness with acceptable latency
-  overhead. Target: proof generation under 2 seconds per API call.
-- **VRF as a service**: Verifiable random functions using the airnode's existing key. RFC 9381 ECVRF with on-chain proof
-  verification.
+- **Chain ports**: `AirnodeVerifier` is the only chain-specific component. The HTTP server and signature format are
+  chain-agnostic. Ports to Solana, Sui, Aptos, and non-EVM L1s are primarily contract work, not protocol work, and can
+  land independently.
+- **VRF as a service**: verifiable random functions using the airnode's existing key. RFC 9381 ECVRF with on-chain proof
+  verification, delivered as a new endpoint mode.
