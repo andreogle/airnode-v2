@@ -40,9 +40,9 @@ cryptographic guarantees.
   choose the encoding at request time with `_type`, `_path`, and `_times` parameters.
 - **Multiple access models.** Free endpoints for public data, API keys for authenticated access, or pay-per-request via
   x402. Use whatever fits your use case.
-- **Aggregation and quorum.** Multiple first-party airnodes from different API providers serving comparable data produce
-  the same endpoint ID. Collect signatures from several providers and submit them to a quorum verifier — no single
-  provider can fabricate data.
+- **Aggregation across providers.** Each API provider runs their own airnode for their own API. Consumers can aggregate
+  signed data from several first-party airnodes — for example, combining BTC/USD from multiple exchanges into an
+  on-chain average or median — without any coordination layer in between.
 
 ## Core Flow
 
@@ -70,8 +70,9 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 ## Endpoint IDs
 
 Endpoint IDs are deterministic hashes of the API specification -- the URL, path, method, non-secret parameters, and
-encoding configuration. Two operators calling the same API endpoint with the same specification produce the same
-endpoint ID. This is by design: it enables cross-operator data comparability and future TLS proof verification.
+encoding configuration. The ID binds the airnode's signature to the exact API spec the operator committed to, so a
+consumer hard-coding an endpoint ID locks in the upstream URL, parameters, and encoding rules. Any change to the spec
+produces a different ID, which on-chain consumers can detect immediately.
 
 ```
 endpointId = keccak256(url | path | method | sorted parameters | encoding spec)

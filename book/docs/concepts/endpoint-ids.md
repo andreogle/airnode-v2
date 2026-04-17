@@ -7,7 +7,8 @@ sidebar_position: 3
 
 Endpoint IDs are deterministic hashes of the full API specification. They are not names, not UUIDs, not
 auto-incrementing counters. The ID is derived from what the endpoint does -- its URL, path, method, parameters, and
-encoding -- so two operators calling the same API with the same specification produce the same endpoint ID.
+encoding -- so the airnode's signature carries a commitment to exactly what was called and how the response was
+interpreted.
 
 ## Derivation
 
@@ -74,7 +75,7 @@ authoritative.
 
 ### Why this design
 
-A colleague-reviewed version of this page: the obvious alternatives both fail.
+The two obvious alternatives both fail.
 
 **"Force operators to fully fix every projection."** This sounds safer, but it turns the operator into a gatekeeper for
 every consumer-side design change. Each new downstream use case (new type, new JSON path, new multiplier) would require
@@ -112,9 +113,8 @@ silently alter the trust split of an existing endpoint.
 2. **Consumers explicitly opt into any flexibility.** By hard-coding a specific ID, a consumer is accepting the exact
    encoding contract baked into that ID. A consumer who wants no submitter-side flexibility simply refuses to recognize
    any ID whose encoding spec contains `*`.
-3. **Cross-operator comparability still works.** Two operators serving the same API with the same `encoding: {}` produce
-   the same ID, regardless of whether the block is fully-fixed or fully-wildcard. Quorum verifiers can still compare
-   signed data from different airnodes under the same ID.
+3. **Operators cannot silently rewire an endpoint.** Any change to the fixed-vs-wildcard split changes the ID. Existing
+   consumers hard-coding the old ID stop accepting signatures the moment the operator widens or narrows the endpoint.
 
 ### Endpoints with no `encoding` block
 
@@ -168,19 +168,25 @@ These fields do not affect the endpoint ID:
 
 ## Why This Design
 
-### Cross-operator comparability
+### Commitment to the API specification
 
-When two independent first-party operators serve the same API endpoint with the same parameters and encoding, they
-produce the same endpoint ID. On-chain contracts can verify that data from different airnodes refers to the same
-underlying data point without trusting a centralized registry.
+Airnode is built for the first-party oracle model: the API provider runs the airnode that serves their own API. The
+endpoint ID turns that arrangement into a cryptographic commitment. A consumer contract hard-coding an endpoint ID binds
+itself to the specific URL, path, method, parameters, and encoding rules the provider declared in config.
 
-This enables cross-operator comparability: multiple first-party airnodes produce signed data for the same endpoint ID,
-and a consumer can verify that they all committed to the same API specification.
+If the provider later changes any part of the spec — redirects to a different upstream, renames a parameter, tweaks the
+encoding — the endpoint ID changes and existing signatures no longer match what the consumer expected. The consumer
+immediately stops accepting data under the old ID. There is no silent re-pointing.
 
-Note that a matching endpoint ID proves two operators committed to the same API specification — it does not prove they
-are actually calling it. With first-party airnodes (where the API provider operates the node), this is inherently
-trustworthy. With third-party operators, a matching endpoint ID provides weaker guarantees because the operator could
-fabricate data while claiming to serve the specified API.
+The same property holds in reverse: if you recompute the endpoint ID from a published config and it matches the ID you
+had already integrated against, you know the airnode is serving exactly the spec you committed to.
+
+### Aggregation across providers
+
+Different API providers each run their own airnode for their own API. A consumer can aggregate signed data from several
+first-party airnodes — for instance, combining BTC/USD prices from multiple exchanges — by collecting signatures across
+those distinct endpoint IDs. Each airnode's signature is independently verifiable, and the aggregation happens at the
+consumer's side with no coordination layer or shared registry.
 
 ### TLS proof verification
 
@@ -196,8 +202,8 @@ public identity.
 
 ### No registry
 
-Endpoint IDs do not require registration, coordination, or a central authority. Any operator can derive the ID locally
-from the config. If two operators arrive at the same ID, they are by definition serving the same data specification.
+Endpoint IDs do not require registration, coordination, or a central authority. An operator derives the ID locally from
+the config, publishes it alongside their endpoint, and consumers integrate against it directly.
 
 ## Computing an Endpoint ID
 

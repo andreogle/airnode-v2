@@ -69,12 +69,14 @@ v1 endpoint IDs were name-based hashes: `keccak256(oisTitle, endpointName)`. The
 about what API was actually called. An operator could change the underlying API without changing the endpoint ID.
 
 v2 endpoint IDs are hashes of the full API specification — the URL, path, method, non-secret parameters, and encoding
-rules. Two independent operators serving the same API with the same config produce the same endpoint ID automatically.
+rules. The signature over `(endpointId, timestamp, data)` therefore commits to exactly what the airnode was configured
+to do.
 
-**Why:** Specification-bound IDs enable cross-operator comparability without a registry. A quorum verifier can confirm
-that multiple airnodes signed data for the same endpoint ID — meaning they all committed to calling the same API the
-same way. TLS proofs extend this: the endpoint ID can be cross-checked against the proven HTTP request that backs the
-response.
+**Why:** The first-party model — the API provider runs the airnode that serves their own API — means the signature and
+the data source are the same party. The endpoint ID turns that configuration into a verifiable commitment: a consumer
+contract hard-coding an ID binds itself to the specific URL, parameters, and encoding rules the operator declared. The
+operator cannot silently point an endpoint at a different upstream without changing the ID. TLS proofs extend this
+further: the endpoint ID can be cross-checked against the proven HTTP request that backs the response.
 
 ### Fixed and client-controlled encoding, both committed to by the ID
 

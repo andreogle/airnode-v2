@@ -44,10 +44,11 @@ provider's domain, treat it with the same skepticism you would apply to any unve
 ### 1. The airnode operator is calling the API they claim
 
 The endpoint ID is a specification-bound hash that commits to the API URL, path, method, parameters, and encoding rules.
-Two independent operators serving the same API with the same config produce the same endpoint ID. This is a verifiable
-commitment -- you can inspect the config and confirm the endpoint ID matches -- but it is not proof that the operator is
-actually running that config. With a first-party airnode, this is not a concern: the API provider has no reason to
-misrepresent calls to their own API. Until TLS proofs mature, third-party operators require out-of-band trust.
+You can recompute the endpoint ID from the operator's published config and confirm it matches what you are integrating
+against — this is a verifiable commitment to the configuration, but not on its own proof that the airnode is actually
+running that config. With a first-party airnode, this is not a concern: the API provider has no reason to misrepresent
+calls to their own API. TLS proofs close the remaining gap by attesting that each response really did come from the
+declared HTTPS endpoint.
 
 ### 2. The airnode's private key is secure
 
@@ -78,11 +79,13 @@ The endpoint ID is `keccak256(apiUrl, path, method, parameters, encoding)`. Give
 the endpoint ID and confirm it matches what the airnode is serving. This does not prove the operator is running that
 config, but it creates an auditable commitment.
 
-### Quorum via multiple airnodes
+### Quorum across providers
 
-Multiple independent airnodes can serve the same endpoint ID. Off-chain, your client can query multiple airnodes and
-compare results. On-chain, you can collect signatures from several airnodes and submit them to a quorum verifier. No
-single operator can manipulate the aggregated result.
+Different API providers each run their own airnode for their own API. A consumer can collect signed data from several
+first-party airnodes — for example, a BTC/USD quorum composed of exchanges that each publish their own price feed — and
+aggregate the results off-chain or submit them to an on-chain quorum verifier. The trust gain comes from independence at
+the source: each airnode commits to its own specific endpoint, and an attacker would need to compromise multiple
+unrelated providers to manipulate the aggregate.
 
 ### Future: TLS proofs and third-party trust
 
