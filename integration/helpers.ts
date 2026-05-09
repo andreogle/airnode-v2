@@ -57,7 +57,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     server: { ...parsed.server, port: 0, rateLimit: undefined, ...serverOverrides },
     settings: { ...parsed.settings, plugins: [] },
     apis: options.apiOverrides ? options.apiOverrides(rewriteApiUrls(parsed.apis)) : rewriteApiUrls(parsed.apis),
-  } as Config;
+  };
 
   const endpointMap = buildEndpointMap(testConfig);
   const cache = createCache();

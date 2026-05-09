@@ -90,7 +90,7 @@ describe('createEmptyRegistry', () => {
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
-      data: '0xaabb' as Hex,
+      data: '0xaabb',
     });
     expect(result).toEqual({ data: '0xaabb', dropped: false });
   });
@@ -432,7 +432,7 @@ describe('callBeforeSign', () => {
   });
 
   test('plugin can override data', async () => {
-    const plugins: AirnodePlugin[] = [{ name: 'override', hooks: { onBeforeSign: () => ({ data: '0xccdd' as Hex }) } }];
+    const plugins: AirnodePlugin[] = [{ name: 'override', hooks: { onBeforeSign: () => ({ data: '0xccdd' }) } }];
     const registry = createRegistry(makeLoaded(plugins));
     const result = await registry.callBeforeSign(baseCtx);
     expect(result.dropped).toBe(false);
@@ -505,7 +505,7 @@ describe('budget', () => {
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
-      data: '0xaa' as Hex,
+      data: '0xaa',
     });
     expect(result.dropped).toBe(true);
   });

@@ -100,7 +100,7 @@ describe('decode', () => {
   });
 
   test('throws on short hex data', () => {
-    expect(() => decode('0x01' as Hex)).toThrow('Data too short');
+    expect(() => decode('0x01')).toThrow('Data too short');
   });
 
   test('throws on unsupported version', () => {

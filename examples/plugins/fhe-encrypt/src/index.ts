@@ -114,8 +114,8 @@ function resolveConfig(): Record<string, unknown> {
   }
 
   const presets: Record<string, Record<string, unknown>> = {
-    sepolia: SepoliaConfig as unknown as Record<string, unknown>,
-    mainnet: MainnetConfig as unknown as Record<string, unknown>,
+    sepolia: SepoliaConfig,
+    mainnet: MainnetConfig,
   };
 
   const preset = presets[FHE_NETWORK];
@@ -141,7 +141,7 @@ async function getInstance(): Promise<FhevmInstance> {
 
   const config = resolveConfig();
 
-  cachedInstance = (await createInstance(config)) as unknown as FhevmInstance;
+  cachedInstance = await createInstance(config);
   console.info(`${PREFIX} FHE instance initialized (network: ${FHE_NETWORK})`);
   return cachedInstance;
 }

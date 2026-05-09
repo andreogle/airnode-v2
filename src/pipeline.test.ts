@@ -46,7 +46,7 @@ function makeApi(overrides: Partial<Api> = {}): Api {
     timeout: 10_000,
     endpoints: [],
     ...overrides,
-  } as Api;
+  };
 }
 
 function makeEndpoint(overrides: Partial<Endpoint> = {}): Endpoint {

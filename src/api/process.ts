@@ -84,6 +84,15 @@ function numericToString(raw: JsonValue): string {
   throw new TypeError(`Cannot convert ${typeof raw} to numeric`);
 }
 
+// Mirrors String() for primitive JSON values but throws for objects/arrays/null
+// so we never encode `[object Object]` into a Solidity bytes/string slot.
+function primitiveToString(raw: JsonValue): string {
+  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw);
+  }
+  throw new TypeError(`Cannot stringify non-primitive value: ${JSON.stringify(raw)}`);
+}
+
 // =============================================================================
 // Solidity value coercion
 // =============================================================================
@@ -116,12 +125,12 @@ function castToBytes32(raw: JsonValue): Hex {
     if ((raw.length - 2) / 2 > 32) throw new RangeError(`Value exceeds 32 bytes: ${raw}`);
     return raw as Hex;
   }
-  return toHex(String(raw as string | number | boolean), { size: 32 });
+  return toHex(primitiveToString(raw), { size: 32 });
 }
 
 function castToAddress(raw: JsonValue): Hex {
   if (typeof raw !== 'string' || !ADDRESS_REGEX.test(raw)) {
-    throw new Error(`Invalid EVM address: ${String(raw as string | number | boolean)}`);
+    throw new Error(`Invalid EVM address: ${JSON.stringify(raw)}`);
   }
   return getAddress(raw);
 }
@@ -131,7 +140,7 @@ function castToBytes(raw: JsonValue): Hex {
     if (!HEX_BYTES_REGEX.test(raw)) throw new Error(`Invalid hex bytes: ${raw}`);
     return raw as Hex;
   }
-  return toHex(String(raw as string | number | boolean));
+  return toHex(primitiveToString(raw));
 }
 
 function castToSolidityValue(
@@ -158,7 +167,7 @@ function castToSolidityValue(
       return castToAddress(raw);
     }
     case 'string': {
-      return String(raw as string | number | boolean);
+      return primitiveToString(raw);
     }
     case 'bytes': {
       return castToBytes(raw);

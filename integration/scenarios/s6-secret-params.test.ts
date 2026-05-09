@@ -4,7 +4,7 @@ import { deriveEndpointId } from '../../src/endpoint';
 import type { Api, Endpoint } from '../../src/types';
 
 function makeApi(url = 'https://api.example.com'): Api {
-  return { name: 'Test', url, timeout: 10_000, endpoints: [] } as Api;
+  return { name: 'Test', url, timeout: 10_000, endpoints: [] };
 }
 
 function makeEndpoint(overrides: Partial<Endpoint> = {}): Endpoint {

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Hex } from 'viem';
-import type { Api } from '../../src/types';
 import { createTestServer, findEndpointId } from '../helpers';
 import type { TestContext } from '../helpers';
 
@@ -15,7 +14,7 @@ beforeAll(async () => {
         return {
           ...api,
           endpoints: api.endpoints.map((ep) => (ep.name === 'currentTemp' ? { ...ep, mode: 'stream' as const } : ep)),
-        } as Api;
+        };
       }),
   });
 });
