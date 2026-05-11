@@ -7,13 +7,14 @@ import type { AsyncRequestStore } from './async';
 import { authenticateRequest, isPaymentRequired } from './auth';
 import type { ResponseCache } from './cache';
 import type { ResolvedEndpoint } from './endpoint';
+import { encryptResponse } from './fhe';
 import { isNil } from './guards';
 import { logger, runWithContext } from './logger';
 import type { PluginRegistry } from './plugins';
 import type { ReclaimProof } from './proof';
 import { requestProof } from './proof';
 import { signResponse } from './sign';
-import type { ClientAuth, Encoding, Settings } from './types';
+import type { ClientAuth, Encoding, Endpoint, Settings } from './types';
 
 // =============================================================================
 // Types
@@ -207,6 +208,31 @@ function resolveEncoding(
 }
 
 // =============================================================================
+// FHE encryption
+//
+// When an endpoint is configured with `encrypt`, the ABI-encoded value is
+// replaced with an FHE ciphertext before signing — and before onBeforeSign
+// plugins run, so plugins observe the ciphertext, not the plaintext. The
+// relayer connection comes from `settings.fhe`; the config schema guarantees it
+// is not `'none'` whenever an endpoint opts in, but we re-check defensively.
+// See `src/fhe.ts`.
+// =============================================================================
+async function prepareSignableData(
+  endpoint: Endpoint,
+  encoding: ResolvedEncoding,
+  encodedData: Hex,
+  deps: PipelineDependencies
+): Promise<Hex> {
+  if (!endpoint.encrypt) return encodedData;
+
+  const fhe = deps.settings.fhe;
+  if (fhe === 'none') {
+    throw new Error('Endpoint requires FHE encryption but settings.fhe is not configured');
+  }
+  return encryptResponse(fhe, endpoint.encrypt, encodedData, encoding.type);
+}
+
+// =============================================================================
 // API call pipeline
 // =============================================================================
 async function executeApiCall(
@@ -263,12 +289,19 @@ async function executeApiCall(
 
     const encodedData = processResponse(apiResponse.data, encoding);
 
+    const prepared = await go(() => prepareSignableData(resolved.endpoint, encoding, encodedData, deps));
+    if (!prepared.success) {
+      logger.error(`FHE encryption failed for endpoint ${endpointId}: ${prepared.error.message}`);
+      void deps.plugins.callError({ requestId, error: prepared.error, stage: 'encryption', endpointId });
+      return jsonResponse({ error: 'FHE encryption failed' }, 502);
+    }
+
     const signResult = await deps.plugins.callBeforeSign({
       requestId,
       endpointId,
       api: resolved.api.name,
       endpoint: resolved.endpoint.name,
-      data: encodedData,
+      data: prepared.data,
     });
     if (signResult.dropped) {
       return jsonResponse({ error: 'Request dropped by plugin' }, 403);

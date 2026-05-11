@@ -15,8 +15,10 @@ interpreted.
 The endpoint ID is the keccak256 hash of a pipe-delimited canonical string:
 
 ```
-endpointId = keccak256(url | path | method | sorted parameters | encoding spec)
+endpointId = keccak256(url | path | method | sorted parameters | encoding spec | encrypt spec)
 ```
+
+(The `encoding spec` and `encrypt spec` segments are only present when the endpoint configures them.)
 
 Concretely, for an endpoint configured as:
 
@@ -72,6 +74,18 @@ Four common configurations:
 Client-supplied fields **cannot override** operator-fixed values. If the operator sets `type: int256`, the request's
 `_type` parameter is ignored for encoding (though it still counts as a request parameter). The operator's fixes are
 authoritative.
+
+### FHE-encrypted endpoints
+
+An endpoint with an [`encrypt`](/docs/concepts/fhe-encryption) block appends an encryption spec to the canonical string:
+
+```
+fhe=euint256,contract=0x5fbdb2315678afecb367f032d93f642f64180aa3
+```
+
+So the endpoint ID commits to the ciphertext type and the consumer contract the encrypted input is bound to. The
+`encrypt.contract` value is always operator-fixed — there is no requester-controlled variant — and the relayer/verifier
+settings (`settings.fhe`) are operational config, so they are _not_ part of the ID.
 
 ### Why this design
 
@@ -139,6 +153,8 @@ These fields are part of the hash:
 | `encoding.type`       | `int256` or `*`                    | Different encodings of the same data produce different outputs |
 | `encoding.path`       | `$.ethereum.usd` or `*`            | Extracting different fields produces different data            |
 | `encoding.times`      | `1e18` or `*`                      | Different multipliers produce different values                 |
+| `encrypt.type`        | `euint256` (if `encrypt` is set)   | The FHE ciphertext type changes the response shape             |
+| `encrypt.contract`    | `0x5fbdb2…` (if `encrypt` is set)  | The encrypted input is bound to this consumer contract         |
 
 ### Parameter rules
 

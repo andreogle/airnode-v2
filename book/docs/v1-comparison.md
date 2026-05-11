@@ -179,9 +179,8 @@ Plugins are ordinary modules loaded from a path in config, with per-request time
 Mutation hooks that fail or time out **drop** the request (fail-closed — no data leaks past a broken security plugin);
 observation hooks are fire-and-forget.
 
-The pipeline is powerful enough that several headline v2 capabilities are built as plugins rather than core features:
+The pipeline is powerful enough that several v2 capabilities are built as plugins rather than core features:
 
-- **`fhe-encrypt`** — encrypts the signed payload for on-chain confidential compute (see below)
 - **`encrypted-channel`** — ECIES-encrypts responses end-to-end to a requester's ephemeral key
 - **`heartbeat`**, **`logger`**, **`slack-alerts`** — operational observability
 
@@ -195,21 +194,22 @@ v1 had no notion of confidential data. Every signed value was public the moment 
 before inclusion (enabling front-running) and readable from storage afterward (making it impossible to sell exclusive
 data or keep valuations private).
 
-v2 ships an [FHE encryption plugin](/docs/concepts/fhe-encryption) built on [Zama's fhEVM](https://docs.zama.ai/fhevm).
-The plugin intercepts the ABI-encoded response in the `onBeforeSign` hook, encrypts it with the target chain's FHE
-public key, and packs the resulting `(einput, inputProof)` pair as the new `data` field. Airnode signs the ciphertext,
-so the signature proves the encrypted data is authentic without ever revealing plaintext.
+v2 has [built-in FHE encryption](/docs/concepts/fhe-encryption) built on [Zama's fhEVM](https://docs.zama.ai/fhevm).
+Configure the relayer under `settings.fhe`, add an `encrypt` block to an endpoint, and the pipeline encrypts the
+ABI-encoded value with the target chain's FHE public key right after encoding — packing the resulting
+`(handle, inputProof)` pair as the new `data` field. Airnode signs the ciphertext, so the signature proves the encrypted
+data is authentic without ever revealing plaintext.
 
 ```
-API response → ABI encode → [fhe-encrypt plugin] → sign(ciphertext) → return to client
-                                    ↓
-                        encrypt with chain's FHE public key
-                        pack (einput, inputProof) into data field
+API response → ABI encode → FHE encrypt → sign(ciphertext) → return to client
+                                 ↓
+                  encrypt with chain's FHE public key
+                  pack (handle, inputProof) into data field
 ```
 
 Because FHE is homomorphic, the callback contract can compute directly on the ciphertext —
-`TFHE.gt(price, liquidationThreshold)` returns an encrypted boolean without either value ever becoming public.
-Per-handle on-chain ACLs determine who is allowed to decrypt.
+`FHE.gt(price, liquidationThreshold)` returns an encrypted boolean without either value ever becoming public. Per-handle
+on-chain ACLs determine who is allowed to decrypt.
 
 **Why:** Public oracle data leaks value. Searchers front-run price updates, premium data leaks to non-payers the instant
 it's consumed, and confidential valuations can't be delivered at all. FHE lets contracts use oracle data while it stays

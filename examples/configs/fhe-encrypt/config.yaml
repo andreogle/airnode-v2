@@ -5,9 +5,17 @@ server:
 
 settings:
   proof: none
-  plugins:
-    - source: ../../plugins/fhe-encrypt/dist/index.js
-      timeout: 30000
+  # FHE relayer connection. With `fhe` configured, any endpoint that has an
+  # `encrypt` block gets its ABI-encoded value replaced with an FHE ciphertext
+  # before signing. `rpcUrl` is the Ethereum JSON-RPC endpoint for the fhEVM
+  # chain — use `${FHE_RPC_URL}` and a .env entry if your endpoint embeds a key.
+  # `verifier` is the AirnodeVerifier deployment on that chain: the encrypted
+  # input is bound to it (it's the address that calls the consumer's callback).
+  # Replace the placeholder below with your AirnodeVerifier address.
+  fhe:
+    network: sepolia
+    rpcUrl: https://ethereum-sepolia-rpc.publicnode.com
+    verifier: '0x0000000000000000000000000000000000000000'
 
 apis:
   - name: CoinGecko
@@ -28,7 +36,15 @@ apis:
           type: int256
           path: $.ethereum.usd
           times: '1e18'
+        # Encrypt the encoded price with the chain's FHE public key before
+        # signing. The signed `data` becomes abi.encode(bytes32 handle, bytes
+        # inputProof), bound to the consumer contract below. Replace `contract`
+        # with your deployed ConfidentialPriceFeed address.
+        encrypt:
+          type: euint256
+          contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
         description: >
-          Encrypted coin price. The fhe-encrypt plugin encrypts the ABI-encoded
-          value with the chain's FHE public key before signing. The response
-          contains ciphertext that can be submitted to an fhEVM-compatible chain.
+          Encrypted ETH/USD price. The encoded value is FHE-encrypted before
+          signing; the response carries ciphertext that can be submitted to an
+          fhEVM-compatible chain where contracts compute on it without
+          decrypting.

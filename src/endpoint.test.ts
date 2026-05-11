@@ -14,6 +14,7 @@ const makeApi = (overrides: Partial<Api> & { url: string; endpoints: Api['endpoi
 
 const makeEndpoint = (overrides: Partial<Endpoint> & { name: string; path: string }): Endpoint => ({
   method: 'GET',
+  mode: 'sync',
   parameters: [],
   ...overrides,
 });
@@ -164,6 +165,54 @@ describe('deriveEndpointId', () => {
     expect(deriveEndpointId(api, empty)).toBe(
       keccak256(toHex('https://api.example.com|/p|GET||type=*,path=*,times=*'))
     );
+  });
+
+  test('encrypt spec is appended after the encoding spec', () => {
+    const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
+    const base = makeEndpoint({ name: 'getPrice', path: '/price', encoding: { type: 'int256', path: '$.price' } });
+    const encrypted = makeEndpoint({
+      name: 'getPrice',
+      path: '/price',
+      encoding: { type: 'int256', path: '$.price' },
+      encrypt: { type: 'euint256', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' },
+    });
+
+    const id = deriveEndpointId(api, encrypted);
+    expect(id).toBe('0xc6bbb158d6ebf7effa84b467548af6f7bdc94b283aa046a20d0fc925795ecabd');
+    expect(id).toBe(
+      keccak256(
+        toHex(
+          'https://api.example.com|/price|GET||type=int256,path=$.price,times=*|fhe=euint256,contract=0x5fbdb2315678afecb367f032d93f642f64180aa3'
+        )
+      )
+    );
+    expect(id).not.toBe(deriveEndpointId(api, base));
+  });
+
+  test('encrypt type and contract both affect the endpoint ID', () => {
+    const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
+    const encoding = { type: 'int256', path: '$.price' } as const;
+    const a = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      encoding,
+      encrypt: { type: 'euint256', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' },
+    });
+    const differentType = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      encoding,
+      encrypt: { type: 'euint64', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' },
+    });
+    const differentContract = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      encoding,
+      encrypt: { type: 'euint256', contract: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' },
+    });
+
+    expect(deriveEndpointId(api, a)).not.toBe(deriveEndpointId(api, differentType));
+    expect(deriveEndpointId(api, a)).not.toBe(deriveEndpointId(api, differentContract));
   });
 });
 

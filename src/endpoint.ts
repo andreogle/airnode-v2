@@ -41,12 +41,18 @@ function buildEncodingSpec(encoding?: {
   return `type=${encoding.type ?? '*'},path=${encoding.path ?? '*'},times=${encoding.times ?? '*'}`;
 }
 
+// FHE-encrypted endpoints commit to the ciphertext type and the bound consumer
+// contract so an on-chain verifier can tell from the endpoint ID alone that the
+// signed `data` is an encrypted-input handle for a specific contract.
+function buildEncryptSpec(encrypt?: { readonly type: string; readonly contract: string }): string {
+  if (!encrypt) return '';
+  return `fhe=${encrypt.type},contract=${encrypt.contract.toLowerCase()}`;
+}
+
 function deriveEndpointId(api: Api, endpoint: Endpoint): Hex {
   const paramSpec = buildParameterSpec(endpoint.parameters);
-  const encodingSpec = buildEncodingSpec(endpoint.encoding);
-  const parts = encodingSpec
-    ? [api.url, endpoint.path, endpoint.method, paramSpec, encodingSpec]
-    : [api.url, endpoint.path, endpoint.method, paramSpec];
+  const tail = [buildEncodingSpec(endpoint.encoding), buildEncryptSpec(endpoint.encrypt)].filter((spec) => spec !== '');
+  const parts = [api.url, endpoint.path, endpoint.method, paramSpec, ...tail];
   const canonical = parts.join('|');
   return keccak256(toHex(canonical));
 }

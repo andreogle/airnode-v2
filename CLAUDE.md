@@ -20,8 +20,9 @@ src/
   api/              HTTP call building and response processing
   abi-encode.ts     ABI encoding (0x01 + string[] name-value pairs)
   server.ts         Bun.serve HTTP server (routes, CORS, rate limiting)
-  pipeline.ts       Request processing pipeline (auth → validate → cache → plugins → API call → encode → sign)
+  pipeline.ts       Request processing pipeline (auth → validate → cache → plugins → API call → encode → encrypt → sign)
   proof.ts          TLS proof gateway client (Reclaim)
+  fhe.ts            FHE encryption of encoded responses (Zama relayer SDK, lazy-loaded)
   async.ts          Async request store (mode: async)
   auth.ts           Client-facing request authentication (free / apiKey / x402)
   cache.ts          In-memory TTL response cache with periodic sweep
@@ -83,11 +84,12 @@ The pipeline runs per-request in `src/pipeline.ts`:
 7. **Call API** → make upstream HTTP request via `src/api/call.ts`
 8. **Plugin: onAfterApiCall** → plugins can modify the response
 9. **Encode** → if endpoint has `encoding`, ABI-encode using type/path/times via `src/api/process.ts`
-10. **Plugin: onBeforeSign** → plugins can modify encoded data before signing
-11. **Sign** → EIP-191 sign `keccak256(encodePacked(endpointId, timestamp, data))` via `src/sign.ts`
-12. **TLS proof** → if proof is enabled and endpoint has `responseMatches`, request a proof from the gateway (non-fatal)
-13. **Cache** → store response if cache config is present
-14. **Plugin: onResponseSent** → observation hook for logging/monitoring
+10. **FHE encrypt** → if endpoint has `encrypt`, replace the encoded data with an FHE ciphertext via `src/fhe.ts`
+11. **Plugin: onBeforeSign** → plugins can modify the encoded (or encrypted) data before signing
+12. **Sign** → EIP-191 sign `keccak256(encodePacked(endpointId, timestamp, data))` via `src/sign.ts`
+13. **TLS proof** → if proof is enabled and endpoint has `responseMatches`, request a proof from the gateway (non-fatal)
+14. **Cache** → store response if cache config is present
+15. **Plugin: onResponseSent** → observation hook for logging/monitoring
 
 ### Config format
 
@@ -95,11 +97,12 @@ Version `'1.0'`. Top-level sections: `version`, `server`, `settings`, `apis`.
 
 - `server` contains `port`, `host` (default `'0.0.0.0'`), `cors` (optional), `rateLimit` (optional).
 - `settings` contains `timeout` (default 10s), `proof` (`'none'` or `{ type: 'reclaim', gatewayUrl }` for TLS proofs),
-  `plugins`.
+  `fhe` (`'none'` or `{ network, rpcUrl, verifier, apiKey? }` for FHE encryption), `plugins`.
 - `apis[].url` is the upstream API base URL. Upstream credentials go in `apis[].headers`.
 - `apis[].auth` is client-facing: `{ type: 'free' }`, `{ type: 'apiKey', keys: [...] }`, or `{ type: 'x402', ... }`.
 - Endpoints use `encoding: { type, path, times? }` instead of `reservedParameters`. Encoding is optional — endpoints
-  without it return raw JSON with a signature over the JSON hash.
+  without it return raw JSON with a signature over the JSON hash. Endpoints can also set `encrypt: { type, contract }`
+  (requires `settings.fhe` and an integer `encoding`) to FHE-encrypt the encoded value before signing.
 - Auth and cache config inherit from API level; endpoint-level overrides take precedence.
 
 ### Plugin hooks

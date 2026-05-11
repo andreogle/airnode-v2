@@ -5,6 +5,8 @@ import { z } from 'zod/v4';
 // =============================================================================
 const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
+const evmAddressSchema = z.string().regex(/^0x[\da-fA-F]{40}$/, 'Must be a valid EVM address');
+
 // =============================================================================
 // Parameters
 // =============================================================================
@@ -32,10 +34,31 @@ export const encodingSchema = z.object({
 });
 
 // =============================================================================
+// FHE encryption (per-endpoint opt-in)
+//
+// When set, the ABI-encoded response value is replaced with an FHE ciphertext
+// before signing (see `src/fhe.ts`). `type` is the FHE ciphertext type — it
+// determines how the integer is packed into the encrypted input (euint64 →
+// add64, euint256 → add256, ...). `contract` is the on-chain consumer the
+// encrypted input is bound to: the signed ciphertext can only be used by that
+// contract, which prevents replaying encrypted values across contexts. The
+// contract is fixed by the operator — requesters cannot override it.
+//
+// Encryption requires the response to encode to a single non-negative integer,
+// so `encoding` must be present with `type` set to `int256` or `uint256` and
+// `path` set (both operator-fixed). The relayer connection is configured once
+// at the settings level (`settings.fhe`).
+// =============================================================================
+const ENCRYPTABLE_ENCODING_TYPES = new Set(['int256', 'uint256']);
+
+export const encryptSchema = z.object({
+  type: z.enum(['euint8', 'euint16', 'euint32', 'euint64', 'euint128', 'euint256']),
+  contract: evmAddressSchema,
+});
+
+// =============================================================================
 // Client-facing auth
 // =============================================================================
-const evmAddressSchema = z.string().regex(/^0x[\da-fA-F]{40}$/, 'Must be a valid EVM address');
-
 const apiKeyClientAuthSchema = z.object({
   type: z.literal('apiKey'),
   keys: z.array(z.string().min(1)).min(1),
@@ -73,6 +96,8 @@ export const cacheSchema = z.object({
 });
 
 // =============================================================================
+// Endpoints
+// =============================================================================
 const endpointModeSchema = z.enum(['sync', 'async', 'stream']).default('sync');
 
 const responseMatchSchema = z.object({
@@ -80,18 +105,31 @@ const responseMatchSchema = z.object({
   value: z.string().min(1),
 });
 
-export const endpointSchema = z.object({
-  name: z.string().min(1),
-  path: z.string().min(1),
-  method: httpMethodSchema.default('GET'),
-  mode: endpointModeSchema,
-  parameters: z.array(parameterSchema).default([]),
-  encoding: encodingSchema.optional(),
-  responseMatches: z.array(responseMatchSchema).min(1).optional(),
-  auth: clientAuthSchema.optional(),
-  cache: cacheSchema.optional(),
-  description: z.string().optional(),
-});
+export const endpointSchema = z
+  .object({
+    name: z.string().min(1),
+    path: z.string().min(1),
+    method: httpMethodSchema.default('GET'),
+    mode: endpointModeSchema,
+    parameters: z.array(parameterSchema).default([]),
+    encoding: encodingSchema.optional(),
+    encrypt: encryptSchema.optional(),
+    responseMatches: z.array(responseMatchSchema).min(1).optional(),
+    auth: clientAuthSchema.optional(),
+    cache: cacheSchema.optional(),
+    description: z.string().optional(),
+  })
+  .refine(
+    (endpoint) => {
+      if (!endpoint.encrypt) return true;
+      if (!endpoint.encoding?.type || !endpoint.encoding.path) return false;
+      return ENCRYPTABLE_ENCODING_TYPES.has(endpoint.encoding.type);
+    },
+    {
+      message: '`encrypt` requires `encoding` with `path` set and `type` set to `int256` or `uint256`',
+      path: ['encrypt'],
+    }
+  );
 
 // =============================================================================
 // APIs
@@ -140,18 +178,52 @@ const reclaimProofSchema = z.object({
 
 const proofSchema = z.union([z.literal('none'), reclaimProofSchema]);
 
+// FHE relayer connection. `none` disables FHE entirely. The object form
+// configures the Zama relayer used to fetch the target chain's FHE public key
+// and produce encrypted inputs.
+//
+// `verifier` is the AirnodeVerifier contract deployed on the fhEVM chain. An
+// fhEVM encrypted input is bound to the contract that ingests it *and* to the
+// address that calls that contract — and in the Airnode flow a consumer's
+// callback is invoked by AirnodeVerifier, so AirnodeVerifier's address is the
+// "user address" the proof must commit to. Requesters routing through a
+// different AirnodeVerifier deployment will not be able to ingest the data.
+//
+// `rpcUrl` and `apiKey` may reference secrets via `${VAR}` interpolation.
+const fheSchema = z.union([
+  z.literal('none'),
+  z.object({
+    network: z.enum(['sepolia', 'mainnet']),
+    rpcUrl: z.url(),
+    verifier: evmAddressSchema,
+    apiKey: z.string().min(1).optional(),
+  }),
+]);
+
 export const settingsSchema = z.object({
   timeout: z.number().int().positive().default(10_000),
   proof: proofSchema.default('none'),
+  fhe: fheSchema.default('none'),
   plugins: z.array(pluginEntrySchema).default([]),
 });
 
 // =============================================================================
 // Top-level config
 // =============================================================================
-export const configSchema = z.object({
-  version: z.literal('1.0'),
-  server: serverSchema,
-  apis: z.array(apiSchema).min(1),
-  settings: settingsSchema,
-});
+export const configSchema = z
+  .object({
+    version: z.literal('1.0'),
+    server: serverSchema,
+    apis: z.array(apiSchema).min(1),
+    settings: settingsSchema,
+  })
+  .refine(
+    (config) => {
+      const usesFhe = config.apis.some((api) => api.endpoints.some((endpoint) => endpoint.encrypt !== undefined));
+      return !usesFhe || config.settings.fhe !== 'none';
+    },
+    {
+      message: 'An endpoint is configured with `encrypt` but `settings.fhe` is `none` — configure the FHE relayer',
+      path: ['settings', 'fhe'],
+    }
+  );

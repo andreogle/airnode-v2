@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { Hex } from 'viem';
+import { type Hex, hexToBytes } from 'viem';
 import { createCache } from './cache';
 import { deriveEndpointId } from './endpoint';
 import type { ResolvedEndpoint } from './endpoint';
@@ -35,6 +35,37 @@ function mockFetchResponse(data?: unknown, status = 200): void {
     status,
   });
 }
+
+// =============================================================================
+// Mock the FHE relayer SDK (lazily imported by src/fhe.ts, so this is in place
+// by the time an encrypt endpoint exercises it)
+// =============================================================================
+void mock.module('@zama-fhe/relayer-sdk/node', () => ({
+  SepoliaConfig: { relayerUrl: 'https://relayer.testnet.zama.cloud' },
+  MainnetConfig: { relayerUrl: 'https://relayer.mainnet.zama.cloud' },
+  createInstance: () =>
+    Promise.resolve({
+      createEncryptedInput: () => {
+        const builder = {
+          add256: () => builder,
+          encrypt: () =>
+            Promise.resolve({ handles: [hexToBytes(`0x${'ab'.repeat(32)}`)], inputProof: hexToBytes('0xdeadbeef') }),
+        };
+        return builder;
+      },
+    }),
+}));
+
+const FHE_SETTINGS = {
+  timeout: 10_000,
+  proof: 'none' as const,
+  fhe: { network: 'sepolia' as const, rpcUrl: 'https://eth-sepolia.example.com', verifier: TEST_AIRNODE },
+  plugins: [],
+};
+
+// abi.encode(bytes32 0xabab…ab, bytes 0xdeadbeef) — what the mock above produces.
+const EXPECTED_CIPHERTEXT =
+  '0xabababababababababababababababababababababababababababababababab00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000004deadbeef00000000000000000000000000000000000000000000000000000000';
 
 // =============================================================================
 // Helpers
@@ -77,7 +108,7 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     endpointMap: new Map(),
     plugins: createEmptyRegistry(),
     cache: createCache(),
-    settings: { timeout: 10_000, proof: 'none', plugins: [] },
+    settings: { timeout: 10_000, proof: 'none', fhe: 'none', plugins: [] },
     ...overrides,
   };
 }
@@ -428,5 +459,62 @@ describe('handleEndpointRequest', () => {
 
     expect(response.status).toBe(502);
     expect(body.error).toBe('API returned no data to encode');
+  });
+});
+
+// =============================================================================
+// FHE encryption
+// =============================================================================
+const ENCRYPT_ENDPOINT: Partial<Endpoint> = {
+  encoding: { type: 'int256', path: '$.price' },
+  encrypt: { type: 'euint256', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' },
+};
+
+describe('handleEndpointRequest — FHE encryption', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  test('replaces the encoded value with an FHE ciphertext before signing', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, settings: FHE_SETTINGS });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as SignedResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.data).toBe(EXPECTED_CIPHERTEXT);
+    expect(body.signature).toMatch(/^0x/);
+  });
+
+  test('returns 502 when encryption fails (negative value cannot be encrypted)', async () => {
+    mockFetchResponse({ price: -1 });
+    const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, settings: FHE_SETTINGS });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe('FHE encryption failed');
+  });
+
+  test('returns 502 when an encrypt endpoint runs without fhe configured', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap }); // settings.fhe === 'none'
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe('FHE encryption failed');
   });
 });

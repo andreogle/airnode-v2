@@ -176,6 +176,7 @@ endpoints:
 | `mode`            | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                                             |
 | `parameters`      | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).                                    |
 | `encoding`        | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.                                    |
+| `encrypt`         | `object` | No       | --      | FHE-encrypt the encoded value before signing. See [Encryption (FHE)](#encryption-fhe).   |
 | `responseMatches` | `array`  | No       | --      | Regex patterns for TLS proof response matching. See [responseMatches](#responsematches). |
 | `auth`            | `object` | No       | --      | Overrides API-level auth for this endpoint.                                              |
 | `cache`           | `object` | No       | --      | Overrides API-level cache for this endpoint.                                             |
@@ -457,3 +458,31 @@ endpoints:
 ```
 
 If the merged result has `_type` without `_path` (or vice versa), the server returns 400.
+
+## Encryption (FHE)
+
+The `encrypt` field FHE-encrypts the encoded value before signing, so the signed `data` is an encrypted-input handle
+instead of plaintext. It requires [`settings.fhe`](/docs/config/settings#fhe) to be configured, and the endpoint must
+have an `encoding` block whose `type` is `int256` or `uint256` with a `path` set — FHE integers are unsigned, so the
+encoded value must be a single non-negative integer that fits in the chosen ciphertext type.
+
+```yaml
+endpoints:
+  - name: coinPrice
+    path: /simple/price
+    encoding:
+      type: int256
+      path: $.ethereum.usd
+      times: '1e18'
+    encrypt:
+      type: euint256
+      contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+```
+
+| Field      | Type     | Required | Description                                                                                                                                               |
+| ---------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`     | `string` | Yes      | FHE ciphertext type. One of `euint8`, `euint16`, `euint32`, `euint64`, `euint128`, `euint256`. The encoded value must fit in this width.                  |
+| `contract` | `string` | Yes      | Address of the consumer contract that will ingest the encrypted input. Operator-fixed — requesters cannot override it, and the endpoint ID commits to it. |
+
+See [FHE Encryption](/docs/concepts/fhe-encryption) for the full flow, the address-binding rules, and the consumer
+contract requirements.

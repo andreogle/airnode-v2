@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parse } from 'yaml';
-import { configSchema, parameterSchema } from './schema';
+import { configSchema, encryptSchema, parameterSchema } from './schema';
 
 function parseYaml(raw: string): unknown {
   return parse(raw) as unknown;
@@ -291,6 +291,155 @@ apis:
     expect(result.apis[0]?.endpoints[0]?.responseMatches).toEqual([
       { type: 'regex', value: String.raw`"usd":\s*(?<price>[\d.]+)` },
     ]);
+  });
+
+  test('parses fhe-encrypt example config successfully', async () => {
+    const file = Bun.file(`${import.meta.dirname}/../../examples/configs/fhe-encrypt/config.yaml`);
+    const content = await file.text();
+    const result = configSchema.parse(parseYaml(content));
+
+    expect(result.version).toBe('1.0');
+    expect(result.settings.fhe).toEqual({
+      network: 'sepolia',
+      rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+      verifier: '0x0000000000000000000000000000000000000000',
+    });
+    expect(result.apis[0]?.endpoints[0]?.encrypt).toEqual({
+      type: 'euint256',
+      contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    });
+  });
+});
+
+// =============================================================================
+// FHE encryption
+// =============================================================================
+const FHE_CONFIG = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  fhe:
+    network: sepolia
+    rpcUrl: https://eth-sepolia.example.com
+    verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: price
+        path: /price
+        encoding:
+          type: int256
+          path: $.price
+        encrypt:
+          type: euint256
+          contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+`;
+
+describe('fhe settings', () => {
+  test('defaults to none', () => {
+    const result = configSchema.parse(parseYaml(MINIMAL_CONFIG));
+    expect(result.settings.fhe).toBe('none');
+  });
+
+  test('accepts a relayer connection', () => {
+    const result = configSchema.parse(parseYaml(FHE_CONFIG));
+    expect(result.settings.fhe).toEqual({
+      network: 'sepolia',
+      rpcUrl: 'https://eth-sepolia.example.com',
+      verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    });
+  });
+
+  test('accepts an optional apiKey', () => {
+    const raw = FHE_CONFIG.replace(
+      "    verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'",
+      "    verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'\n    apiKey: my-relayer-key"
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect((result.settings.fhe as { apiKey: string }).apiKey).toBe('my-relayer-key');
+  });
+
+  test('rejects an unknown network', () => {
+    expect(() => configSchema.parse(parseYaml(FHE_CONFIG.replace('network: sepolia', 'network: goerli')))).toThrow();
+  });
+
+  test('rejects an invalid rpcUrl', () => {
+    expect(() =>
+      configSchema.parse(parseYaml(FHE_CONFIG.replace('rpcUrl: https://eth-sepolia.example.com', 'rpcUrl: not-a-url')))
+    ).toThrow();
+  });
+
+  test('rejects an invalid verifier address', () => {
+    expect(() =>
+      configSchema.parse(
+        parseYaml(FHE_CONFIG.replace("verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'", "verifier: '0xabc'"))
+      )
+    ).toThrow();
+  });
+
+  test('rejects a missing verifier', () => {
+    expect(() =>
+      configSchema.parse(
+        parseYaml(FHE_CONFIG.replace("\n    verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'", ''))
+      )
+    ).toThrow();
+  });
+
+  test('rejects an encrypt endpoint when fhe is none', () => {
+    const raw = FHE_CONFIG.replace(
+      "  fhe:\n    network: sepolia\n    rpcUrl: https://eth-sepolia.example.com\n    verifier: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'",
+      '  fhe: none'
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow('settings.fhe');
+  });
+});
+
+describe('encrypt', () => {
+  test('accepts an encrypt block on an endpoint with integer encoding', () => {
+    const result = configSchema.parse(parseYaml(FHE_CONFIG));
+    expect(result.apis[0]?.endpoints[0]?.encrypt).toEqual({
+      type: 'euint256',
+      contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    });
+  });
+
+  test('rejects encrypt without an encoding block', () => {
+    const raw = FHE_CONFIG.replace('        encoding:\n          type: int256\n          path: $.price\n', '');
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow('encrypt');
+  });
+
+  test('rejects encrypt when encoding.type is not int256 or uint256', () => {
+    expect(() => configSchema.parse(parseYaml(FHE_CONFIG.replace('type: int256', 'type: bytes32')))).toThrow('encrypt');
+  });
+
+  test('rejects encrypt when encoding.path is missing', () => {
+    const raw = FHE_CONFIG.replace('          path: $.price\n', '');
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow('encrypt');
+  });
+
+  test('rejects an unknown ciphertext type', () => {
+    expect(() => configSchema.parse(parseYaml(FHE_CONFIG.replace('type: euint256', 'type: euint17')))).toThrow();
+  });
+
+  test('rejects an invalid contract address', () => {
+    expect(() =>
+      configSchema.parse(
+        parseYaml(FHE_CONFIG.replace("contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3'", "contract: '0xnope'"))
+      )
+    ).toThrow();
+  });
+
+  test('encryptSchema accepts valid input', () => {
+    const result = encryptSchema.parse({ type: 'euint64', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' });
+    expect(result.type).toBe('euint64');
+  });
+
+  test('encryptSchema rejects an unknown type', () => {
+    expect(() =>
+      encryptSchema.parse({ type: 'euint512', contract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' })
+    ).toThrow();
   });
 });
 

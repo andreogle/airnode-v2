@@ -13,9 +13,10 @@ import { ITFHE } from './ITFHE.sol';
 ///         up to the application.
 ///
 ///   Data flow:
-///   1. Client requests signed data from Airnode's HTTP endpoint.
-///   2. The fhe-encrypt plugin encrypts the response with the chain's FHE public
-///      key, packing (einput, inputProof) into the data field.
+///   1. Client requests signed data from Airnode's HTTP endpoint (an endpoint
+///      configured with an `encrypt` block).
+///   2. Airnode encrypts the encoded response with the chain's FHE public key,
+///      packing (handle, inputProof) into the data field.
 ///   3. Airnode signs the ciphertext — the signature proves the encrypted data is
 ///      authentically from the API provider.
 ///   4. Client submits the signed data to AirnodeVerifier.verifyAndFulfill(),
@@ -31,8 +32,13 @@ import { ITFHE } from './ITFHE.sol';
 ///     handles it created — even if a malicious contract knows the handle ID,
 ///     it cannot grant itself access.
 ///
-///   On fhEVM-compatible chains, replace ITFHE with the real TFHE library and
-///   use native encrypted types (euint256) instead of uint256 handles.
+///   On fhEVM-compatible chains, replace ITFHE with the real `FHE` library
+///   (zama-ai/fhevm-solidity) and use native encrypted types (euint256) instead
+///   of uint256 handles. Note: an fhEVM encrypted input is bound to the contract
+///   that ingests it AND to that contract's msg.sender at ingestion time. Here
+///   fulfill() is called by AirnodeVerifier, so the airnode must have encrypted
+///   the input for (this contract, AirnodeVerifier) — i.e. the operator's
+///   `settings.fhe.verifier` must be the AirnodeVerifier address used here.
 contract ConfidentialPriceFeed {
   // ===========================================================================
   // Events
@@ -105,7 +111,7 @@ contract ConfidentialPriceFeed {
 
   /// @notice Called by AirnodeVerifier after signature verification.
   ///         The data field contains abi.encode(bytes32 handleRef, bytes inputProof)
-  ///         packed by the fhe-encrypt plugin.
+  ///         packed by Airnode's FHE encryption.
   /// @param airnode The airnode that signed the data.
   /// @param endpointId The endpoint the data came from.
   /// @param timestamp When the data was fetched.

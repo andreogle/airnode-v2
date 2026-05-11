@@ -104,10 +104,11 @@ Reducing trust assumptions and enabling confidential data flows.
   independent attestor verifies the TLS session and signs a claim. Proofs are non-fatal -- responses are returned
   without proofs if the attestor is unavailable. Configured via `settings.proof` and per-endpoint `responseMatches`. See
   [TLS Proofs](/docs/concepts/proofs).
-- **FHE encryption (Zama)**: plugin that encrypts the ABI-encoded response before signing, using the target chain's FHE
-  public key. On-chain contracts compute directly on the ciphertext via the Zama coprocessor, with a per-handle ACL
-  controlling decryption. Enables MEV-protected price feeds, paid-data access control, and confidential on-chain
-  computation. See [FHE Encryption](/docs/concepts/fhe-encryption).
+- **FHE encryption (Zama)**: built-in encryption of the ABI-encoded response before signing, using the target chain's
+  FHE public key. Configured via `settings.fhe` plus a per-endpoint `encrypt` block. On-chain contracts compute directly
+  on the ciphertext via the Zama coprocessor, with a per-handle ACL controlling decryption. Enables MEV-protected price
+  feeds, paid-data access control, and confidential on-chain computation. See
+  [FHE Encryption](/docs/concepts/fhe-encryption).
 - **Encrypted channel (ECIES)**: plugin that establishes end-to-end encryption between the requester and the airnode.
   Request parameters and signed response bodies are opaque to observers; only the requester's ephemeral key can decrypt.
 
