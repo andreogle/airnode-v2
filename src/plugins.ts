@@ -212,7 +212,9 @@ interface PluginRegistry {
 }
 
 const EMPTY_REQUEST_PLUGINS: RequestPlugins = {
-  callHttpRequest: () => Promise.resolve(),
+  // The `undefined` is the HttpRequestResult "no rejection" value — Promise.resolve() would be Promise<void>.
+  // eslint-disable-next-line unicorn/no-useless-undefined
+  callHttpRequest: () => Promise.resolve(undefined),
   callBeforeApiCall: (ctx) => Promise.resolve({ parameters: ctx.parameters, dropped: false }),
   callAfterApiCall: (ctx) => Promise.resolve({ response: ctx.response, dropped: false }),
   callBeforeSign: (ctx) => Promise.resolve({ data: ctx.data, dropped: false }),

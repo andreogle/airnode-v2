@@ -43,15 +43,47 @@ function isPaymentRequired(result: AuthResult): result is AuthPaymentRequired {
 
 // =============================================================================
 // Shared RPC client pool
+//
+// `verifyPayment` only needs three read methods. We model that narrow surface
+// explicitly (a) so it's clear what an RPC outage / mismatch can affect and
+// (b) so tests can inject a fake client via `setRpcClientFactory`.
 // =============================================================================
-const rpcClients = new Map<string, ReturnType<typeof createPublicClient>>();
+interface RpcLog {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+}
+interface RpcClient {
+  readonly getTransactionReceipt: (args: { readonly hash: Hex }) => Promise<{
+    readonly status: 'success' | 'reverted';
+    readonly blockNumber: bigint;
+    readonly logs: readonly RpcLog[];
+  }>;
+  readonly getBlock: (args: { readonly blockNumber: bigint }) => Promise<{ readonly timestamp: bigint }>;
+  readonly getTransaction: (args: {
+    readonly hash: Hex;
+  }) => Promise<{ readonly from: string; readonly to: string | null; readonly value: bigint }>;
+}
 
-function getPublicClient(rpc: string): ReturnType<typeof createPublicClient> {
+const defaultRpcClientFactory = (rpc: string): RpcClient => createPublicClient({ transport: http(rpc) });
+
+const rpcClients = new Map<string, RpcClient>();
+// eslint-disable-next-line functional/no-let
+let rpcClientFactory: (rpc: string) => RpcClient = defaultRpcClientFactory;
+
+function getPublicClient(rpc: string): RpcClient {
   const existing = rpcClients.get(rpc);
   if (existing) return existing;
-  const client = createPublicClient({ transport: http(rpc) });
+  const client = rpcClientFactory(rpc);
   rpcClients.set(rpc, client); // eslint-disable-line functional/immutable-data
   return client;
+}
+
+// Swap the RPC client factory and clear the pool. Pass nothing to restore the
+// real (viem http) factory. Intended for tests — production never calls this.
+function setRpcClientFactory(factory?: (rpc: string) => RpcClient): void {
+  rpcClientFactory = factory ?? defaultRpcClientFactory;
+  rpcClients.clear(); // eslint-disable-line functional/immutable-data
 }
 
 // =============================================================================
@@ -297,5 +329,5 @@ async function authenticateRequest(request: Request, context: AuthContext, auth?
   return lastResult;
 }
 
-export { authenticateRequest, buildPaymentAuthHash, isPaymentRequired };
-export type { AuthContext, AuthPaymentRequired, AuthResult };
+export { authenticateRequest, buildPaymentAuthHash, isPaymentRequired, setRpcClientFactory };
+export type { AuthContext, AuthPaymentRequired, AuthResult, RpcClient };

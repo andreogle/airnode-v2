@@ -57,15 +57,21 @@ describe('S12 — Plugin hooks — onHttpRequest', () => {
     expect(response.status).toBe(200);
   });
 
-  test('plugin error does not crash the server', async () => {
+  test('a throwing onHttpRequest plugin fails closed (request rejected, server stays up)', async () => {
     ctx.stop();
     const plugins = createRegistry([{ plugin: crashPlugin, timeout: 5000 }]);
     ctx = await createTestServer({ plugins });
 
     const endpointId = findEndpointId(ctx.endpointMap, 'WeatherAPI', 'currentTemp');
     const response = await post(ctx.baseUrl, endpointId, { q: 'London' });
+    const body = (await response.json()) as { error: string };
 
-    // Error is caught, request proceeds
-    expect(response.status).toBe(200);
+    // onHttpRequest is fail-closed: a thrown error rejects the request with 500.
+    expect(response.status).toBe(500);
+    expect(body.error).toBe('Plugin error');
+
+    // The server is still serving — a subsequent request gets the same treatment, not a hang.
+    const followUp = await fetch(`${ctx.baseUrl}/health`);
+    expect(followUp.status).toBe(200);
   });
 });

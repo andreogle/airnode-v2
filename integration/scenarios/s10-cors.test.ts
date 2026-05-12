@@ -13,17 +13,28 @@ afterAll(() => {
 });
 
 describe('S10 — CORS and preflight', () => {
-  test('GET /health includes Access-Control-Allow-Origin', async () => {
-    const response = await fetch(`${ctx.baseUrl}/health`);
+  test('GET /health reflects an allow-listed Origin', async () => {
+    const response = await fetch(`${ctx.baseUrl}/health`, { headers: { Origin: 'https://app.example.com' } });
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com');
+    expect(response.headers.get('Vary')).toBe('Origin');
+  });
+
+  test('GET /health denies an origin that is not on the allow-list', async () => {
+    const response = await fetch(`${ctx.baseUrl}/health`, { headers: { Origin: 'https://evil.example.com' } });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('null');
   });
 
   test('OPTIONS returns 204 with correct CORS headers', async () => {
     const endpointId = findEndpointId(ctx.endpointMap, 'WeatherAPI', 'currentTemp');
 
-    const response = await fetch(`${ctx.baseUrl}/endpoints/${endpointId}`, { method: 'OPTIONS' });
+    const response = await fetch(`${ctx.baseUrl}/endpoints/${endpointId}`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://app.example.com' },
+    });
 
     expect(response.status).toBe(204);
     expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');

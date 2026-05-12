@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Api, Endpoint } from '../types';
-import { callApi } from './call';
+import { buildApiRequest, callApi } from './call';
 
 const fetchMock = mock();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -394,5 +394,41 @@ describe('callApi', () => {
 
     expect(result.status).toBe(200);
     expect(result.data).toBeUndefined();
+  });
+
+  test('rejects a non-empty response body that is not JSON', async () => {
+    fetchMock.mockResolvedValue({
+      text: () => Promise.resolve('<html><body>502 Bad Gateway</body></html>'),
+      status: 502,
+    });
+
+    const call = callApi(makeApi(), makeEndpoint(), {});
+    expect(call).rejects.toThrow('API returned non-JSON response (status 502)');
+    await call.catch(() => {});
+  });
+});
+
+// =============================================================================
+// buildApiRequest — SSRF guard
+// =============================================================================
+describe('buildApiRequest', () => {
+  test('rejects a resolved URL whose origin differs from the configured API base', () => {
+    const api = makeApi({ url: 'https://api.example.com' });
+    // A misconfigured endpoint path of "@evil.example.com/..." turns the
+    // configured host into URL userinfo, so the real host becomes evil.example.com.
+    const endpoint = makeEndpoint({ path: '@evil.example.com/data' });
+
+    expect(() => buildApiRequest(api, endpoint, {})).toThrow(
+      'Resolved URL origin https://evil.example.com does not match API base https://api.example.com'
+    );
+  });
+
+  test('allows a path that stays on the configured origin', () => {
+    const api = makeApi({ url: 'https://api.example.com' });
+    const endpoint = makeEndpoint({ path: '/v1/data' });
+
+    const built = buildApiRequest(api, endpoint, {});
+    expect(built.url).toBe('https://api.example.com/v1/data');
+    expect(built.method).toBe('GET');
   });
 });

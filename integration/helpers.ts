@@ -40,12 +40,14 @@ function rewriteApiUrls(apis: readonly Api[]): Api[] {
 
 interface TestServerOptions {
   readonly server?: Partial<Config['server']>;
+  readonly settings?: Partial<Config['settings']>;
   readonly plugins?: PluginRegistry;
   readonly apiOverrides?: (apis: readonly Api[]) => Api[];
 }
 
 async function createTestServer(options: TestServerOptions = {}): Promise<TestContext> {
   const serverOverrides = options.server ?? {};
+  const settingsOverrides = options.settings ?? {};
   await loadEnvFile(ENV_PATH);
 
   const account = createAirnodeAccount(PRIVATE_KEY);
@@ -55,7 +57,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
   const testConfig: Config = {
     ...parsed,
     server: { ...parsed.server, port: 0, rateLimit: undefined, ...serverOverrides },
-    settings: { ...parsed.settings, plugins: [] },
+    settings: { ...parsed.settings, plugins: [], ...settingsOverrides },
     apis: options.apiOverrides ? options.apiOverrides(rewriteApiUrls(parsed.apis)) : rewriteApiUrls(parsed.apis),
   };
 
@@ -71,6 +73,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     plugins: options.plugins ?? createEmptyRegistry(),
     cache,
     asyncStore,
+    settings: testConfig.settings,
     handleRequest: handleEndpointRequest,
   });
 

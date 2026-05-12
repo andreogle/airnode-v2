@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { type Hex, hexToBytes } from 'viem';
 import { createAsyncRequestStore } from './async';
+import type { AsyncRequestStore, PendingRequest } from './async';
 import { createCache } from './cache';
 import { deriveEndpointId } from './endpoint';
 import type { ResolvedEndpoint } from './endpoint';
@@ -116,6 +117,17 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
 
 function makeRequest(headers: Record<string, string> = {}): Request {
   return new Request('http://test/endpoints/0x00', { headers });
+}
+
+// Async mode runs the pipeline in a fire-and-forget background task; poll the
+// store until the request leaves the running state (or give up after ~1s).
+async function drainAsync(store: AsyncRequestStore, requestId: Hex, attempts = 200): Promise<PendingRequest> {
+  const entry = store.get(requestId);
+  if (!entry) throw new Error(`async request ${requestId} disappeared from the store`);
+  if (entry.status === 'complete' || entry.status === 'failed') return entry;
+  if (attempts <= 0) throw new Error(`async request stuck in "${entry.status}"`);
+  await Bun.sleep(5);
+  return drainAsync(store, requestId, attempts - 1);
 }
 
 // =============================================================================
@@ -258,6 +270,47 @@ describe('handleEndpointRequest', () => {
     asyncStore.stop();
   });
 
+  test('async endpoint runs the pipeline in the background and stores the signed result', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ endpointMap, asyncStore });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const { requestId } = (await response.json()) as { requestId: Hex };
+
+    const finished = await drainAsync(asyncStore, requestId);
+    expect(finished.status).toBe('complete');
+    expect(finished.error).toBeUndefined();
+    const result = finished.result as SignedResponseBody;
+    expect(result.endpointId).toBe(endpointId);
+    expect(result.airnode).toBe(TEST_AIRNODE);
+    // int256(3000) — the encoded upstream `price`.
+    expect(result.data).toBe('0x0000000000000000000000000000000000000000000000000000000000000bb8');
+    expect(result.signature).toMatch(/^0x[\da-f]+$/);
+    asyncStore.stop();
+  });
+
+  test('async endpoint records a failed state when the upstream call fails', async () => {
+    fetchMock.mockRejectedValue(new Error('connection refused'));
+    const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ endpointMap, asyncStore });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const { requestId } = (await response.json()) as { requestId: Hex };
+
+    const finished = await drainAsync(asyncStore, requestId);
+    expect(finished.status).toBe('failed');
+    expect(finished.error).toBe('API call returned an error');
+    expect(finished.result).toBeUndefined();
+    asyncStore.stop();
+  });
+
   test('correct response structure for signed response', async () => {
     mockFetchResponse({ result: 100 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result' } });
@@ -355,7 +408,8 @@ describe('handleEndpointRequest', () => {
     const body = (await response.json()) as SignedResponseBody;
 
     expect(response.status).toBe(200);
-    expect(body.data).toMatch(/^0x/);
+    // int256(42) — encoded from $.result with the requester-supplied _type/_path
+    expect(body.data).toBe('0x000000000000000000000000000000000000000000000000000000000000002a');
     expect(body.signature).toMatch(/^0x/);
     // Should NOT have rawData — it's an encoded response
     expect('rawData' in body).toBe(false);
@@ -381,7 +435,8 @@ describe('handleEndpointRequest', () => {
     const body = (await response.json()) as SignedResponseBody;
 
     expect(response.status).toBe(200);
-    expect(body.data).toMatch(/^0x/);
+    // 1.5 * 1000 = 1500, int256-encoded — proves _times was actually applied
+    expect(body.data).toBe('0x00000000000000000000000000000000000000000000000000000000000005dc');
   });
 
   test('returns 400 when _type is provided without _path', async () => {
@@ -451,7 +506,9 @@ describe('handleEndpointRequest', () => {
     const body = (await response.json()) as SignedResponseBody;
 
     expect(response.status).toBe(200);
-    expect(body.data).toMatch(/^0x/);
+    // int256(42) from $.result — the operator's encoding, NOT uint256(99) from $.other
+    expect(body.data).toBe('0x000000000000000000000000000000000000000000000000000000000000002a');
+    expect(body.data).not.toBe('0x0000000000000000000000000000000000000000000000000000000000000063');
   });
 
   test('returns raw response when no encoding and no reserved params', async () => {

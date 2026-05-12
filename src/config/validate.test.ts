@@ -146,6 +146,55 @@ apis:
     expect(result.errors[0]).toContain('Duplicate API name');
   });
 
+  test('rejects duplicate endpoint names within an API', () => {
+    const yaml = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Weather
+    url: https://api.example.com
+    endpoints:
+      - name: forecast
+        path: /a
+      - name: forecast
+        path: /b
+`;
+    const result = validateConfig(yaml);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.some((e) => e.includes('Duplicate endpoint name(s) in API "Weather": forecast'))).toBe(true);
+  });
+
+  test('rejects duplicate plugin sources', () => {
+    const yaml = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+  plugins:
+    - source: ./heartbeat.js
+      timeout: 5000
+    - source: ./heartbeat.js
+      timeout: 3000
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: test
+        path: /test
+`;
+    const result = validateConfig(yaml);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.some((e) => e.includes('Duplicate plugin source(s): ./heartbeat.js'))).toBe(true);
+  });
+
   test('rejects endpoints with identical specifications (colliding endpoint IDs)', () => {
     const yaml = `
 version: '1.0'
@@ -167,6 +216,54 @@ apis:
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.errors.some((e) => e.includes('identical specifications'))).toBe(true);
+  });
+
+  // ===========================================================================
+  // Environment interpolation (interpolate = true)
+  // ===========================================================================
+  test('interpolates ${ENV_VAR} references when interpolate is true', () => {
+    process.env['TEST_VALIDATE_API_URL'] = 'https://from-env.example.com';
+    const yaml = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: \${TEST_VALIDATE_API_URL}
+    endpoints:
+      - name: test
+        path: /test
+`;
+    const result = validateConfig(yaml, true);
+    delete process.env['TEST_VALIDATE_API_URL'];
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.config.apis[0]?.url).toBe('https://from-env.example.com');
+  });
+
+  test('reports an error when an interpolated env var is missing', () => {
+    const yaml = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: \${DEFINITELY_NOT_SET_ENV_VAR_XYZ}
+    endpoints:
+      - name: test
+        path: /test
+`;
+    const result = validateConfig(yaml, true);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain('DEFINITELY_NOT_SET_ENV_VAR_XYZ');
   });
 
   // ===========================================================================

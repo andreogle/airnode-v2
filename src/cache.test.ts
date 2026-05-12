@@ -60,12 +60,18 @@ describe('createCache', () => {
     expect(cache.get(ENDPOINT_ID, { coin: 'ETH' })).toBeUndefined();
   });
 
-  test('stop() clears the sweep interval', () => {
+  test('stop() is idempotent and leaves existing entries readable', () => {
+    // (That stop() actually halts the periodic sweep is covered by bounded-map.test.ts —
+    // createCache hardcodes a 60s sweep interval, too slow to observe here.)
     const cache = createCache();
     cache.set(ENDPOINT_ID, { coin: 'ETH' }, { price: 3000 }, 60_000);
+
     cache.stop();
-    // No assertion needed — verifies stop() doesn't throw and the interval is cleared
-    expect(cache.size()).toBe(1);
+    cache.stop(); // double-stop must not throw
+
+    expect(cache.get(ENDPOINT_ID, { coin: 'ETH' })).toEqual({ price: 3000 });
+    cache.set(ENDPOINT_ID, { coin: 'BTC' }, { price: 60_000 }, 60_000);
+    expect(cache.get(ENDPOINT_ID, { coin: 'BTC' })).toEqual({ price: 60_000 });
   });
 
   test('special characters in values cannot collide across parameter sets', () => {

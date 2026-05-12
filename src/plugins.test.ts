@@ -33,7 +33,7 @@ function makeLoaded(
   return plugins.map((plugin) => ({ plugin, timeout }));
 }
 
-const ENDPOINT_ID = `0x${'aa'.repeat(32)}`;
+const ENDPOINT_ID: Hex = `0x${'aa'.repeat(32)}`;
 
 // =============================================================================
 // createEmptyRegistry
@@ -52,6 +52,7 @@ describe('createEmptyRegistry', () => {
   test('callHttpRequest returns undefined when no plugins reject', async () => {
     const registry = createEmptyRegistry();
     const result = await registry.beginRequest().callHttpRequest({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -63,6 +64,7 @@ describe('createEmptyRegistry', () => {
   test('callBeforeApiCall passes through parameters', async () => {
     const registry = createEmptyRegistry();
     const result = await registry.beginRequest().callBeforeApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -75,6 +77,7 @@ describe('createEmptyRegistry', () => {
     const registry = createEmptyRegistry();
     const response = { data: { price: 100 }, status: 200 };
     const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -87,6 +90,7 @@ describe('createEmptyRegistry', () => {
   test('callBeforeSign passes through data', async () => {
     const registry = createEmptyRegistry();
     const result = await registry.beginRequest().callBeforeSign({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -110,6 +114,7 @@ describe('createRegistry', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -129,6 +134,7 @@ describe('createRegistry', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -152,6 +158,7 @@ describe('createRegistry', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -174,6 +181,7 @@ describe('createRegistry', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -216,6 +224,7 @@ describe('createRegistry', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -252,6 +261,7 @@ describe('createRegistry', () => {
 // =============================================================================
 describe('callHttpRequest', () => {
   const baseCtx = {
+    requestId: ENDPOINT_ID,
     endpointId: ENDPOINT_ID,
     api: 'coingecko',
     endpoint: 'price',
@@ -316,6 +326,7 @@ describe('callHttpRequest', () => {
 // =============================================================================
 describe('callBeforeApiCall', () => {
   const baseCtx = {
+    requestId: ENDPOINT_ID,
     endpointId: ENDPOINT_ID,
     api: 'coingecko',
     endpoint: 'price',
@@ -395,6 +406,7 @@ describe('callAfterApiCall', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -411,6 +423,7 @@ describe('callAfterApiCall', () => {
 
     const original = { data: { price: 100 }, status: 200 };
     const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -453,6 +466,7 @@ describe('callAfterApiCall', () => {
 // =============================================================================
 describe('callBeforeSign', () => {
   const baseCtx = {
+    requestId: ENDPOINT_ID,
     endpointId: ENDPOINT_ID,
     api: 'coingecko',
     endpoint: 'price',
@@ -524,6 +538,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -540,6 +555,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
     const result = await registry.beginRequest().callBeforeApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -553,6 +569,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
     const result = await registry.beginRequest().callBeforeSign({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -590,6 +607,7 @@ describe('budget', () => {
     const registry = createRegistry(makeLoaded([plugin]));
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -614,6 +632,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
     const result = await registry.beginRequest().callBeforeApiCall({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -636,6 +655,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
     await registry.beginRequest().callResponseSent({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -659,6 +679,7 @@ describe('budget', () => {
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
     const result = await registry.beginRequest().callHttpRequest({
+      requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
