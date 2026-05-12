@@ -1,3 +1,4 @@
+import { goSync } from '@api3/promise-utils';
 import { type Hex, encodePacked, keccak256 } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { mnemonicToAccount } from 'viem/accounts';
@@ -10,6 +11,10 @@ interface SignedResponse {
   readonly airnode: Hex;
 }
 
+type ResolvedAccount =
+  | { readonly success: true; readonly account: PrivateKeyAccount }
+  | { readonly success: false; readonly error: string };
+
 // =============================================================================
 // Account creation (call once at startup, not per-request)
 // =============================================================================
@@ -19,6 +24,34 @@ function createAirnodeAccount(privateKey: Hex): PrivateKeyAccount {
 
 function createAirnodeAccountFromMnemonic(mnemonic: string): PrivateKeyAccount {
   return mnemonicToAccount(mnemonic) as unknown as PrivateKeyAccount;
+}
+
+const PRIVATE_KEY_REGEX = /^0x[\da-fA-F]{64}$/;
+
+// Resolve the airnode signing account from the environment. `AIRNODE_MNEMONIC`
+// takes precedence over `AIRNODE_PRIVATE_KEY`. Returns a clear, actionable error
+// rather than letting a malformed key blow up deep inside viem at sign time.
+function accountFromEnv(env: NodeJS.ProcessEnv = process.env): ResolvedAccount {
+  const mnemonic = env['AIRNODE_MNEMONIC'];
+  if (mnemonic) {
+    const result = goSync(() => createAirnodeAccountFromMnemonic(mnemonic));
+    if (!result.success) {
+      return { success: false, error: `AIRNODE_MNEMONIC is not a valid BIP-39 mnemonic: ${result.error.message}` };
+    }
+    return { success: true, account: result.data };
+  }
+
+  const privateKey = env['AIRNODE_PRIVATE_KEY'];
+  if (privateKey) {
+    if (!PRIVATE_KEY_REGEX.test(privateKey)) {
+      return { success: false, error: 'AIRNODE_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string (66 characters)' };
+    }
+    const result = goSync(() => createAirnodeAccount(privateKey as Hex));
+    if (!result.success) return { success: false, error: `AIRNODE_PRIVATE_KEY is invalid: ${result.error.message}` };
+    return { success: true, account: result.data };
+  }
+
+  return { success: false, error: 'AIRNODE_PRIVATE_KEY or AIRNODE_MNEMONIC environment variable is required' };
 }
 
 // =============================================================================
@@ -47,5 +80,5 @@ async function signResponse(
   return { signature, airnode: account.address };
 }
 
-export { createAirnodeAccount, createAirnodeAccountFromMnemonic, deriveMessageHash, signResponse };
-export type { SignedResponse };
+export { accountFromEnv, createAirnodeAccount, createAirnodeAccountFromMnemonic, deriveMessageHash, signResponse };
+export type { ResolvedAccount, SignedResponse };

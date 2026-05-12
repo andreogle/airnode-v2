@@ -2,8 +2,8 @@ import { go, goSync } from '@api3/promise-utils';
 import { Command } from 'commander';
 import type { Hex } from 'viem';
 import { getAddress } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
 import { buildTxtRecordHost, verifyIdentity } from '../../identity';
+import { accountFromEnv } from '../../sign';
 import { bold, dim, green, red, reset } from '../colors';
 
 // =============================================================================
@@ -19,14 +19,14 @@ const show = new Command('show')
   .requiredOption('-d, --domain <domain>', 'Domain name (e.g., api.coingecko.com)')
   .option('--chain-id <id>', 'Chain ID for the TXT record', '1')
   .action((options: ShowOptions) => {
-    const privateKey = process.env['AIRNODE_PRIVATE_KEY'] as Hex | undefined;
-    if (!privateKey) {
-      console.error('AIRNODE_PRIVATE_KEY environment variable is required');
+    const resolved = accountFromEnv();
+    if (!resolved.success) {
+      console.error(resolved.error);
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(1);
     }
 
-    const account = privateKeyToAccount(privateKey);
+    const account = resolved.account;
     const chainId = Number(options.chainId);
     const host = buildTxtRecordHost(options.domain, chainId);
     const separator = dim + '─'.repeat(70) + reset;

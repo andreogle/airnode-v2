@@ -1,19 +1,16 @@
 import { Command } from 'commander';
-import type { Hex } from 'viem';
-import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
+import type { PrivateKeyAccount } from 'viem/accounts';
+import { accountFromEnv } from '../../sign';
 import { bold, dim, reset } from '../colors';
 
 // =============================================================================
 // Helpers
 // =============================================================================
-function resolveAccount(): { readonly address: string } {
-  const mnemonic = process.env['AIRNODE_MNEMONIC'];
-  if (mnemonic) return mnemonicToAccount(mnemonic);
+function resolveAccount(): PrivateKeyAccount {
+  const resolved = accountFromEnv();
+  if (resolved.success) return resolved.account;
 
-  const privateKey = process.env['AIRNODE_PRIVATE_KEY'] as Hex | undefined;
-  if (privateKey) return privateKeyToAccount(privateKey);
-
-  console.error('AIRNODE_PRIVATE_KEY or AIRNODE_MNEMONIC environment variable is required');
+  console.error(resolved.error);
   // eslint-disable-next-line unicorn/no-process-exit
   process.exit(1);
 }
