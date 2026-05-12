@@ -90,6 +90,17 @@ function parseRequestRoute(pathname: string): string | undefined {
   return match[1];
 }
 
+// Rate-limit key. By default the socket peer's address; when `trustForwardedFor`
+// is set (Airnode behind a trusted reverse proxy), the first `X-Forwarded-For`
+// entry — the originating client — instead.
+function resolveClientIp(request: Request, peerAddress: string | undefined, trustForwardedFor: boolean): string {
+  if (trustForwardedFor) {
+    const forwarded = request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return peerAddress ?? 'unknown';
+}
+
 // =============================================================================
 // Request body parsing
 // =============================================================================
@@ -172,7 +183,7 @@ function createServer(deps: ServerDependencies): ServerHandle {
       }
 
       if (rateLimitConfig) {
-        const ip = bunServer.requestIP(request)?.address ?? 'unknown';
+        const ip = resolveClientIp(request, bunServer.requestIP(request)?.address, rateLimitConfig.trustForwardedFor);
         const allowed = checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max);
         if (!allowed) {
           return errorResponse('Too Many Requests', 429, cors);

@@ -201,6 +201,14 @@ encrypted. The auction contract compares `FHE.gt(bid, reservePrice)` without rev
 - **One consumer per endpoint.** The encrypted input is bound to `encrypt.contract`, so an endpoint feeds exactly one
   consumer contract. If several contracts need the same feed, deploy a shared registry contract (the
   `ConfidentialPriceFeed` pattern) that re-shares the handle via `FHE.allow`, or define one endpoint per consumer.
+- **Avoid caching encrypt endpoints.** A [cached](/docs/config/apis#cache) response replays the same signed bytes for
+  the whole TTL — and `AirnodeVerifier` deduplicates on `keccak256(endpointId, timestamp, data)`, so only the _first_
+  on-chain submission of a cached ciphertext succeeds; the rest revert "already fulfilled". A cache on an encrypt
+  endpoint therefore both serves stale data and caps on-chain ingestion to one submission per window. Leave `cache`
+  unset unless that's actually what you want.
+- **Set `encoding.times` explicitly.** If you omit `encoding.times`, the requester controls the scale multiplier via the
+  `_times` parameter (and the endpoint ID records `times=*`). For an encrypt endpoint you almost always want a fixed
+  scale — set `times: '1'` if you mean "no scaling".
 - **Throughput.** The Zama coprocessor currently handles a limited number of input verifications per second.
   High-frequency price feeds may hit this limit.
 - **Numeric, encoded responses only.** `encrypt` requires an `encoding` block producing a single `int256`/`uint256`

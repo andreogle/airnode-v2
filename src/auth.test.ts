@@ -127,20 +127,18 @@ describe('x402 auth', () => {
   async function makeSignedProof(
     overrides: {
       readonly txHash?: Hex;
-      readonly paymentId?: Hex;
       readonly expiresAt?: number;
       readonly airnode?: Hex;
       readonly endpointId?: Hex;
     } = {}
   ): Promise<string> {
     const txHash = overrides.txHash ?? `0x${'ab'.repeat(32)}`;
-    const paymentId = overrides.paymentId ?? `0x${'cd'.repeat(32)}`;
     const expiresAt = overrides.expiresAt ?? Math.floor(Date.now() / 1000) + 120;
     const airnode = overrides.airnode ?? CTX.airnode;
     const endpointId = overrides.endpointId ?? CTX.endpointId;
-    const hash = buildPaymentAuthHash(airnode, endpointId, paymentId, expiresAt);
+    const hash = buildPaymentAuthHash(airnode, endpointId, expiresAt);
     const signature = await payerAccount.signMessage({ message: { raw: hash } });
-    return JSON.stringify({ txHash, paymentId, expiresAt, signature });
+    return JSON.stringify({ txHash, expiresAt, signature });
   }
 
   test('returns 402 with payment details when no proof header', async () => {
@@ -155,7 +153,6 @@ describe('x402 auth', () => {
       expect(result.paymentDetails.amount).toBe('1000000');
       expect(result.paymentDetails.network).toBe(8453);
       expect(result.paymentDetails.recipient).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
-      expect(result.paymentDetails.paymentId).toMatch(/^0x/);
       expect(result.paymentDetails.expiresAt).toBeGreaterThan(0);
     }
   });
@@ -168,7 +165,6 @@ describe('x402 auth', () => {
   test('rejects malformed tx hash in JSON proof', async () => {
     const proof = JSON.stringify({
       txHash: '0xdeadbeef',
-      paymentId: `0x${'cd'.repeat(32)}`,
       expiresAt: Math.floor(Date.now() / 1000) + 120,
       signature: `0x${'ab'.repeat(65)}`,
     });

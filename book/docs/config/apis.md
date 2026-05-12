@@ -82,7 +82,11 @@ key rotation.
 
 ### x402 (HTTP-native payment)
 
-Pay-per-request using on-chain transfers. When a client requests without payment, the server returns a 402:
+Pay-per-request using on-chain transfers. When a client requests without payment, the server returns a 402.
+
+This is an x402-_flavoured_ scheme — it borrows the HTTP 402 pay-per-request idea but is **not** the x402 wire protocol:
+clients pay on-chain first and then prove the confirmed transaction, rather than handing over a signed EIP-3009
+authorization in an `X-PAYMENT` header.
 
 ```yaml
 auth:
@@ -90,19 +94,20 @@ auth:
   network: 8453 # chain ID for payment
   rpc: https://mainnet.base.org
   token: '0xA0b8...' # ERC-20 address (or 0x000...0 for ETH)
-  amount: '1000000' # in token's smallest unit (e.g. 1 USDC = 1000000)
+  amount: '1000000' # token base units, integer string (e.g. 1 USDC = 1000000)
   recipient: '0x...' # operator's address
   expiry: 300000 # payment window in ms (default 5 min)
 ```
 
-Flow: client POSTs → gets 402 with payment details (including `airnode`, `endpointId`, `paymentId`, `expiresAt`) → sends
-on-chain transfer → signs `keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))` with the payer's
-EOA → retries with `X-Payment-Proof: <json>` where the JSON is
-`{ "txHash": "0x…", "paymentId": "0x…", "expiresAt": <unix-seconds>, "signature": "0x…" }`.
+Flow: client POSTs → gets `402` with payment details (`airnode`, `endpointId`, `amount`, `token`, `network`,
+`recipient`, `expiresAt`) → sends the on-chain transfer → signs
+`keccak256(encodePacked(airnode, endpointId, uint64(expiresAt)))` with the payer's EOA → retries with
+`X-Payment-Proof: <json>` where the JSON is `{ "txHash": "0x…", "expiresAt": <unix-seconds>, "signature": "0x…" }`.
 
 The server checks that the signature recovers to the transaction's sender, that the proof has not expired, and that the
-transaction matches the configured amount and recipient. This binds the payment to a specific request so mempool
-observers cannot steal it and cross-endpoint upgrade attacks are blocked. Each tx hash can only be used once.
+transaction matches the configured amount and recipient. The signature binds the payment to a specific airnode and
+endpoint (so it can't be replayed elsewhere) and to a short `expiresAt` window. Each `txHash` is the per-payment
+uniqueness key — it can be redeemed exactly once.
 
 `expiresAt` must be a future unix-seconds timestamp no further ahead than 10 minutes; longer-lived proofs are rejected.
 
@@ -191,7 +196,8 @@ Controls how the server delivers the response:
   polls `GET /requests/{requestId}` until the status is `complete` or `failed`.
 - **`stream`** — return the signed response as a Server-Sent Event (SSE). The response has
   `Content-Type: text/event-stream`. The full pipeline runs (including plugins), and the signed result is delivered as a
-  single `data:` event with `done: true`.
+  single `data:` event with `done: true`. A pipeline error is returned as the plain HTTP error response, not an SSE
+  frame.
 
 ```yaml
 endpoints:
@@ -205,6 +211,10 @@ endpoints:
     method: POST
     mode: stream # return SSE events
 ```
+
+The response [cache](#cache) applies to `sync`-mode endpoints only. `async` returns a `202`+`pollUrl` and `stream`
+returns an SSE frame, so a cached plain-JSON body would break those response contracts — those modes neither read nor
+write the cache.
 
 ## Parameters
 
@@ -348,7 +358,7 @@ Produces the request body:
 
 ### Cookie parameters
 
-Sent as cookies on the upstream request:
+Sent as cookies on the upstream request, joined into a single `Cookie` header:
 
 ```yaml
 parameters:
@@ -357,6 +367,9 @@ parameters:
     fixed: ${SESSION_TOKEN}
     secret: true
 ```
+
+Cookie values are concatenated verbatim, so a value containing `;`, CR, or LF (which would let it inject extra cookie
+pairs or split the header) is rejected — keep cookie values to ordinary cookie content.
 
 ## `responseMatches`
 

@@ -113,13 +113,28 @@ When a proof is successfully generated, the response includes a `proof` field:
 The `proof.signatures.attestorAddress` identifies the attestor that generated the proof. The `claimSignature` is a
 signature over the claim data that can be verified independently.
 
+## What the proof attests (and what it doesn't)
+
+The proof covers the _request_ exactly: Airnode hands the gateway the same URL, method, headers, and body it actually
+sent, and rejects any returned proof whose `claim.parameters` disagree (treated as a non-fatal failure — see below).
+
+It does **not** guarantee that the proof's _response_ equals the data Airnode signed. The attestor performs its own TLS
+session to the upstream, separate from Airnode's. For volatile data (a price that ticks between the two fetches) the
+attested response can legitimately differ from the signed payload. A future on-chain verifier that wants to bind the
+proof to the signed data must account for this — e.g. by comparing only the `responseMatches`-extracted fields and
+allowing a tolerance, not by requiring byte-for-byte equality.
+
 ## Non-fatal behavior
 
-Proof generation is **non-fatal**. If the proof gateway is unavailable, times out, or returns an error:
+Proof generation is **non-fatal**. If the proof gateway is unavailable, times out, returns an error, or returns a proof
+that doesn't match the request Airnode made:
 
 - The response is still returned without the `proof` field.
 - A `WARN` log is emitted with the failure reason.
 - The EIP-191 signature is unaffected.
+
+The gateway timeout is configurable via [`settings.proof.timeout`](/docs/config/settings#proof) (default 30s). Because
+the proof is fetched after signing on the sync path, that timeout is added to the response latency on a slow gateway.
 
 This ensures that proof infrastructure issues do not block data delivery. Consumers that require proofs should check for
 the presence of the `proof` field and reject responses without it.

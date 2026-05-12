@@ -23,6 +23,8 @@ let mockHandle: Uint8Array = new Uint8Array(32).fill(0x11);
 let mockProof: Uint8Array = new Uint8Array([0x22, 0x22, 0x22, 0x22]);
 
 let mockEmptyHandles = false;
+let createInstanceShouldFail = false;
+let encryptShouldFail = false;
 
 function makeBuilder(): Record<string, unknown> {
   const record = (method: string) => (value: bigint) => {
@@ -36,7 +38,10 @@ function makeBuilder(): Record<string, unknown> {
     add64: record('add64'),
     add128: record('add128'),
     add256: record('add256'),
-    encrypt: () => Promise.resolve({ handles: mockEmptyHandles ? [] : [mockHandle], inputProof: mockProof }),
+    encrypt: () =>
+      encryptShouldFail
+        ? Promise.reject(new Error('relayer encrypt failed'))
+        : Promise.resolve({ handles: mockEmptyHandles ? [] : [mockHandle], inputProof: mockProof }),
   };
   return builder;
 }
@@ -46,6 +51,7 @@ void mock.module('@zama-fhe/relayer-sdk/node', () => ({
   MainnetConfig: MAINNET_PRESET,
   createInstance: (config: unknown) => {
     createInstanceConfigs.push(config);
+    if (createInstanceShouldFail) return Promise.reject(new Error('relayer unavailable'));
     return Promise.resolve({
       createEncryptedInput: (contract: string, user: string) => {
         encryptedInputArgs.push({ contract, user });
@@ -81,6 +87,8 @@ describe('encryptResponse', () => {
     mockHandle = new Uint8Array(32).fill(0x11);
     mockProof = new Uint8Array([0x22, 0x22, 0x22, 0x22]);
     mockEmptyHandles = false;
+    createInstanceShouldFail = false;
+    encryptShouldFail = false;
     resetFheInstance();
   });
 
@@ -192,6 +200,51 @@ describe('encryptResponse', () => {
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
     resetFheInstance();
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(2n), 'int256');
+    expect(createInstanceConfigs).toHaveLength(2);
+  });
+
+  test('shares a single createInstance call across concurrent first requests', async () => {
+    const [a, b] = await Promise.all([
+      encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256'),
+      encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(2n), 'int256'),
+    ]);
+    expect(a).toBe(EXPECTED_PACKED);
+    expect(b).toBe(EXPECTED_PACKED);
+    expect(createInstanceConfigs).toHaveLength(1);
+  });
+
+  test('drops the cached instance when createInstance fails so the next request retries', async () => {
+    createInstanceShouldFail = true;
+    const failed = encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
+    expect(failed).rejects.toThrow('relayer unavailable');
+    await failed.catch(() => {});
+    expect(createInstanceConfigs).toHaveLength(1);
+
+    createInstanceShouldFail = false;
+    const result = await encryptResponse(
+      SEPOLIA,
+      { type: 'euint256', contract: CONTRACT },
+      encodedInt256(2n),
+      'int256'
+    );
+    expect(result).toBe(EXPECTED_PACKED);
+    expect(createInstanceConfigs).toHaveLength(2);
+  });
+
+  test('drops the cached instance when an encrypt call fails so the next request rebuilds it', async () => {
+    encryptShouldFail = true;
+    const failed = encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
+    expect(failed).rejects.toThrow('relayer encrypt failed');
+    await failed.catch(() => {});
+
+    encryptShouldFail = false;
+    const result = await encryptResponse(
+      SEPOLIA,
+      { type: 'euint256', contract: CONTRACT },
+      encodedInt256(2n),
+      'int256'
+    );
+    expect(result).toBe(EXPECTED_PACKED);
     expect(createInstanceConfigs).toHaveLength(2);
   });
 });

@@ -149,13 +149,15 @@ The full pipeline runs (including plugins), and the signed result is delivered a
 
 ## x402 payment
 
+> This is an x402-_flavoured_ scheme — pay on-chain first, then prove the confirmed transaction. It is **not** the x402
+> wire protocol (no `X-PAYMENT`/EIP-3009 authorization).
+
 For endpoints with x402 auth, the first request returns 402 with payment details:
 
 ```json
 {
   "airnode": "0x...",
   "endpointId": "0x...",
-  "paymentId": "0x...",
   "amount": "1000000",
   "token": "0xA0b8...",
   "network": 8453,
@@ -164,18 +166,17 @@ For endpoints with x402 auth, the first request returns 402 with payment details
 }
 ```
 
-After sending the on-chain transfer, the payer signs an authorisation binding the payment to this specific request and
-airnode:
+After sending the on-chain transfer, the payer signs an authorisation binding the payment to this airnode and endpoint:
 
 ```
-message = keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))
+message = keccak256(encodePacked(airnode, endpointId, uint64(expiresAt)))
 signature = EIP-191 personal-sign(message) with the EOA that sent the transaction
 ```
 
 Retry with a JSON-encoded `X-Payment-Proof` header:
 
 ```bash
-PROOF='{"txHash":"0x...","paymentId":"0x...","expiresAt":1700001000,"signature":"0x..."}'
+PROOF='{"txHash":"0x...","expiresAt":1700001000,"signature":"0x..."}'
 
 curl -X POST http://airnode.example.com/endpoints/0x... \
   -H "Content-Type: application/json" \
@@ -184,8 +185,9 @@ curl -X POST http://airnode.example.com/endpoints/0x... \
 ```
 
 The server verifies the signature recovers to the transaction sender and checks that `expiresAt` is in the future and no
-more than 10 minutes ahead. This binds the payment to the specific request so mempool observers cannot steal the call,
-and signatures cannot be reused across different airnodes, endpoints, or (after expiry) time.
+more than 10 minutes ahead. This binds the payment to the specific airnode and endpoint (signatures can't be reused
+across either, nor after expiry), and each `txHash` can be redeemed only once — that on-chain hash is the per-payment
+uniqueness key.
 
 ## Error responses
 

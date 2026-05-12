@@ -73,7 +73,16 @@ function buildApiRequest(api: Api, endpoint: Endpoint, requestParameters: Record
   };
 
   if (cookieParameters.length > 0) {
-    const cookieString = cookieParameters.map((p) => `${p.name}=${p.value as string}`).join('; ');
+    // Cookie values are concatenated raw into the Cookie header, so a `;`, CR,
+    // or LF in a (possibly requester-supplied) value would let it inject extra
+    // cookie pairs or split the header — reject those outright. (Path/query are
+    // percent-encoded and header values are validated by fetch; only cookies
+    // are joined verbatim.)
+    const invalidCookie = cookieParameters.find((p) => /[;\r\n]/.test(String(p.value)));
+    if (invalidCookie) {
+      throw new Error(`Cookie parameter "${invalidCookie.name}" value must not contain ';', CR, or LF`);
+    }
+    const cookieString = cookieParameters.map((p) => `${p.name}=${String(p.value)}`).join('; ');
     const existing = headers['Cookie'];
     headers['Cookie'] = existing ? `${existing}; ${cookieString}` : cookieString; // eslint-disable-line functional/immutable-data
   }

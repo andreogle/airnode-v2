@@ -1,13 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import type { Hex } from 'viem';
 import { createAsyncRequestStore } from './async';
+import type { AsyncRequestStore, PendingRequest } from './async';
 
 describe('createAsyncRequestStore', () => {
   const ENDPOINT_ID: Hex = '0x04e77a11d6561a70385e2e8e315989cb24bb35128cb4d5a8b3ece93a3c72295b';
 
+  function mustCreate(store: AsyncRequestStore): PendingRequest {
+    const req = store.create(ENDPOINT_ID);
+    if (!req) throw new Error('async store unexpectedly full');
+    return req;
+  }
+
   test('creates a pending request', () => {
     const store = createAsyncRequestStore();
-    const req = store.create(ENDPOINT_ID);
+    const req = mustCreate(store);
 
     expect(req.requestId).toMatch(/^0x/);
     expect(req.status).toBe('pending');
@@ -18,7 +25,7 @@ describe('createAsyncRequestStore', () => {
 
   test('retrieves a created request', () => {
     const store = createAsyncRequestStore();
-    const req = store.create(ENDPOINT_ID);
+    const req = mustCreate(store);
 
     const retrieved = store.get(req.requestId);
     expect(retrieved).toBeDefined();
@@ -29,7 +36,7 @@ describe('createAsyncRequestStore', () => {
 
   test('transitions through statuses', () => {
     const store = createAsyncRequestStore();
-    const req = store.create(ENDPOINT_ID);
+    const req = mustCreate(store);
 
     expect(store.get(req.requestId)?.status).toBe('pending');
 
@@ -45,7 +52,7 @@ describe('createAsyncRequestStore', () => {
 
   test('handles failure status', () => {
     const store = createAsyncRequestStore();
-    const req = store.create(ENDPOINT_ID);
+    const req = mustCreate(store);
 
     store.setProcessing(req.requestId);
     store.setFailed(req.requestId, 'API timeout');
@@ -64,11 +71,34 @@ describe('createAsyncRequestStore', () => {
 
   test('generates unique request IDs', () => {
     const store = createAsyncRequestStore();
-    const r1 = store.create(ENDPOINT_ID);
-    const r2 = store.create(ENDPOINT_ID);
+    const r1 = mustCreate(store);
+    const r2 = mustCreate(store);
 
     expect(r1.requestId).not.toBe(r2.requestId);
 
+    store.stop();
+  });
+
+  test('refuses new requests when full of in-flight requests', () => {
+    const store = createAsyncRequestStore();
+    Array.from({ length: 100 }, () => store.create(ENDPOINT_ID));
+    expect(store.create(ENDPOINT_ID)).toBeUndefined();
+    store.stop();
+  });
+
+  test('a freshly finished request is retained for polling but still holds its slot', () => {
+    const store = createAsyncRequestStore();
+    const created = Array.from({ length: 100 }, () => {
+      const req = store.create(ENDPOINT_ID);
+      if (req) store.setComplete(req.requestId, { ok: true });
+      return req;
+    });
+    // The slots are still occupied (results retained), so a new request is refused...
+    expect(store.create(ENDPOINT_ID)).toBeUndefined();
+    // ...and the finished results remain retrievable in the meantime.
+    const first = created[0];
+    expect(first && store.get(first.requestId)?.result).toEqual({ ok: true });
+    expect(first && store.get(first.requestId)?.finishedAt).toBeGreaterThan(0);
     store.stop();
   });
 });

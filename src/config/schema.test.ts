@@ -305,7 +305,11 @@ apis:
 
     expect(result.version).toBe('1.0');
     expect(result.apis).toHaveLength(1);
-    expect(result.settings.proof).toEqual({ type: 'reclaim', gatewayUrl: 'http://localhost:5177/v1/prove' });
+    expect(result.settings.proof).toEqual({
+      type: 'reclaim',
+      gatewayUrl: 'http://localhost:5177/v1/prove',
+      timeout: 30_000,
+    });
     expect(result.apis[0]?.endpoints[0]?.responseMatches).toEqual([
       { type: 'regex', value: String.raw`"usd":\s*(?<price>[\d.]+)` },
     ]);
@@ -467,7 +471,7 @@ describe('proof settings', () => {
     expect(result.settings.proof).toBe('none');
   });
 
-  test('accepts proof: reclaim with gatewayUrl', () => {
+  test('accepts proof: reclaim with gatewayUrl, defaulting timeout', () => {
     const raw = MINIMAL_CONFIG.replace(
       'proof: none',
       `proof:
@@ -475,9 +479,22 @@ describe('proof settings', () => {
     gatewayUrl: https://prove.example.com/v1/prove`
     );
     const result = configSchema.parse(parseYaml(raw));
-    const proof = result.settings.proof as { type: string; gatewayUrl: string };
+    const proof = result.settings.proof as { type: string; gatewayUrl: string; timeout: number };
     expect(proof.type).toBe('reclaim');
     expect(proof.gatewayUrl).toBe('https://prove.example.com/v1/prove');
+    expect(proof.timeout).toBe(30_000);
+  });
+
+  test('accepts a custom proof timeout', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'proof: none',
+      `proof:
+    type: reclaim
+    gatewayUrl: https://prove.example.com/v1/prove
+    timeout: 5000`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect((result.settings.proof as { timeout: number }).timeout).toBe(5000);
   });
 
   test('rejects reclaim proof without gatewayUrl', () => {

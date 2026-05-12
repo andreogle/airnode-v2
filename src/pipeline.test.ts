@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { type Hex, hexToBytes } from 'viem';
+import { createAsyncRequestStore } from './async';
 import { createCache } from './cache';
 import { deriveEndpointId } from './endpoint';
 import type { ResolvedEndpoint } from './endpoint';
@@ -204,6 +205,57 @@ describe('handleEndpointRequest', () => {
     const body1 = (await response1.json()) as RawResponseBody;
     const body2 = (await response2.json()) as RawResponseBody;
     expect(body2.rawData).toEqual(body1.rawData);
+  });
+
+  test('streaming endpoint returns an SSE frame carrying the signed result', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved({}, { mode: 'stream', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+    const text = await response.text();
+    expect(text.startsWith('data: ')).toBe(true);
+    const payload = JSON.parse(text.slice('data: '.length).trim()) as { done: boolean; signature: string };
+    expect(payload.done).toBe(true);
+    expect(payload.signature).toMatch(/^0x/);
+  });
+
+  test('streaming endpoint propagates a pipeline error as a plain JSON response', async () => {
+    fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
+    const resolved = makeResolved({}, { mode: 'stream', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('API returned no data to encode');
+  });
+
+  test('async endpoint returns 202 with a requestId and pollUrl', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ endpointMap, asyncStore });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+
+    expect(response.status).toBe(202);
+    const body = (await response.json()) as { requestId: string; status: string; pollUrl: string };
+    expect(body.status).toBe('pending');
+    expect(body.requestId).toMatch(/^0x[\da-f]{64}$/);
+    expect(body.pollUrl).toContain(body.requestId);
+    asyncStore.stop();
   });
 
   test('correct response structure for signed response', async () => {

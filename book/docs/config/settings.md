@@ -58,10 +58,11 @@ settings:
     gatewayUrl: http://localhost:5177/v1/prove
 ```
 
-| Field        | Type     | Required | Description                                                  |
-| ------------ | -------- | -------- | ------------------------------------------------------------ |
-| `type`       | `string` | Yes      | Must be `'reclaim'`.                                         |
-| `gatewayUrl` | `string` | Yes      | Full URL of the proof gateway endpoint. Must be a valid URL. |
+| Field        | Type     | Required             | Description                                                                                                                                                                     |
+| ------------ | -------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`       | `string` | Yes                  | Must be `'reclaim'`.                                                                                                                                                            |
+| `gatewayUrl` | `string` | Yes                  | Full URL of the proof gateway endpoint. Must be a valid URL.                                                                                                                    |
+| `timeout`    | `number` | No (default `30000`) | Gateway request timeout in milliseconds. The proof is fetched after signing on the sync path, so this latency is added to the response; a timeout just omits the `proof` field. |
 
 When enabled, Airnode requests a TLS proof from the gateway after each API call. The proof is attached to the response
 in a `proof` field alongside the signature. See [TLS Proofs](/docs/concepts/proofs) for details on how proofs work.

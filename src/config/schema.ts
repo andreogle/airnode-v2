@@ -156,6 +156,10 @@ const corsSchema = z.object({
 const rateLimitSchema = z.object({
   window: z.number().int().positive(),
   max: z.number().int().positive(),
+  // When Airnode runs behind a reverse proxy the socket peer is the proxy, so
+  // every client shares one bucket. Set this only if a *trusted* proxy sets
+  // `X-Forwarded-For` — its first entry is then used as the rate-limit key.
+  trustForwardedFor: z.boolean().default(false),
 });
 
 export const serverSchema = z.object({
@@ -176,6 +180,9 @@ const pluginEntrySchema = z.object({
 const reclaimProofSchema = z.object({
   type: z.literal('reclaim'),
   gatewayUrl: z.url(),
+  // The proof is fetched after signing on the sync path, so this latency is
+  // added to the response. Non-fatal: a timeout just omits the `proof` field.
+  timeout: z.number().int().positive().default(30_000),
 });
 
 const proofSchema = z.union([z.literal('none'), reclaimProofSchema]);

@@ -1,3 +1,4 @@
+import { go } from '@api3/promise-utils';
 import { type Hex, bytesToHex, decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { logger } from './logger';
 import type { Encrypt } from './types';
@@ -122,14 +123,16 @@ function addValue(builder: EncryptedInputBuilder, type: Encrypt['type'], value: 
 }
 
 // =============================================================================
-// Relayer instance (lazy, cached for the process lifetime)
+// Relayer instance (lazy, shared for the process lifetime)
 //
 // The SDK fetches the chain's FHE public key from the relayer on first use and
-// caches it internally. We create the instance once — re-creating it per request
-// would re-fetch keys and re-init WASM every time.
+// caches it internally — re-creating it per request would re-fetch keys and
+// re-init WASM every time. We cache the *promise*, so concurrent first requests
+// share one `createInstance` call; a rejected promise is dropped so the next
+// request retries (which also picks up a rotated chain key after a clear).
 // =============================================================================
 // eslint-disable-next-line functional/no-let
-let cachedInstance: FhevmInstance | undefined;
+let cachedInstance: Promise<FhevmInstance> | undefined;
 // eslint-disable-next-line functional/no-let
 let cachedConnectionKey: string | undefined;
 
@@ -141,21 +144,29 @@ function buildInstanceConfig(preset: Record<string, unknown>, connection: FheCon
   return { ...base, auth: { __type: 'ApiKeyHeader', value: connection.apiKey } };
 }
 
-async function getInstance(connection: FheConnection): Promise<FhevmInstance> {
-  const key = `${connection.network}|${connection.rpcUrl}`;
-  if (cachedInstance && cachedConnectionKey === key) return cachedInstance;
-
+async function loadInstance(connection: FheConnection): Promise<FhevmInstance> {
   const sdk = (await import('@zama-fhe/relayer-sdk/node')) as unknown as RelayerSdkModule;
   const preset = connection.network === 'mainnet' ? sdk.MainnetConfig : sdk.SepoliaConfig;
   const instance = await sdk.createInstance(buildInstanceConfig(preset, connection));
-
-  cachedInstance = instance;
-  cachedConnectionKey = key;
   logger.info(`FHE relayer instance initialized (network: ${connection.network})`);
   return instance;
 }
 
-// Reset the cached instance — for tests that swap the mocked SDK between cases.
+function getInstance(connection: FheConnection): Promise<FhevmInstance> {
+  const key = `${connection.network}|${connection.rpcUrl}`;
+  if (!cachedInstance || cachedConnectionKey !== key) {
+    cachedConnectionKey = key;
+    cachedInstance = loadInstance(connection).catch((error: unknown) => {
+      if (cachedConnectionKey === key) resetFheInstance();
+      throw error;
+    });
+  }
+  return cachedInstance;
+}
+
+// Drop the cached instance. Called on a relayer error (rebuild on the next
+// request, also picking up a rotated chain key) and by tests that swap the
+// mocked SDK between cases.
 function resetFheInstance(): void {
   cachedInstance = undefined;
   cachedConnectionKey = undefined;
@@ -172,15 +183,27 @@ async function encryptResponse(
   encodedData: Hex,
   solidityType: string
 ): Promise<Hex> {
+  // Value validation first: a bad request value is not a relayer problem, so it
+  // must not invalidate the cached instance.
   const value = toEncryptableValue(encodedData, solidityType, encrypt.type);
 
   const instance = await getInstance(connection);
+
   // Bind the encrypted input to the consumer contract and to AirnodeVerifier —
   // the address that will call the consumer's callback when it ingests this.
-  const input = instance.createEncryptedInput(encrypt.contract, connection.verifier);
-  addValue(input, encrypt.type, value);
+  const encrypted = await go(async () => {
+    const input = instance.createEncryptedInput(encrypt.contract, connection.verifier);
+    addValue(input, encrypt.type, value);
+    return input.encrypt();
+  });
+  if (!encrypted.success) {
+    // The relayer's state may have moved on under us — drop the cached instance
+    // so the next request rebuilds it.
+    resetFheInstance();
+    throw encrypted.error;
+  }
 
-  const { handles, inputProof } = await input.encrypt();
+  const { handles, inputProof } = encrypted.data;
   const handle = handles[0];
   if (!handle) {
     throw new Error('FHE encryption produced no handles');

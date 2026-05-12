@@ -49,6 +49,13 @@ function buildEncryptSpec(encrypt?: { readonly type: string; readonly contract: 
   return `fhe=${encrypt.type},contract=${encrypt.contract.toLowerCase()}`;
 }
 
+// Canonical string: `url|path|method|paramSpec[|encodingSpec[|encryptSpec]]`,
+// joined by `|`, where paramSpec/encodingSpec/encryptSpec use `,` and `=` as
+// internal delimiters. This is not a length-prefixed encoding, so in principle
+// a config containing those characters in a path or parameter value could be
+// crafted to collide with a different config — but the operator controls every
+// segment and has no incentive to collide with themselves, so we accept the
+// simpler form. (`buildEndpointMap` still catches accidental collisions.)
 function deriveEndpointId(api: Api, endpoint: Endpoint): Hex {
   const paramSpec = buildParameterSpec(endpoint.parameters);
   const tail = [buildEncodingSpec(endpoint.encoding), buildEncryptSpec(endpoint.encrypt)].filter((spec) => spec !== '');

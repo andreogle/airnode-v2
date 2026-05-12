@@ -137,9 +137,14 @@ async function buildRawResponse(
 // =============================================================================
 // TLS proof
 //
-// The proof gateway must attest the same HTTP request Airnode actually made.
-// We reuse the exact request shape (URL, headers, cookies, body) produced by
-// buildApiRequest so the TLS transcript cannot diverge from the signed data.
+// We hand the gateway the exact request shape (URL, method, headers, cookies,
+// body) that buildApiRequest produced, so the attested *request* matches what
+// Airnode actually sent (requestProof additionally rejects a proof whose
+// claim.parameters disagree). The attested *response*, though, comes from the
+// gateway's own separate fetch and can differ from what Airnode signed for
+// volatile data — a verifier comparing the two must account for that. Proof
+// fetching is non-fatal: a gateway error, timeout, or a mismatched proof just
+// omits the `proof` field.
 // =============================================================================
 async function fetchProofIfEnabled(
   resolved: ResolvedEndpoint,
@@ -158,13 +163,17 @@ async function fetchProofIfEnabled(
   const built = buildApiRequest(resolved.api, resolved.endpoint, parameters);
 
   const result = await go(() =>
-    requestProof(proof.gatewayUrl, {
-      url: built.url,
-      method: built.method,
-      headers: built.headers,
-      body: built.body,
-      responseMatches,
-    })
+    requestProof(
+      proof.gatewayUrl,
+      {
+        url: built.url,
+        method: built.method,
+        headers: built.headers,
+        body: built.body,
+        responseMatches,
+      },
+      proof.timeout
+    )
   );
 
   if (!result.success) {
@@ -387,29 +396,47 @@ function handleAsyncRequest(
 // =============================================================================
 // SSE streaming handler
 //
-// Runs the full pipeline (plugins included) via executeApiCall, then wraps the
-// signed result in a single SSE event. Real incremental streaming (proxying
-// chunked upstream responses) requires the upstream API to support it — that's
-// a future enhancement. For now, the SSE format lets clients use EventSource
-// and receive the signed response as a server-pushed event.
+// Runs the full pipeline (plugins included) via executeApiCall — inside the
+// same logger context and with the same onError/onResponseSent hooks as the
+// sync path — then wraps the signed result in a single SSE event. A non-200
+// pipeline outcome (plugin drop, bad encoding, upstream error) is propagated as
+// the plain HTTP error response, not a 200 SSE frame carrying an error payload.
+// Real incremental streaming (proxying chunked upstream responses) requires the
+// upstream API to support it — a future enhancement. The streaming path does
+// not use the response cache.
 // =============================================================================
 async function handleStreamingRequest(
   resolved: ResolvedEndpoint,
   requestId: Hex,
   endpointId: Hex,
   parameters: Record<string, string>,
-  deps: RequestDependencies
+  deps: RequestDependencies,
+  start: number
 ): Promise<Response> {
-  // Run the full pipeline (same as sync, with all plugin hooks)
-  const result = await go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
+  const result = await runWithContext({ requestId }, async () => {
+    logger.info(`Processing ${resolved.api.name}/${resolved.endpoint.name} (stream)`);
+    return go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
+  });
   if (!result.success) {
-    return jsonResponse({ error: 'API call failed' }, 502);
+    logger.error(`Streaming pipeline failed for endpoint ${endpointId}: ${result.error.message}`);
+    void deps.plugins.callError({ requestId, error: result.error, stage: 'pipeline', endpointId });
+    return jsonResponse({ error: 'Internal processing error' }, 502);
+  }
+  if (result.data.status !== 200) {
+    return result.data;
   }
 
   const body = await result.data.json();
+  void deps.plugins.callResponseSent({
+    requestId,
+    endpointId,
+    api: resolved.api.name,
+    endpoint: resolved.endpoint.name,
+    duration: Date.now() - start,
+  });
+
   const encoder = new TextEncoder();
   const event = `data: ${JSON.stringify({ done: true, ...(body as object) })}\n\n`;
-
   const stream = new ReadableStream({
     start: (controller) => {
       controller.enqueue(encoder.encode(event));
@@ -481,21 +508,31 @@ async function handleEndpointRequest(
     return jsonResponse({ error: validationError }, 400);
   }
 
-  // Check cache
-  const maxAge = resolveCacheMaxAge(resolved);
-  const cached = maxAge ? deps.cache.get(endpointId, parameters) : undefined;
-  if (cached) {
-    logger.debug(`Cache hit for ${resolved.api.name}/${resolved.endpoint.name}`);
-    return jsonResponse(cached);
-  }
-
-  // Dispatch by endpoint mode
+  // Dispatch by endpoint mode. The response cache is used by sync mode only —
+  // async returns a 202+pollUrl and stream returns an SSE frame, so serving a
+  // plain cached JSON body there would break the response contract for that
+  // mode. (Those modes don't populate the cache either.)
   if (resolved.endpoint.mode === 'stream') {
-    return handleStreamingRequest(resolved, requestId, endpointId, parameters, rdeps);
+    return handleStreamingRequest(resolved, requestId, endpointId, parameters, rdeps, start);
   }
 
   if (resolved.endpoint.mode === 'async' && deps.asyncStore) {
     return handleAsyncRequest(resolved, endpointId, parameters, rdeps);
+  }
+
+  // Check cache (sync mode)
+  const maxAge = resolveCacheMaxAge(resolved);
+  const cached = maxAge ? deps.cache.get(endpointId, parameters) : undefined;
+  if (cached) {
+    logger.debug(`Cache hit for ${resolved.api.name}/${resolved.endpoint.name}`);
+    void plugins.callResponseSent({
+      requestId,
+      endpointId,
+      api: resolved.api.name,
+      endpoint: resolved.endpoint.name,
+      duration: Date.now() - start,
+    });
+    return jsonResponse(cached);
   }
 
   // Synchronous execution (mode === 'sync' or default)

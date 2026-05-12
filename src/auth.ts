@@ -1,15 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { go, goSync } from '@api3/promise-utils';
-import {
-  type Hex,
-  bytesToHex,
-  createPublicClient,
-  encodePacked,
-  http,
-  keccak256,
-  recoverMessageAddress,
-  toHex,
-} from 'viem';
+import { type Hex, createPublicClient, encodePacked, http, keccak256, recoverMessageAddress, toHex } from 'viem';
 import { createBoundedMap } from './bounded-map';
 import type { ClientAuth, ClientAuthMethod } from './types';
 
@@ -36,7 +27,6 @@ interface AuthPaymentRequired {
   readonly paymentDetails: {
     readonly airnode: Hex;
     readonly endpointId: Hex;
-    readonly paymentId: Hex;
     readonly amount: string;
     readonly token: string;
     readonly network: number;
@@ -94,16 +84,21 @@ function checkApiKey(request: Request, keys: readonly string[]): AuthResult {
 // =============================================================================
 // x402 payment auth
 //
-// Clients authorise a specific request by signing
-//   keccak256(encodePacked(airnode, endpointId, paymentId, uint64(expiresAt)))
-// with the EOA that sends the payment transaction. Airnode recovers the
-// signer, checks tx.from matches, and enforces a tight expiresAt window. This
-// prevents:
+// Note: this is an x402-*flavoured* scheme (HTTP 402 pay-per-request), not the
+// x402 wire protocol — clients pay on-chain first and then prove the confirmed
+// transaction, rather than handing over a signed EIP-3009 authorization.
+//
+// A client authorises a specific request by signing
+//   keccak256(encodePacked(airnode, endpointId, uint64(expiresAt)))
+// with the EOA that sent the payment transaction. Airnode recovers the signer,
+// checks tx.from matches, and enforces a tight expiresAt window. This prevents:
 //   - Mempool observers from stealing a victim's payment (they can't produce
 //     a signature from the payer's key).
 //   - Cross-endpoint upgrade attacks (signature binds to endpointId).
 //   - Cross-airnode reuse (signature binds to airnode address).
 //   - Long-lived replay (expiresAt <= MAX_PROOF_LIFETIME_MS).
+// Per-payment uniqueness is the on-chain tx hash, deduplicated in
+// `usedPaymentProofs` — each confirmed transaction is redeemable exactly once.
 // =============================================================================
 interface PaymentProofEntry {
   readonly usedAt: number;
@@ -111,7 +106,6 @@ interface PaymentProofEntry {
 
 interface PaymentProofHeader {
   readonly txHash: Hex;
-  readonly paymentId: Hex;
   readonly expiresAt: number;
   readonly signature: Hex;
 }
@@ -132,14 +126,11 @@ const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
 
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const TX_HASH_REGEX = /^0x[\da-fA-F]{64}$/;
-const BYTES32_REGEX = /^0x[\da-fA-F]{64}$/;
 const ADDRESS_REGEX = /^0x[\da-fA-F]{40}$/;
 const HEX_SIGNATURE_REGEX = /^0x[\da-fA-F]+$/;
 
-function buildPaymentAuthHash(airnode: Hex, endpointId: Hex, paymentId: Hex, expiresAt: number): Hex {
-  return keccak256(
-    encodePacked(['address', 'bytes32', 'bytes32', 'uint64'], [airnode, endpointId, paymentId, BigInt(expiresAt)])
-  );
+function buildPaymentAuthHash(airnode: Hex, endpointId: Hex, expiresAt: number): Hex {
+  return keccak256(encodePacked(['address', 'bytes32', 'uint64'], [airnode, endpointId, BigInt(expiresAt)]));
 }
 
 function parsePaymentProof(raw: string): PaymentProofHeader | string {
@@ -150,7 +141,6 @@ function parsePaymentProof(raw: string): PaymentProofHeader | string {
   if (!p || typeof p !== 'object') return 'X-Payment-Proof must be a JSON object';
 
   if (typeof p.txHash !== 'string' || !TX_HASH_REGEX.test(p.txHash)) return 'Invalid txHash in payment proof';
-  if (typeof p.paymentId !== 'string' || !BYTES32_REGEX.test(p.paymentId)) return 'Invalid paymentId in payment proof';
   if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) return 'Invalid expiresAt in payment proof';
   if (typeof p.signature !== 'string' || !HEX_SIGNATURE_REGEX.test(p.signature)) {
     return 'Invalid signature in payment proof';
@@ -158,7 +148,6 @@ function parsePaymentProof(raw: string): PaymentProofHeader | string {
 
   return {
     txHash: p.txHash,
-    paymentId: p.paymentId,
     expiresAt: p.expiresAt,
     signature: p.signature,
   };
@@ -228,7 +217,6 @@ async function checkX402(
       paymentDetails: {
         airnode: context.airnode,
         endpointId: context.endpointId,
-        paymentId: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
         amount: config.amount,
         token: config.token,
         network: config.network,
@@ -252,7 +240,7 @@ async function checkX402(
     return { authenticated: false, error: 'Payment proof lifetime exceeds server limit' };
   }
 
-  const authHash = buildPaymentAuthHash(context.airnode, context.endpointId, parsed.paymentId, parsed.expiresAt);
+  const authHash = buildPaymentAuthHash(context.airnode, context.endpointId, parsed.expiresAt);
   const recovered = await go(() => recoverMessageAddress({ message: { raw: authHash }, signature: parsed.signature }));
   if (!recovered.success) return { authenticated: false, error: 'Invalid payment proof signature' };
   if (!ADDRESS_REGEX.test(recovered.data)) return { authenticated: false, error: 'Unrecognised signer address' };

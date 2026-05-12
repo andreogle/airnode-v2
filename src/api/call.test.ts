@@ -357,6 +357,21 @@ describe('callApi', () => {
     expect((options.headers as Record<string, string>)['Cookie']).toBeUndefined();
   });
 
+  test('rejects a cookie parameter value that could inject extra cookies', async () => {
+    const api = makeApi();
+    const endpoint = makeEndpoint({
+      parameters: [{ name: 'session', in: 'cookie', required: true, secret: false }],
+    });
+
+    const semicolon = callApi(api, endpoint, { session: 'abc; evil=1' });
+    expect(semicolon).rejects.toThrow('Cookie parameter "session"');
+    await semicolon.catch(() => {});
+
+    const crlf = callApi(api, endpoint, { session: 'abc\r\nX-Injected: 1' });
+    expect(crlf).rejects.toThrow('CR, or LF');
+    await crlf.catch(() => {});
+  });
+
   test('returns null data for empty response body (204 No Content)', async () => {
     fetchMock.mockResolvedValue({
       text: () => Promise.resolve(''),

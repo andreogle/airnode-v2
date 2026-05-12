@@ -94,4 +94,36 @@ describe('requestProof', () => {
     expect(request).rejects.toThrow('Connection refused');
     await request.catch(() => {});
   });
+
+  test('rejects a proof that attests a different URL than the request', async () => {
+    const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/other', method: 'GET' });
+    expect(request).rejects.toThrow('proof attests URL');
+    await request.catch(() => {});
+  });
+
+  test('rejects a proof whose claim parameters are not valid JSON', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          claim: { parameters: 'not-json' },
+          signatures: { claimSignature: '0xabc', attestorAddress: '0xdef' },
+        }),
+    });
+
+    const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
+    expect(request).rejects.toThrow('not valid JSON');
+    await request.catch(() => {});
+  });
+
+  test('rejects a proof missing the attestor signature', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ claim: { parameters: '{"url":"https://api.example.com/price","method":"GET"}' } }),
+    });
+
+    const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
+    expect(request).rejects.toThrow('missing attestor signature');
+    await request.catch(() => {});
+  });
 });

@@ -199,7 +199,7 @@ describe('createServer', () => {
 
   test('rate limiting returns 429 after max requests', async () => {
     const deps = makeDeps({
-      config: makeConfig({ rateLimit: { window: 60_000, max: 3 } }),
+      config: makeConfig({ rateLimit: { window: 60_000, max: 3, trustForwardedFor: false } }),
     });
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
@@ -217,6 +217,39 @@ describe('createServer', () => {
     expect(r4.status).toBe(429);
     const body = (await r4.json()) as { error: string };
     expect(body.error).toBe('Too Many Requests');
+  });
+
+  test('rate limiting buckets by X-Forwarded-For when trustForwardedFor is set', async () => {
+    const deps = makeDeps({
+      config: makeConfig({ rateLimit: { window: 60_000, max: 1, trustForwardedFor: true } }),
+    });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+    const get = (xff: string): Promise<Response> => fetch(`${baseUrl}/health`, { headers: { 'X-Forwarded-For': xff } });
+
+    // Each distinct forwarded client gets its own bucket: one request each is allowed.
+    const clientA = await get('203.0.113.1');
+    expect(clientA.status).toBe(200);
+    const clientB = await get('203.0.113.2, 10.0.0.1');
+    expect(clientB.status).toBe(200);
+    // ...but a second request from the same forwarded client is limited.
+    const clientAgain = await get('203.0.113.1');
+    expect(clientAgain.status).toBe(429);
+  });
+
+  test('rate limiting ignores X-Forwarded-For unless trustForwardedFor is set', async () => {
+    const deps = makeDeps({
+      config: makeConfig({ rateLimit: { window: 60_000, max: 1, trustForwardedFor: false } }),
+    });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+    const get = (xff: string): Promise<Response> => fetch(`${baseUrl}/health`, { headers: { 'X-Forwarded-For': xff } });
+
+    // Both requests share the socket-peer bucket regardless of the spoofed header.
+    const first = await get('203.0.113.1');
+    expect(first.status).toBe(200);
+    const second = await get('203.0.113.2');
+    expect(second.status).toBe(429);
   });
 
   test('OPTIONS preflight returns correct headers', async () => {

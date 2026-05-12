@@ -20,15 +20,16 @@ server:
 
 ## Fields
 
-| Field              | Type       | Required | Default     | Description                                                                 |
-| ------------------ | ---------- | -------- | ----------- | --------------------------------------------------------------------------- |
-| `port`             | `number`   | Yes      | --          | TCP port the server listens on.                                             |
-| `host`             | `string`   | No       | `'0.0.0.0'` | Bind address. Use `127.0.0.1` to restrict to localhost.                     |
-| `cors`             | `object`   | No       | --          | CORS configuration. When omitted, `Access-Control-Allow-Origin: *` is used. |
-| `cors.origins`     | `string[]` | No       | `['*']`     | Allowed origins. Each entry is joined with `, ` in the response header.     |
-| `rateLimit`        | `object`   | No       | --          | Per-IP rate limiting. When omitted, no rate limiting is applied.            |
-| `rateLimit.window` | `number`   | Yes      | --          | Time window in milliseconds.                                                |
-| `rateLimit.max`    | `number`   | Yes      | --          | Maximum requests per IP within the window.                                  |
+| Field                         | Type       | Required | Default     | Description                                                                                         |
+| ----------------------------- | ---------- | -------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| `port`                        | `number`   | Yes      | --          | TCP port the server listens on.                                                                     |
+| `host`                        | `string`   | No       | `'0.0.0.0'` | Bind address. Use `127.0.0.1` to restrict to localhost.                                             |
+| `cors`                        | `object`   | No       | --          | CORS configuration. When omitted, `Access-Control-Allow-Origin: *` is used.                         |
+| `cors.origins`                | `string[]` | No       | `['*']`     | Allowed origins. Each entry is joined with `, ` in the response header.                             |
+| `rateLimit`                   | `object`   | No       | --          | Per-IP rate limiting. When omitted, no rate limiting is applied.                                    |
+| `rateLimit.window`            | `number`   | Yes      | --          | Time window in milliseconds.                                                                        |
+| `rateLimit.max`               | `number`   | Yes      | --          | Maximum requests per IP within the window.                                                          |
+| `rateLimit.trustForwardedFor` | `boolean`  | No       | `false`     | Use the first `X-Forwarded-For` entry as the client IP. Only enable behind a trusted reverse proxy. |
 
 ## Minimal
 
@@ -57,6 +58,11 @@ server:
 When a client exceeds the limit, the server returns `429 Too Many Requests`.
 
 The rate limiter tracks up to 10,000 unique IPs. When this limit is reached, the oldest entries are evicted.
+
+By default the client IP is the socket peer. If Airnode runs behind a reverse proxy that is the proxy's address, so
+every client would share one bucket — set `rateLimit.trustForwardedFor: true` to use the first `X-Forwarded-For` entry
+instead. Only enable this when a trusted proxy controls that header; a client-supplied `X-Forwarded-For` is otherwise
+trivially spoofable.
 
 ## CORS
 
