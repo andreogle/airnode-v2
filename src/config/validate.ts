@@ -1,6 +1,7 @@
 import { goSync } from '@api3/promise-utils';
 import { parse } from 'yaml';
 import type { z } from 'zod/v4';
+import { deriveEndpointId } from '../endpoint';
 import { interpolateEnvironment } from './parser';
 import { configSchema } from './schema';
 
@@ -42,7 +43,19 @@ function crossFieldErrors(config: z.infer<typeof configSchema>): readonly string
       ? [`Duplicate plugin source(s): ${[...new Set(duplicatePluginSources)].join(', ')}`]
       : [];
 
-  return [...apiNameErrors, ...endpointNameErrors, ...pluginErrors];
+  // Two endpoints with identical specifications derive the same endpoint ID,
+  // which would silently shadow one another in the endpoint map.
+  const endpointEntries = config.apis.flatMap((api) =>
+    api.endpoints.map((endpoint) => ({ id: deriveEndpointId(api, endpoint), label: `${api.name}/${endpoint.name}` }))
+  );
+  const endpointIds = endpointEntries.map((e) => e.id);
+  const duplicateEndpointIds = endpointIds.filter((id, i, all) => all.indexOf(id) !== i);
+  const endpointIdErrors = [...new Set(duplicateEndpointIds)].map((id) => {
+    const labels = endpointEntries.filter((e) => e.id === id).map((e) => e.label);
+    return `Endpoints with identical specifications (same endpoint ID ${id}): ${labels.join(', ')}`;
+  });
+
+  return [...apiNameErrors, ...endpointNameErrors, ...pluginErrors, ...endpointIdErrors];
 }
 
 // =============================================================================

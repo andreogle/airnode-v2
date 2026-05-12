@@ -347,6 +347,24 @@ describe('handleEndpointRequest', () => {
     expect(body.error).toContain('_path');
   });
 
+  test('ignores a non-string reserved encoding parameter (no crash)', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved(); // no config encoding — requester would control it
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    // A client could send `_type` as a non-string (the request body's parameter
+    // values are not type-validated). It must be treated as absent, not passed
+    // to processResponse — so this becomes "missing _type" (400), not a 502.
+    const params = { _type: { evil: 1 }, _path: '$.result' } as unknown as Record<string, string>;
+    const response = await handleEndpointRequest(makeRequest(), endpointId, params, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('_type');
+  });
+
   test('returns 400 when _path is provided without _type', async () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved();

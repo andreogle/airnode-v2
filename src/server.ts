@@ -93,7 +93,25 @@ function parseRequestRoute(pathname: string): string | undefined {
 // =============================================================================
 // Request body parsing
 // =============================================================================
-async function parseRequestBody(request: Request): Promise<Record<string, string> | 'too_large' | 'bad_content_type'> {
+type ParsedBody = Record<string, string> | 'too_large' | 'bad_content_type' | 'bad_parameters';
+
+// The request body must be `{ parameters: { ... } }` — `parameters`, when
+// present, must be a plain object. We do NOT validate or coerce the individual
+// values here: a `body`-typed parameter may legitimately be nested JSON (it is
+// serialized whole into the upstream request body), while query/path/header/
+// cookie parameters are coerced to strings further down in `buildApiRequest`.
+// See the limitation note in book/docs/config/apis.md ("Parameter values").
+function extractRequestParameters(body: unknown): Record<string, string> | 'bad_parameters' {
+  if (body === null || body === undefined) return {};
+  if (typeof body !== 'object' || Array.isArray(body)) return 'bad_parameters';
+  const raw = (body as { parameters?: unknown }).parameters;
+  if (raw === null || raw === undefined) return {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) return 'bad_parameters';
+  // Values stay untyped; the pipeline handles each parameter by its `in` kind.
+  return raw as Record<string, string>;
+}
+
+async function parseRequestBody(request: Request): Promise<ParsedBody> {
   const contentType = request.headers.get('Content-Type');
   if (contentType && !contentType.includes('application/json')) {
     return 'bad_content_type';
@@ -106,11 +124,11 @@ async function parseRequestBody(request: Request): Promise<Record<string, string
 
   const text = await request.text();
   if (!text) return {};
-  if (text.length > MAX_BODY_BYTES) return 'too_large';
+  if (Buffer.byteLength(text) > MAX_BODY_BYTES) return 'too_large';
 
-  const result = goSync(() => JSON.parse(text) as { parameters?: Record<string, string> });
+  const result = goSync(() => JSON.parse(text) as unknown);
   if (!result.success) return {};
-  return result.data.parameters ?? {};
+  return extractRequestParameters(result.data);
 }
 
 function withCorsHeaders(response: Response, cors: CorsHeaders): Response {
@@ -201,6 +219,9 @@ function createServer(deps: ServerDependencies): ServerHandle {
         }
         if (body === 'bad_content_type') {
           return errorResponse('Content-Type must be application/json', 415, cors);
+        }
+        if (body === 'bad_parameters') {
+          return errorResponse('Request "parameters" must be an object', 400, cors);
         }
 
         return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps), cors);

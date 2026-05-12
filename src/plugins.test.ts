@@ -51,7 +51,7 @@ describe('createEmptyRegistry', () => {
 
   test('callHttpRequest returns undefined when no plugins reject', async () => {
     const registry = createEmptyRegistry();
-    const result = await registry.callHttpRequest({
+    const result = await registry.beginRequest().callHttpRequest({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -62,7 +62,7 @@ describe('createEmptyRegistry', () => {
 
   test('callBeforeApiCall passes through parameters', async () => {
     const registry = createEmptyRegistry();
-    const result = await registry.callBeforeApiCall({
+    const result = await registry.beginRequest().callBeforeApiCall({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -74,7 +74,7 @@ describe('createEmptyRegistry', () => {
   test('callAfterApiCall passes through response', async () => {
     const registry = createEmptyRegistry();
     const response = { data: { price: 100 }, status: 200 };
-    const result = await registry.callAfterApiCall({
+    const result = await registry.beginRequest().callAfterApiCall({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -86,7 +86,7 @@ describe('createEmptyRegistry', () => {
 
   test('callBeforeSign passes through data', async () => {
     const registry = createEmptyRegistry();
-    const result = await registry.callBeforeSign({
+    const result = await registry.beginRequest().callBeforeSign({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -109,7 +109,7 @@ describe('createRegistry', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -128,7 +128,7 @@ describe('createRegistry', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -151,7 +151,7 @@ describe('createRegistry', () => {
     const plugins: AirnodePlugin[] = [failingPlugin, { name: 'after', hooks: { onResponseSent: afterPlugin } }];
     const registry = createRegistry(makeLoaded(plugins));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -173,7 +173,7 @@ describe('createRegistry', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -215,7 +215,7 @@ describe('createRegistry', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -261,7 +261,7 @@ describe('callHttpRequest', () => {
   test('returns undefined when no plugins reject', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'empty', hooks: {} }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callHttpRequest(baseCtx);
+    const result = await registry.beginRequest().callHttpRequest(baseCtx);
     expect(result).toBeUndefined();
   });
 
@@ -275,18 +275,18 @@ describe('callHttpRequest', () => {
       },
     ];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callHttpRequest(baseCtx);
+    const result = await registry.beginRequest().callHttpRequest(baseCtx);
     expect(result).toEqual({ reject: true, status: 403, message: 'Forbidden' });
   });
 
   test('undefined return means no rejection', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'pass', hooks: { onHttpRequest: () => {} } }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callHttpRequest(baseCtx);
+    const result = await registry.beginRequest().callHttpRequest(baseCtx);
     expect(result).toBeUndefined();
   });
 
-  test('continues on error', async () => {
+  test('rejects when a plugin throws (fail-closed)', async () => {
     const plugins: AirnodePlugin[] = [
       {
         name: 'crasher',
@@ -299,8 +299,15 @@ describe('callHttpRequest', () => {
       { name: 'pass', hooks: {} },
     ];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callHttpRequest(baseCtx);
-    expect(result).toBeUndefined();
+    const result = await registry.beginRequest().callHttpRequest(baseCtx);
+    expect(result).toEqual({ reject: true, status: 500, message: 'Plugin error' });
+  });
+
+  test('rejects when a plugin budget is exhausted (fail-closed)', async () => {
+    const plugins: AirnodePlugin[] = [{ name: 'starved', hooks: { onHttpRequest: () => {} } }];
+    const registry = createRegistry([{ plugin: plugins[0] as AirnodePlugin, timeout: 0 }]);
+    const result = await registry.beginRequest().callHttpRequest(baseCtx);
+    expect(result).toEqual({ reject: true, status: 503, message: 'Plugin budget exhausted' });
   });
 });
 
@@ -318,7 +325,7 @@ describe('callBeforeApiCall', () => {
   test('returns original parameters when no plugins override', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'empty', hooks: {} }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callBeforeApiCall(baseCtx);
+    const result = await registry.beginRequest().callBeforeApiCall(baseCtx);
     expect(result).toEqual({ parameters: { coinId: 'bitcoin' }, dropped: false });
   });
 
@@ -328,7 +335,7 @@ describe('callBeforeApiCall', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    const result = await registry.callBeforeApiCall(baseCtx);
+    const result = await registry.beginRequest().callBeforeApiCall(baseCtx);
     expect(result).toEqual({ parameters: { coinId: 'ethereum' }, dropped: false });
   });
 
@@ -344,7 +351,7 @@ describe('callBeforeApiCall', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    const result = await registry.callBeforeApiCall(baseCtx);
+    const result = await registry.beginRequest().callBeforeApiCall(baseCtx);
     expect(result).toEqual({ parameters: { coinId: 'ethereum', currency: 'eur' }, dropped: false });
   });
 
@@ -352,11 +359,12 @@ describe('callBeforeApiCall', () => {
     const plugins: AirnodePlugin[] = [{ name: 'pass', hooks: { onBeforeApiCall: () => {} } }];
     const registry = createRegistry(makeLoaded(plugins));
 
-    const result = await registry.callBeforeApiCall(baseCtx);
+    const result = await registry.beginRequest().callBeforeApiCall(baseCtx);
     expect(result).toEqual({ parameters: { coinId: 'bitcoin' }, dropped: false });
   });
 
-  test('continues on error', async () => {
+  test('drops when a plugin throws (fail-closed) — later plugins do not run', async () => {
+    const laterPlugin = mock(() => ({ parameters: { coinId: 'ethereum' } }));
     const plugins: AirnodePlugin[] = [
       {
         name: 'crasher',
@@ -366,12 +374,13 @@ describe('callBeforeApiCall', () => {
           },
         },
       },
-      { name: 'override', hooks: { onBeforeApiCall: () => ({ parameters: { coinId: 'ethereum' } }) } },
+      { name: 'override', hooks: { onBeforeApiCall: laterPlugin } },
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    const result = await registry.callBeforeApiCall(baseCtx);
-    expect(result).toEqual({ parameters: { coinId: 'ethereum' }, dropped: false });
+    const result = await registry.beginRequest().callBeforeApiCall(baseCtx);
+    expect(result).toEqual({ parameters: { coinId: 'bitcoin' }, dropped: true });
+    expect(laterPlugin).not.toHaveBeenCalled();
   });
 });
 
@@ -385,7 +394,7 @@ describe('callAfterApiCall', () => {
     ];
     const registry = createRegistry(makeLoaded(plugins));
 
-    const result = await registry.callAfterApiCall({
+    const result = await registry.beginRequest().callAfterApiCall({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -401,7 +410,7 @@ describe('callAfterApiCall', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     const original = { data: { price: 100 }, status: 200 };
-    const result = await registry.callAfterApiCall({
+    const result = await registry.beginRequest().callAfterApiCall({
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
       endpoint: 'price',
@@ -410,6 +419,32 @@ describe('callAfterApiCall', () => {
     });
 
     expect(result).toEqual({ response: original, dropped: false });
+  });
+
+  test('drops when a plugin throws (fail-closed)', async () => {
+    const plugins: AirnodePlugin[] = [
+      {
+        name: 'crasher',
+        hooks: {
+          onAfterApiCall: () => {
+            throw new Error('boom');
+          },
+        },
+      },
+    ];
+    const registry = createRegistry(makeLoaded(plugins));
+
+    const original = { data: { price: 100 }, status: 200 };
+    const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
+      endpointId: ENDPOINT_ID,
+      api: 'coingecko',
+      endpoint: 'price',
+      parameters: {},
+      response: original,
+    });
+
+    expect(result).toEqual({ response: original, dropped: true });
   });
 });
 
@@ -427,14 +462,14 @@ describe('callBeforeSign', () => {
   test('returns original data when no plugins override', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'empty', hooks: {} }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callBeforeSign(baseCtx);
+    const result = await registry.beginRequest().callBeforeSign(baseCtx);
     expect(result).toEqual({ data: '0xaabb', dropped: false });
   });
 
   test('plugin can override data', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'override', hooks: { onBeforeSign: () => ({ data: '0xccdd' }) } }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callBeforeSign(baseCtx);
+    const result = await registry.beginRequest().callBeforeSign(baseCtx);
     expect(result.dropped).toBe(false);
     expect(result.data).toBe('0xccdd');
   });
@@ -442,8 +477,24 @@ describe('callBeforeSign', () => {
   test('undefined return means no change', async () => {
     const plugins: AirnodePlugin[] = [{ name: 'pass', hooks: { onBeforeSign: () => {} } }];
     const registry = createRegistry(makeLoaded(plugins));
-    const result = await registry.callBeforeSign(baseCtx);
+    const result = await registry.beginRequest().callBeforeSign(baseCtx);
     expect(result).toEqual({ data: '0xaabb', dropped: false });
+  });
+
+  test('drops when a plugin throws (fail-closed) — original data is kept', async () => {
+    const plugins: AirnodePlugin[] = [
+      {
+        name: 'crasher',
+        hooks: {
+          onBeforeSign: () => {
+            throw new Error('boom');
+          },
+        },
+      },
+    ];
+    const registry = createRegistry(makeLoaded(plugins));
+    const result = await registry.beginRequest().callBeforeSign(baseCtx);
+    expect(result).toEqual({ data: '0xaabb', dropped: true });
   });
 });
 
@@ -457,7 +508,7 @@ describe('void hooks', () => {
     const registry = createRegistry(makeLoaded(plugins));
 
     const err = new Error('test error');
-    await registry.callError({ error: err, stage: 'apiCall', endpointId: ENDPOINT_ID });
+    await registry.beginRequest().callError({ error: err, stage: 'apiCall', endpointId: ENDPOINT_ID });
 
     expect(hookMock).toHaveBeenCalledTimes(1);
   });
@@ -472,7 +523,7 @@ describe('budget', () => {
     const plugin: AirnodePlugin = { name: 'slow', hooks: { onResponseSent: hookMock } };
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -488,7 +539,7 @@ describe('budget', () => {
     const plugin: AirnodePlugin = { name: 'slow', hooks: { onBeforeApiCall: () => {} } };
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
-    const result = await registry.callBeforeApiCall({
+    const result = await registry.beginRequest().callBeforeApiCall({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -501,7 +552,7 @@ describe('budget', () => {
     const plugin: AirnodePlugin = { name: 'slow', hooks: { onBeforeSign: () => {} } };
     const registry = createRegistry([{ plugin, timeout: 0 }]);
 
-    const result = await registry.callBeforeSign({
+    const result = await registry.beginRequest().callBeforeSign({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -510,26 +561,19 @@ describe('budget', () => {
     expect(result.dropped).toBe(true);
   });
 
-  test('resetBudgets allows hook to run again', async () => {
+  test('beginRequest mints an independent session each time', async () => {
     const hookMock = mock();
-    const plugin: AirnodePlugin = { name: 'limited', hooks: { onResponseSent: hookMock } };
+    const plugin: AirnodePlugin = { name: 'observer', hooks: { onResponseSent: hookMock } };
     const registry = createRegistry([{ plugin, timeout: 5000 }]);
 
-    await registry.callResponseSent({
-      endpointId: ENDPOINT_ID,
-      api: 'test',
-      endpoint: 'test',
-      duration: 100,
-    });
-    expect(hookMock).toHaveBeenCalledTimes(1);
+    const sessionA = registry.beginRequest();
+    const sessionB = registry.beginRequest();
+    expect(sessionA).not.toBe(sessionB);
 
-    registry.resetBudgets();
-    await registry.callResponseSent({
-      endpointId: ENDPOINT_ID,
-      api: 'test',
-      endpoint: 'test',
-      duration: 200,
-    });
+    const ctx = { requestId: ENDPOINT_ID, endpointId: ENDPOINT_ID, api: 'test', endpoint: 'test', duration: 1 };
+    await sessionA.callResponseSent(ctx);
+    await sessionB.callResponseSent(ctx);
+    // Each session ran the hook on its own fresh budget — no cross-session interference.
     expect(hookMock).toHaveBeenCalledTimes(2);
   });
 
@@ -545,7 +589,7 @@ describe('budget', () => {
     };
     const registry = createRegistry(makeLoaded([plugin]));
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -569,7 +613,7 @@ describe('budget', () => {
     };
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
-    const result = await registry.callBeforeApiCall({
+    const result = await registry.beginRequest().callBeforeApiCall({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -591,7 +635,7 @@ describe('budget', () => {
     };
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
-    await registry.callResponseSent({
+    await registry.beginRequest().callResponseSent({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',
@@ -614,7 +658,7 @@ describe('budget', () => {
     };
     const registry = createRegistry([{ plugin, timeout: 50 }]);
 
-    const result = await registry.callHttpRequest({
+    const result = await registry.beginRequest().callHttpRequest({
       endpointId: ENDPOINT_ID,
       api: 'test',
       endpoint: 'test',

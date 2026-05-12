@@ -29,8 +29,8 @@ function makeConfig(overrides: Partial<Config['server']> = {}): Config {
         endpoints: [{ name: 'test', path: '/data', method: 'GET', parameters: [] }],
       },
     ],
-    settings: { timeout: 10_000, proof: 'none', plugins: [] },
-  } as Config;
+    settings: { timeout: 10_000, proof: 'none', fhe: 'none', plugins: [] },
+  } as unknown as Config;
 }
 
 function makeDeps(overrides: Partial<ServerDependencies> = {}): ServerDependencies {
@@ -87,6 +87,57 @@ describe('createServer', () => {
 
     expect(response.status).toBe(200);
     expect(handleRequest).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejects a request body whose "parameters" is not an object', async () => {
+    const handleRequest = mock(() => Promise.resolve(Response.json({ result: 'ok' }, { status: 200 })));
+    const deps = makeDeps({ handleRequest });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    for (const bad of [
+      JSON.stringify({ parameters: 5 }),
+      JSON.stringify({ parameters: 'str' }),
+      JSON.stringify({ parameters: ['a'] }),
+      JSON.stringify('not-an-object'),
+    ]) {
+      const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, { method: 'POST', body: bad });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toContain('parameters');
+    }
+    expect(handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('passes nested parameter values through (e.g. for body parameters)', async () => {
+    const handleRequest = mock((_req: Request, _id: string, params: Record<string, unknown>) =>
+      Promise.resolve(Response.json({ params }, { status: 200 }))
+    );
+    const deps = makeDeps({ handleRequest: handleRequest as unknown as ServerDependencies['handleRequest'] });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      body: JSON.stringify({ parameters: { jsonrpc: '2.0', params: [{ to: '0xabc' }, 'latest'] } }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(handleRequest).toHaveBeenCalledTimes(1);
+    const body = (await response.json()) as { params: Record<string, unknown> };
+    expect(body.params).toEqual({ jsonrpc: '2.0', params: [{ to: '0xabc' }, 'latest'] });
+  });
+
+  test('treats a missing or null "parameters" as empty', async () => {
+    const handleRequest = mock(() => Promise.resolve(Response.json({ result: 'ok' }, { status: 200 })));
+    const deps = makeDeps({ handleRequest });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const r1 = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, { method: 'POST', body: JSON.stringify({}) });
+    expect(r1.status).toBe(200);
+    const r2 = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, { method: 'POST', body: '{"parameters":null}' });
+    expect(r2.status).toBe(200);
   });
 
   test('returns 404 for unknown routes', async () => {

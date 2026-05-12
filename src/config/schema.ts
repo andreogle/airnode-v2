@@ -73,7 +73,10 @@ const x402ClientAuthSchema = z.object({
   network: z.number().int().positive(),
   rpc: z.url(),
   token: evmAddressSchema,
-  amount: z.string().min(1),
+  // Base-unit integer amount (e.g. wei, or token base units) — kept as a string
+  // to preserve precision and parsed with BigInt at request time, so it must be
+  // a plain non-negative integer with no decimal point, sign, or units.
+  amount: z.string().regex(/^\d+$/, 'Must be a non-negative integer string (token base units)'),
   recipient: evmAddressSchema,
   expiry: z.number().int().positive().default(300_000),
 });
@@ -92,7 +95,6 @@ export const clientAuthSchema = z.union([clientAuthMethodSchema, z.array(clientA
 // =============================================================================
 export const cacheSchema = z.object({
   maxAge: z.number().int().positive(),
-  delay: z.number().int().nonnegative().optional(),
 });
 
 // =============================================================================

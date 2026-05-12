@@ -47,7 +47,6 @@ apis:
           times: '1e18'
         cache:
           maxAge: 30000
-          delay: 60000 # public responses delayed by 60s (OEV window)
         description: Get the current price of a coin
 
       - name: coinMarketData

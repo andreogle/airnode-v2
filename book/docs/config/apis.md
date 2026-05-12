@@ -139,10 +139,10 @@ cache:
 | Field    | Type     | Required | Description                                                |
 | -------- | -------- | -------- | ---------------------------------------------------------- |
 | `maxAge` | `number` | Yes      | Cache TTL in milliseconds for responses. Positive integer. |
-| `delay`  | `number` | No       | Delay in milliseconds before cached responses are served.  |
 
 `maxAge` controls response caching — repeated `POST /endpoints/{id}` requests with the same parameters return the cached
-response until the TTL expires.
+response until the TTL expires. A cached response replays the same signature and timestamp, so within `maxAge` every
+caller (and every on-chain submission) gets the identical signed payload.
 
 ## Endpoint-level fields
 
@@ -221,6 +221,20 @@ parameters:
     in: query
     default: usd
 ```
+
+:::note Parameter values in requests
+
+Clients send parameter values in the request body as `{"parameters": {"name": value, ...}}`. `parameters` must be a JSON
+**object** (a non-object value is rejected with `400`). The individual values are handled per parameter `in`:
+
+- `query`, `path`, `header`, `cookie` — the value is coerced to a string. **Pass a string** (or a number/boolean);
+  passing a nested object or array here produces a stringified placeholder, not what you want.
+- `body` — the value is serialized whole into the upstream request body, so **nested JSON is supported and expected**
+  here (e.g. a JSON-RPC `params: [{ "to": "0x...", "data": "0x..." }, "latest"]`).
+
+In short: only `body` parameters may be nested; everything else should be a primitive.
+
+:::
 
 ### Parameter fields
 

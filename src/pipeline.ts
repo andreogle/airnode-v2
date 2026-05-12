@@ -10,7 +10,7 @@ import type { ResolvedEndpoint } from './endpoint';
 import { encryptResponse } from './fhe';
 import { isNil } from './guards';
 import { logger, runWithContext } from './logger';
-import type { PluginRegistry } from './plugins';
+import type { PluginRegistry, RequestPlugins } from './plugins';
 import type { ReclaimProof } from './proof';
 import { requestProof } from './proof';
 import { signResponse } from './sign';
@@ -19,6 +19,9 @@ import type { ClientAuth, Encoding, Endpoint, Settings } from './types';
 // =============================================================================
 // Types
 // =============================================================================
+// What `createServer` holds and passes to `handleEndpointRequest`. `plugins` is
+// the long-lived registry; the request handler mints a per-request session from
+// it (see `RequestDependencies`).
 interface PipelineDependencies {
   readonly account: PrivateKeyAccount;
   readonly airnode: Hex;
@@ -27,6 +30,13 @@ interface PipelineDependencies {
   readonly cache: ResponseCache;
   readonly asyncStore?: AsyncRequestStore;
   readonly settings: Settings;
+}
+
+// Request-scoped view: `plugins` is a single request's session, so its budgets
+// are not shared with other in-flight requests. Every internal pipeline
+// function takes this.
+interface RequestDependencies extends Omit<PipelineDependencies, 'plugins'> {
+  readonly plugins: RequestPlugins;
 }
 
 interface SignedResponseBody {
@@ -93,11 +103,7 @@ function validateRequiredParameters(
 // =============================================================================
 // Response builders
 // =============================================================================
-async function buildSignedResponse(
-  endpointId: Hex,
-  data: Hex,
-  deps: PipelineDependencies
-): Promise<SignedResponseBody> {
+async function buildSignedResponse(endpointId: Hex, data: Hex, deps: RequestDependencies): Promise<SignedResponseBody> {
   const timestamp = unixTimestamp();
   const signed = await signResponse(deps.account, endpointId, timestamp, data);
 
@@ -113,7 +119,7 @@ async function buildSignedResponse(
 async function buildRawResponse(
   endpointId: Hex,
   rawData: unknown,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Promise<RawResponseBody> {
   const timestamp = unixTimestamp();
   const dataHash = keccak256(toHex(stableStringify(rawData)));
@@ -138,7 +144,7 @@ async function buildRawResponse(
 async function fetchProofIfEnabled(
   resolved: ResolvedEndpoint,
   parameters: Record<string, string>,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Promise<ReclaimProof | undefined> {
   const proof = deps.settings.proof;
   if (proof === 'none') return undefined;
@@ -193,13 +199,23 @@ interface ResolvedEncoding {
   readonly times?: string;
 }
 
+// Reserved encoding parameters are typed as strings but the request body's
+// `parameters` values are not validated per-value (see server.ts), so a client
+// could send `_type`/`_path`/`_times` as a non-string. Treat anything that
+// isn't a string as absent rather than passing it to `processResponse`, which
+// would call `.split()` on it and crash.
+function reservedString(parameters: Record<string, string>, key: string): string | undefined {
+  const value: unknown = parameters[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function resolveEncoding(
   configEncoding: Encoding | undefined,
   parameters: Record<string, string>
 ): ResolvedEncoding | 'invalid' | undefined {
-  const type = configEncoding?.type ?? parameters[RESERVED_PARAM_TYPE];
-  const path = configEncoding?.path ?? parameters[RESERVED_PARAM_PATH];
-  const times = configEncoding?.times ?? parameters[RESERVED_PARAM_TIMES];
+  const type = configEncoding?.type ?? reservedString(parameters, RESERVED_PARAM_TYPE);
+  const path = configEncoding?.path ?? reservedString(parameters, RESERVED_PARAM_PATH);
+  const times = configEncoding?.times ?? reservedString(parameters, RESERVED_PARAM_TIMES);
 
   if (!type && !path) return undefined;
   if (!type || !path) return 'invalid';
@@ -221,7 +237,7 @@ async function prepareSignableData(
   endpoint: Endpoint,
   encoding: ResolvedEncoding,
   encodedData: Hex,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Promise<Hex> {
   if (!endpoint.encrypt) return encodedData;
 
@@ -240,7 +256,7 @@ async function executeApiCall(
   requestId: Hex,
   endpointId: Hex,
   parameters: Record<string, string>,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Promise<Response> {
   const beforeResult = await deps.plugins.callBeforeApiCall({
     requestId,
@@ -324,7 +340,7 @@ function handleAsyncRequest(
   resolved: ResolvedEndpoint,
   endpointId: Hex,
   parameters: Record<string, string>,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Response {
   const store = deps.asyncStore;
   if (!store) return jsonResponse({ error: 'Async not configured' }, 500);
@@ -382,7 +398,7 @@ async function handleStreamingRequest(
   requestId: Hex,
   endpointId: Hex,
   parameters: Record<string, string>,
-  deps: PipelineDependencies
+  deps: RequestDependencies
 ): Promise<Response> {
   // Run the full pipeline (same as sync, with all plugin hooks)
   const result = await go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
@@ -432,11 +448,13 @@ async function handleEndpointRequest(
   // endpointId, which races when multiple clients hit the same endpoint).
   const requestId: Hex = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
 
-  // Reset plugin budgets per request so hooks don't degrade over time
-  deps.plugins.resetBudgets();
+  // Mint a per-request plugin session. Its budgets are private to this request,
+  // so concurrent requests can't consume each other's allowance.
+  const plugins = deps.plugins.beginRequest();
+  const rdeps: RequestDependencies = { ...deps, plugins };
 
   // Plugin: onHttpRequest
-  const httpResult = await deps.plugins.callHttpRequest({
+  const httpResult = await plugins.callHttpRequest({
     requestId,
     endpointId,
     api: resolved.api.name,
@@ -473,22 +491,22 @@ async function handleEndpointRequest(
 
   // Dispatch by endpoint mode
   if (resolved.endpoint.mode === 'stream') {
-    return handleStreamingRequest(resolved, requestId, endpointId, parameters, deps);
+    return handleStreamingRequest(resolved, requestId, endpointId, parameters, rdeps);
   }
 
   if (resolved.endpoint.mode === 'async' && deps.asyncStore) {
-    return handleAsyncRequest(resolved, endpointId, parameters, deps);
+    return handleAsyncRequest(resolved, endpointId, parameters, rdeps);
   }
 
   // Synchronous execution (mode === 'sync' or default)
   const pipelineResult = await runWithContext({ requestId }, async () => {
     logger.info(`Processing ${resolved.api.name}/${resolved.endpoint.name}`);
-    return go(() => executeApiCall(resolved, requestId, endpointId, parameters, deps));
+    return go(() => executeApiCall(resolved, requestId, endpointId, parameters, rdeps));
   });
 
   if (!pipelineResult.success) {
     logger.error(`Pipeline failed for endpoint ${endpointId}: ${pipelineResult.error.message}`);
-    void deps.plugins.callError({ requestId, error: pipelineResult.error, stage: 'pipeline', endpointId });
+    void plugins.callError({ requestId, error: pipelineResult.error, stage: 'pipeline', endpointId });
     return jsonResponse({ error: 'Internal processing error' }, 502);
   }
 
@@ -499,7 +517,7 @@ async function handleEndpointRequest(
     const body = await response.json();
     deps.cache.set(endpointId, parameters, body, maxAge);
 
-    void deps.plugins.callResponseSent({
+    void plugins.callResponseSent({
       requestId,
       endpointId,
       api: resolved.api.name,
@@ -511,7 +529,7 @@ async function handleEndpointRequest(
   }
 
   if (response.status === 200) {
-    void deps.plugins.callResponseSent({
+    void plugins.callResponseSent({
       requestId,
       endpointId,
       api: resolved.api.name,

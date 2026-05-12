@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { deriveEndpointId } from '../endpoint';
 import { loadEnvFile } from './env';
 import { interpolateEnvironment, parseConfig } from './parser';
 
@@ -97,6 +98,84 @@ describe('parseConfig', () => {
 
   test('throws on invalid YAML content', () => {
     expect(() => parseConfig('not: valid: yaml: [')).toThrow();
+  });
+
+  test('flags parameters with env-backed fixed values as secret', () => {
+    process.env['SECRET_PARAM_VALUE'] = 'super-secret-key';
+    const raw = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: getData
+        path: /data
+        parameters:
+          - name: apikey
+            in: query
+            fixed: \${SECRET_PARAM_VALUE}
+          - name: coin
+            in: query
+            required: true
+`;
+    const params = parseConfig(raw).apis[0]?.endpoints[0]?.parameters;
+    const apikey = params?.find((p) => p.name === 'apikey');
+    expect(apikey?.fixed).toBe('super-secret-key'); // resolved from the environment
+    expect(apikey?.secret).toBe(true); // and marked secret so it stays out of the endpoint ID
+    expect(params?.find((p) => p.name === 'coin')?.secret).toBe(false);
+  });
+
+  test('env-backed fixed params do not change the endpoint ID', () => {
+    process.env['SECRET_PARAM_VALUE'] = 'super-secret-key';
+    const withSecretParam = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: getData
+        path: /data
+        parameters:
+          - name: apikey
+            in: query
+            fixed: \${SECRET_PARAM_VALUE}
+          - name: coin
+            in: query
+            required: true
+`;
+    const withoutSecretParam = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: getData
+        path: /data
+        parameters:
+          - name: coin
+            in: query
+            required: true
+`;
+    const apiWith = parseConfig(withSecretParam).apis[0];
+    const apiWithout = parseConfig(withoutSecretParam).apis[0];
+    const endpointWith = apiWith?.endpoints[0];
+    const endpointWithout = apiWithout?.endpoints[0];
+    if (!apiWith || !endpointWith || !apiWithout || !endpointWithout) {
+      throw new Error('config did not parse as expected');
+    }
+    expect(deriveEndpointId(apiWith, endpointWith)).toBe(deriveEndpointId(apiWithout, endpointWithout));
   });
 
   test('interpolates header values from environment variables', async () => {

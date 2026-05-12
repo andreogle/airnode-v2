@@ -259,4 +259,29 @@ describe('buildEndpointMap', () => {
     const map = buildEndpointMap(config);
     expect(map.size).toBe(3);
   });
+
+  test('throws when two endpoints derive the same ID', () => {
+    const api = makeApi({
+      url: 'https://api.example.com',
+      // Same path + method + (no) params + (no) encoding → identical endpoint ID.
+      endpoints: [makeEndpoint({ name: 'first', path: '/data' }), makeEndpoint({ name: 'second', path: '/data' })],
+    });
+
+    expect(() => buildEndpointMap(makeConfig([api]))).toThrow(/same endpoint ID/);
+  });
+
+  test('throws when endpoints across different APIs with the same url collide', () => {
+    const api1 = makeApi({
+      name: 'A',
+      url: 'https://shared.example.com',
+      endpoints: [makeEndpoint({ name: 'x', path: '/p' })],
+    });
+    const api2 = makeApi({
+      name: 'B',
+      url: 'https://shared.example.com',
+      endpoints: [makeEndpoint({ name: 'y', path: '/p' })],
+    });
+
+    expect(() => buildEndpointMap(makeConfig([api1, api2]))).toThrow(/same endpoint ID/);
+  });
 });

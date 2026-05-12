@@ -59,14 +59,27 @@ function deriveEndpointId(api: Api, endpoint: Endpoint): Hex {
 
 // =============================================================================
 // Endpoint map
+//
+// Two endpoints with identical specifications (URL, path, method, parameters,
+// encoding, encryption) derive the same ID. Building the map silently with
+// `new Map(entries)` would let the later one shadow the earlier — so we detect
+// the collision and fail loudly instead.
 // =============================================================================
 function buildEndpointMap(config: Config): ReadonlyMap<Hex, ResolvedEndpoint> {
   const entries = config.apis.flatMap((api) =>
-    api.endpoints.map((endpoint) => {
-      const endpointId = deriveEndpointId(api, endpoint);
-      return [endpointId, { api, endpoint }] as const;
-    })
+    api.endpoints.map((endpoint) => [deriveEndpointId(api, endpoint), { api, endpoint }] as const)
   );
+
+  const ids = entries.map(([id]) => id);
+  const duplicateId = ids.find((id, index) => ids.indexOf(id) !== index);
+  if (duplicateId) {
+    const colliding = entries
+      .filter(([id]) => id === duplicateId)
+      .map(([, resolved]) => `"${resolved.api.name}/${resolved.endpoint.name}"`);
+    throw new Error(
+      `Endpoints ${colliding.join(' and ')} derive the same endpoint ID ${duplicateId} — their specifications are identical`
+    );
+  }
 
   return new Map(entries);
 }

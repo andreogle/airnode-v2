@@ -129,6 +129,24 @@ apis:
     expect(auth.expiry).toBe(300_000);
   });
 
+  test('rejects a non-numeric x402 amount', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'url: https://api.example.com',
+      `url: https://api.example.com
+    auth:
+      type: x402
+      network: 8453
+      rpc: https://mainnet.base.org
+      token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+      amount: '1 USDC'
+      recipient: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+
+    const withDecimal = raw.replace("amount: '1 USDC'", "amount: '1.5'");
+    expect(() => configSchema.parse(parseYaml(withDecimal))).toThrow();
+  });
+
   test('validates auth as array (multi-method)', () => {
     const raw = MINIMAL_CONFIG.replace(
       'url: https://api.example.com',
@@ -197,7 +215,7 @@ apis:
     expect(result.apis[0]?.endpoints[0]?.cache).toEqual({ maxAge: 5000 });
   });
 
-  test('validates cache with delay', () => {
+  test('strips unknown cache keys', () => {
     const raw = MINIMAL_CONFIG.replace(
       'path: /test',
       `path: /test
@@ -206,7 +224,7 @@ apis:
           delay: 60000`
     );
     const result = configSchema.parse(parseYaml(raw));
-    expect(result.apis[0]?.endpoints[0]?.cache).toEqual({ maxAge: 5000, delay: 60_000 });
+    expect(result.apis[0]?.endpoints[0]?.cache).toEqual({ maxAge: 5000 });
   });
 
   test('validates parameters with secret flag', () => {

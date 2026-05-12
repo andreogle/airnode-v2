@@ -146,6 +146,29 @@ apis:
     expect(result.errors[0]).toContain('Duplicate API name');
   });
 
+  test('rejects endpoints with identical specifications (colliding endpoint IDs)', () => {
+    const yaml = `
+version: '1.0'
+server:
+  port: 3000
+settings:
+  proof: none
+apis:
+  - name: Test
+    url: https://api.example.com
+    endpoints:
+      - name: first
+        path: /data
+      - name: second
+        path: /data
+`;
+    const result = validateConfig(yaml);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.some((e) => e.includes('identical specifications'))).toBe(true);
+  });
+
   // ===========================================================================
   // Multiple errors
   // ===========================================================================

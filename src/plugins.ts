@@ -181,11 +181,16 @@ async function runWithBudget<T>(
 
 // =============================================================================
 // Plugin registry
+//
+// `RequestPlugins` is a single request's view of the plugin chain — each hook
+// method shares a private budget map that lives for the lifetime of that
+// request. `PluginRegistry` is the long-lived holder; call `beginRequest()` at
+// the start of every request to mint a fresh `RequestPlugins`. There is
+// deliberately no shared "ambient" budget on the registry: under concurrent
+// requests, a shared mutable budget would let one request consume another's
+// allowance and cause spurious drops.
 // =============================================================================
-interface PluginRegistry {
-  readonly plugins: readonly AirnodePlugin[];
-  readonly hasApiHooks: boolean;
-  readonly resetBudgets: () => void;
+interface RequestPlugins {
   readonly callHttpRequest: (context: Omit<HttpRequestContext, 'signal'>) => Promise<HttpRequestResult>;
   readonly callBeforeApiCall: (
     context: Omit<BeforeApiCallContext, 'signal'>
@@ -200,17 +205,26 @@ interface PluginRegistry {
   readonly callError: (context: Omit<ErrorContext, 'signal'>) => Promise<void>;
 }
 
+interface PluginRegistry {
+  readonly plugins: readonly AirnodePlugin[];
+  readonly hasApiHooks: boolean;
+  readonly beginRequest: () => RequestPlugins;
+}
+
+const EMPTY_REQUEST_PLUGINS: RequestPlugins = {
+  callHttpRequest: () => Promise.resolve(),
+  callBeforeApiCall: (ctx) => Promise.resolve({ parameters: ctx.parameters, dropped: false }),
+  callAfterApiCall: (ctx) => Promise.resolve({ response: ctx.response, dropped: false }),
+  callBeforeSign: (ctx) => Promise.resolve({ data: ctx.data, dropped: false }),
+  callResponseSent: () => Promise.resolve(),
+  callError: () => Promise.resolve(),
+};
+
 function createEmptyRegistry(): PluginRegistry {
   return {
     plugins: [],
     hasApiHooks: false,
-    resetBudgets: () => {},
-    callHttpRequest: () => Promise.resolve(),
-    callBeforeApiCall: (ctx) => Promise.resolve({ parameters: ctx.parameters, dropped: false }),
-    callAfterApiCall: (ctx) => Promise.resolve({ response: ctx.response, dropped: false }),
-    callBeforeSign: (ctx) => Promise.resolve({ data: ctx.data, dropped: false }),
-    callResponseSent: () => Promise.resolve(),
-    callError: () => Promise.resolve(),
+    beginRequest: () => EMPTY_REQUEST_PLUGINS,
   };
 }
 
@@ -253,6 +267,8 @@ async function callVoidHook<T>(
 }
 
 // Reject runner for onHttpRequest. First plugin to return { reject: true } stops.
+// Mutation hooks are fail-closed: a timeout or a thrown error rejects the
+// request rather than letting it slip past a broken security plugin.
 async function callHttpRequestHook(
   plugins: readonly AirnodePlugin[],
   budgets: Map<string, PluginBudget>,
@@ -267,7 +283,8 @@ async function callHttpRequestHook(
     const budget = budgets.get(plugin.name);
     if (!budget || budget.remainingMs <= 0) {
       if (budget && budget.remainingMs <= 0) {
-        logger.warn(`Plugin "${plugin.name}" budget exhausted, skipping onHttpRequest`);
+        logger.warn(`Plugin "${plugin.name}" budget exhausted, rejecting in onHttpRequest`);
+        return { reject: true, status: 503, message: 'Plugin budget exhausted' };
       }
       return callHttpRequestHook(plugins, budgets, context, index + 1);
     }
@@ -278,8 +295,8 @@ async function callHttpRequestHook(
       return { reject: true, status: 503, message: 'Plugin timeout' };
     }
     if (result.outcome === 'error') {
-      logger.error(`Plugin "${plugin.name}" failed in onHttpRequest: ${result.error.message}`);
-      return callHttpRequestHook(plugins, budgets, context, index + 1);
+      logger.error(`Plugin "${plugin.name}" failed in onHttpRequest, rejecting: ${result.error.message}`);
+      return { reject: true, status: 500, message: 'Plugin error' };
     }
 
     if (result.data?.reject) {
@@ -290,7 +307,8 @@ async function callHttpRequestHook(
   return callHttpRequestHook(plugins, budgets, context, index + 1);
 }
 
-// Override runner for onBeforeApiCall. Timeout = drop affected requests.
+// Override runner for onBeforeApiCall. Fail-closed: timeout, error, or
+// exhausted budget all drop the affected request(s).
 async function callBeforeApiCallHook(
   plugins: readonly AirnodePlugin[],
   budgets: Map<string, PluginBudget>,
@@ -314,8 +332,8 @@ async function callBeforeApiCallHook(
       return { parameters: context.parameters, dropped: true };
     }
     if (result.outcome === 'error') {
-      logger.error(`Plugin "${plugin.name}" failed in onBeforeApiCall: ${result.error.message}`);
-      return callBeforeApiCallHook(plugins, budgets, context, index + 1);
+      logger.error(`Plugin "${plugin.name}" failed in onBeforeApiCall, dropping request(s): ${result.error.message}`);
+      return { parameters: context.parameters, dropped: true };
     }
 
     if (result.data !== undefined) {
@@ -326,7 +344,8 @@ async function callBeforeApiCallHook(
   return callBeforeApiCallHook(plugins, budgets, context, index + 1);
 }
 
-// Override runner for onAfterApiCall. Timeout = drop affected requests.
+// Override runner for onAfterApiCall. Fail-closed: timeout, error, or
+// exhausted budget all drop the affected request(s).
 async function callAfterApiCallHook(
   plugins: readonly AirnodePlugin[],
   budgets: Map<string, PluginBudget>,
@@ -350,8 +369,8 @@ async function callAfterApiCallHook(
       return { response: context.response, dropped: true };
     }
     if (result.outcome === 'error') {
-      logger.error(`Plugin "${plugin.name}" failed in onAfterApiCall: ${result.error.message}`);
-      return callAfterApiCallHook(plugins, budgets, context, index + 1);
+      logger.error(`Plugin "${plugin.name}" failed in onAfterApiCall, dropping request(s): ${result.error.message}`);
+      return { response: context.response, dropped: true };
     }
 
     if (result.data !== undefined) {
@@ -367,7 +386,9 @@ async function callAfterApiCallHook(
   return callAfterApiCallHook(plugins, budgets, context, index + 1);
 }
 
-// Override runner for onBeforeSign. Timeout = drop.
+// Override runner for onBeforeSign. Fail-closed: timeout, error, or exhausted
+// budget all drop the request — a plugin that can rewrite signed bytes must
+// never be silently skipped.
 async function callBeforeSignHook(
   plugins: readonly AirnodePlugin[],
   budgets: Map<string, PluginBudget>,
@@ -391,8 +412,8 @@ async function callBeforeSignHook(
       return { data: context.data, dropped: true };
     }
     if (result.outcome === 'error') {
-      logger.error(`Plugin "${plugin.name}" failed in onBeforeSign: ${result.error.message}`);
-      return callBeforeSignHook(plugins, budgets, context, index + 1);
+      logger.error(`Plugin "${plugin.name}" failed in onBeforeSign, dropping request(s): ${result.error.message}`);
+      return { data: context.data, dropped: true };
     }
 
     if (result.data !== undefined) {
@@ -410,21 +431,21 @@ function createRegistry(loaded: readonly LoadedPlugin[]): PluginRegistry {
   const plugins = loaded.map((l) => l.plugin);
   const hasApiHooks = plugins.some((p) => p.hooks.onBeforeApiCall || p.hooks.onAfterApiCall || p.hooks.onBeforeSign);
 
-  // eslint-disable-next-line functional/no-let
-  let budgets = createBudgetMap(loaded);
-
   return {
     plugins,
     hasApiHooks,
-    resetBudgets: () => {
-      budgets = createBudgetMap(loaded);
+    beginRequest: () => {
+      // Per-request budget map — never shared with other in-flight requests.
+      const budgets = createBudgetMap(loaded);
+      return {
+        callHttpRequest: (ctx) => callHttpRequestHook(plugins, budgets, ctx),
+        callBeforeApiCall: (ctx) => callBeforeApiCallHook(plugins, budgets, ctx),
+        callAfterApiCall: (ctx) => callAfterApiCallHook(plugins, budgets, ctx),
+        callBeforeSign: (ctx) => callBeforeSignHook(plugins, budgets, ctx),
+        callResponseSent: (ctx) => callVoidHook(plugins, budgets, (h) => h.onResponseSent, ctx),
+        callError: (ctx) => callVoidHook(plugins, budgets, (h) => h.onError, ctx),
+      };
     },
-    callHttpRequest: (ctx) => callHttpRequestHook(plugins, budgets, ctx),
-    callBeforeApiCall: (ctx) => callBeforeApiCallHook(plugins, budgets, ctx),
-    callAfterApiCall: (ctx) => callAfterApiCallHook(plugins, budgets, ctx),
-    callBeforeSign: (ctx) => callBeforeSignHook(plugins, budgets, ctx),
-    callResponseSent: (ctx) => callVoidHook(plugins, budgets, (h) => h.onResponseSent, ctx),
-    callError: (ctx) => callVoidHook(plugins, budgets, (h) => h.onError, ctx),
   };
 }
 
@@ -510,5 +531,6 @@ export type {
   PluginConfigEntry,
   PluginHooks,
   PluginRegistry,
+  RequestPlugins,
   ResponseSentContext,
 };
