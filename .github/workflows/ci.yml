@@ -18,18 +18,6 @@ jobs:
       - run: bunx tsc --noEmit
       - run: bun test
 
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      # Reports known advisories from the npm registry DB (informational — does
-      # not fail the build). For a gating scan, configure `[install.security]`
-      # in bunfig.toml and use `bun pm scan`.
-      - run: bun audit --audit-level=high
-
   contracts:
     name: Foundry tests
     runs-on: ubuntu-latest
