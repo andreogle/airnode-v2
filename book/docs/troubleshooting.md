@@ -150,7 +150,8 @@ the API changed its response format, a nested field was renamed, or the path use
 **Check the logs.** Airnode logs every request with its endpoint ID, response status, and processing time. Set
 `LOG_LEVEL=debug` for detailed pipeline output including upstream request/response details.
 
-**Verify the config.** Run `airnode config validate -c config.yaml` to check your config against the schema before starting the server.
+**Verify the config.** Run `airnode config validate -c config.yaml` to check your config against the schema before
+starting the server.
 
 **Test the upstream API directly.** Use curl to call the upstream API with the same parameters the airnode would use.
 This isolates whether the issue is in the airnode or the upstream.

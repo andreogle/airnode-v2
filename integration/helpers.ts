@@ -84,7 +84,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     endpointMap,
     baseUrl: `http://127.0.0.1:${String(server.port)}`,
     stop: () => {
-      server.stop();
+      void server.stop();
       cache.stop();
       asyncStore.stop();
     },

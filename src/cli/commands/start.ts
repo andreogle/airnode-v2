@@ -68,14 +68,16 @@ export const start = new Command('start')
       handleRequest: handleEndpointRequest,
     });
 
-    const shutdown = (): void => {
-      server.stop();
+    const shutdown = async (): Promise<void> => {
+      logger.info('Shutting down — letting in-flight requests finish...');
+      await server.stop(); // resolves once active requests have drained
       cache.stop();
       asyncStore.stop();
+      logger.info('Shutdown complete.');
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(0);
     };
 
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', () => void shutdown());
+    process.on('SIGTERM', () => void shutdown());
   });

@@ -99,12 +99,12 @@ Expected response:
 
 ## Environment variables
 
-| Variable              | Required | Description                                                                          |
-| --------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `AIRNODE_MNEMONIC`    | Yes\*    | BIP-39 mnemonic. Signs all responses. Takes precedence over `AIRNODE_PRIVATE_KEY`.   |
-| `AIRNODE_PRIVATE_KEY` | Yes\*    | Hex-encoded private key (with `0x` prefix). Signs all responses.                      |
-| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                          |
-| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                       |
+| Variable              | Required | Description                                                                        |
+| --------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `AIRNODE_MNEMONIC`    | Yes\*    | BIP-39 mnemonic. Signs all responses. Takes precedence over `AIRNODE_PRIVATE_KEY`. |
+| `AIRNODE_PRIVATE_KEY` | Yes\*    | Hex-encoded private key (with `0x` prefix). Signs all responses.                   |
+| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                        |
+| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                     |
 
 \* Exactly one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required.
 

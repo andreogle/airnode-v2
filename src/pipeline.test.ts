@@ -645,3 +645,94 @@ describe('handleEndpointRequest — FHE encryption', () => {
     expect(body.error).toBe('FHE encryption failed');
   });
 });
+
+// =============================================================================
+// TLS proof attachment (fetchProofIfEnabled)
+// =============================================================================
+describe('handleEndpointRequest — TLS proof', () => {
+  const GATEWAY_URL = 'https://proof-gateway.example.com/v1/prove';
+  const ATTESTOR = '0x0000000000000000000000000000000000000002';
+  const PROOF_SETTINGS = {
+    timeout: 10_000,
+    proof: { type: 'reclaim' as const, gatewayUrl: GATEWAY_URL, timeout: 5000 },
+    fhe: 'none' as const,
+    plugins: [],
+  };
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  function routeFetch(gatewayResponse: {
+    ok: boolean;
+    json?: () => Promise<unknown>;
+    text?: () => Promise<string>;
+  }): void {
+    fetchMock.mockImplementation((input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === GATEWAY_URL) return Promise.resolve(gatewayResponse);
+      return Promise.resolve({ text: () => Promise.resolve(JSON.stringify({ price: 3000 })), status: 200 });
+    });
+  }
+
+  test('attaches a gateway proof when proof is enabled and the endpoint has responseMatches', async () => {
+    routeFetch({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          claim: { parameters: JSON.stringify({ url: 'https://api.example.com/data', method: 'GET' }) },
+          signatures: { attestorAddress: ATTESTOR, claimSignature: `0x${'ab'.repeat(65)}` },
+        }),
+    });
+    const resolved = makeResolved(
+      {},
+      { encoding: { type: 'int256', path: '$.price' }, responseMatches: [{ type: 'regex', value: 'price' }] }
+    );
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: string;
+      signature: string;
+      proof?: { signatures: { attestorAddress: string } };
+    };
+    expect(body.data).toBe('0x0000000000000000000000000000000000000000000000000000000000000bb8'); // int256(3000)
+    expect(body.signature).toMatch(/^0x/);
+    expect(body.proof?.signatures.attestorAddress).toBe(ATTESTOR);
+  });
+
+  test('returns 200 without a proof when the gateway fails (proof is non-fatal)', async () => {
+    routeFetch({ ok: false, text: () => Promise.resolve('gateway down') });
+    const resolved = makeResolved(
+      {},
+      { encoding: { type: 'int256', path: '$.price' }, responseMatches: [{ type: 'regex', value: 'price' }] }
+    );
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { signature: string; proof?: unknown };
+    expect(body.signature).toMatch(/^0x/);
+    expect(body.proof).toBeUndefined();
+  });
+
+  test('skips the gateway entirely when the endpoint has no responseMatches', async () => {
+    routeFetch({ ok: false, text: () => Promise.resolve('should not be called') });
+    const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.price' } }); // no responseMatches
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { proof?: unknown };
+    expect(body.proof).toBeUndefined();
+    // The mock was hit once (the upstream API call), not twice (no gateway call).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

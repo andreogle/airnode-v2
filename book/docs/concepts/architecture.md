@@ -32,10 +32,10 @@ giving plugins the ability to observe, filter, or modify data at each stage.
    `X-Api-Key` header, or x402 payment proof (an `X-Payment-Proof` header attesting a confirmed on-chain payment). An
    unpaid x402 request gets `402` with the payment parameters.
 4. **Validate parameters** -- check that all required parameters (those without `fixed` or `default` values) are present
-   in the request body. (Async-mode endpoints stop here and return `202` + a `pollUrl`; the rest of the pipeline runs
-   in the background.)
-5. **Check cache** -- if the endpoint has cache config, return a cached response when the TTL has not expired
-   (sync mode only).
+   in the request body. (Async-mode endpoints stop here and return `202` + a `pollUrl`; the rest of the pipeline runs in
+   the background.)
+5. **Check cache** -- if the endpoint has cache config, return a cached response when the TTL has not expired (sync mode
+   only).
 6. **Plugin: onBeforeApiCall** -- plugins can modify request parameters before the upstream call.
 7. **Call API** -- make the HTTP request to the upstream API via `src/api/call.ts`. Method, path, headers, query
    parameters, and body are assembled from the endpoint config and client parameters.

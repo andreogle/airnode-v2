@@ -68,17 +68,20 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 4. If the endpoint has encoding configured, Airnode ABI-encodes the response. Otherwise, the raw JSON is returned.
 5. If the endpoint has `encrypt` configured, the encoded value is replaced with an FHE ciphertext.
 6. Airnode signs the result with the operator's private key.
-7. If TLS proofs are enabled, Airnode requests an attestation of the upstream call (non-fatal — a failure just omits the proof).
+7. If TLS proofs are enabled, Airnode requests an attestation of the upstream call (non-fatal — a failure just omits the
+   proof).
 8. The signed response is returned to the client.
 
-Endpoints can also run in `async` mode (returns `202` with a `pollUrl`; the result is fetched later from `GET /requests/{requestId}`) or `stream` mode (the signed result is wrapped in a single Server-Sent Events frame). See [Request and Response](/docs/concepts/request-response).
+Endpoints can also run in `async` mode (returns `202` with a `pollUrl`; the result is fetched later from
+`GET /requests/{requestId}`) or `stream` mode (the signed result is wrapped in a single Server-Sent Events frame). See
+[Request and Response](/docs/concepts/request-response).
 
 ## Endpoint IDs
 
-Endpoint IDs are deterministic hashes of the API specification -- the URL, path, method, non-secret parameters,
-encoding configuration, and encryption configuration. The ID binds the airnode's signature to the exact API spec the
-operator committed to, so a consumer hard-coding an endpoint ID locks in the upstream URL, parameters, and encoding
-rules. Any change to the spec produces a different ID, which on-chain consumers can detect immediately.
+Endpoint IDs are deterministic hashes of the API specification -- the URL, path, method, non-secret parameters, encoding
+configuration, and encryption configuration. The ID binds the airnode's signature to the exact API spec the operator
+committed to, so a consumer hard-coding an endpoint ID locks in the upstream URL, parameters, and encoding rules. Any
+change to the spec produces a different ID, which on-chain consumers can detect immediately.
 
 ```
 endpointId = keccak256(url | path | method | sorted parameters | encoding spec | encrypt spec)

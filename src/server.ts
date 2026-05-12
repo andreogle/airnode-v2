@@ -4,6 +4,7 @@ import type { PrivateKeyAccount } from 'viem/accounts';
 import type { AsyncRequestStore } from './async';
 import type { ResponseCache } from './cache';
 import type { ResolvedEndpoint } from './endpoint';
+import { logger } from './logger';
 import type { PipelineDependencies } from './pipeline';
 import type { PluginRegistry } from './plugins';
 import { checkRateLimit } from './rate-limit';
@@ -32,7 +33,9 @@ interface ServerDependencies {
 }
 
 interface ServerHandle {
-  readonly stop: () => void;
+  // Stops accepting new connections and resolves once in-flight requests have
+  // finished (graceful drain). Use `stop(true)`-style force-close is not exposed.
+  readonly stop: () => Promise<void>;
   readonly port: number;
   readonly hostname: string;
 }
@@ -171,81 +174,91 @@ function createServer(deps: ServerDependencies): ServerHandle {
   const rateLimitConfig = deps.config.server.rateLimit;
   const rateBuckets = new Map<string, TokenBucket>();
 
-  const server = Bun.serve({
-    port: deps.config.server.port,
-    hostname: deps.config.server.host,
-    fetch: async (request: Request, bunServer): Promise<Response> => {
-      const url = new URL(request.url);
-      const cors = resolveCorsHeaders(request, allowedOrigins);
+  // The routing core. `fetch` wraps it to emit one access-log line per request.
+  async function route(
+    request: Request,
+    url: URL,
+    cors: CorsHeaders,
+    peerAddress: string | undefined
+  ): Promise<Response> {
+    if (request.method === 'OPTIONS') {
+      return handlePreflight(cors);
+    }
 
-      if (request.method === 'OPTIONS') {
-        return handlePreflight(cors);
+    if (rateLimitConfig) {
+      const ip = resolveClientIp(request, peerAddress, rateLimitConfig.trustForwardedFor);
+      const allowed = checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max);
+      if (!allowed) {
+        return errorResponse('Too Many Requests', 429, cors);
       }
+    }
 
-      if (rateLimitConfig) {
-        const ip = resolveClientIp(request, bunServer.requestIP(request)?.address, rateLimitConfig.trustForwardedFor);
-        const allowed = checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max);
-        if (!allowed) {
-          return errorResponse('Too Many Requests', 429, cors);
-        }
+    if (url.pathname === '/health' && request.method === 'GET') {
+      return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, cors);
+    }
+
+    // Async request polling
+    const asyncRequestId = parseRequestRoute(url.pathname);
+    if (asyncRequestId && request.method === 'GET' && deps.asyncStore) {
+      const pending = deps.asyncStore.get(asyncRequestId);
+      if (!pending) {
+        return errorResponse('Request not found', 404, cors);
       }
-
-      if (url.pathname === '/health' && request.method === 'GET') {
-        return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, cors);
-      }
-
-      // Async request polling
-      const asyncRequestId = parseRequestRoute(url.pathname);
-      if (asyncRequestId && request.method === 'GET' && deps.asyncStore) {
-        const pending = deps.asyncStore.get(asyncRequestId);
-        if (!pending) {
-          return errorResponse('Request not found', 404, cors);
-        }
-        if (pending.status === 'complete') {
-          return jsonResponse(
-            { requestId: pending.requestId, status: 'complete', ...(pending.result as object) },
-            200,
-            cors
-          );
-        }
-        if (pending.status === 'failed') {
-          return jsonResponse({ requestId: pending.requestId, status: 'failed', error: pending.error }, 200, cors);
-        }
+      if (pending.status === 'complete') {
         return jsonResponse(
-          { requestId: pending.requestId, status: pending.status, pollUrl: `/requests/${pending.requestId}` },
+          { requestId: pending.requestId, status: 'complete', ...(pending.result as object) },
           200,
           cors
         );
       }
+      if (pending.status === 'failed') {
+        return jsonResponse({ requestId: pending.requestId, status: 'failed', error: pending.error }, 200, cors);
+      }
+      return jsonResponse(
+        { requestId: pending.requestId, status: pending.status, pollUrl: `/requests/${pending.requestId}` },
+        200,
+        cors
+      );
+    }
 
-      const endpointId = parseEndpointRoute(url.pathname);
-      if (endpointId) {
-        if (request.method !== 'POST') {
-          return errorResponse('Method Not Allowed', 405, cors);
-        }
-
-        const body = await parseRequestBody(request);
-        if (body === 'too_large') {
-          return errorResponse('Request body too large', 413, cors);
-        }
-        if (body === 'bad_content_type') {
-          return errorResponse('Content-Type must be application/json', 415, cors);
-        }
-        if (body === 'bad_parameters') {
-          return errorResponse('Request "parameters" must be an object', 400, cors);
-        }
-
-        return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps), cors);
+    const endpointId = parseEndpointRoute(url.pathname);
+    if (endpointId) {
+      if (request.method !== 'POST') {
+        return errorResponse('Method Not Allowed', 405, cors);
       }
 
-      return errorResponse('Not Found', 404, cors);
+      const body = await parseRequestBody(request);
+      if (body === 'too_large') {
+        return errorResponse('Request body too large', 413, cors);
+      }
+      if (body === 'bad_content_type') {
+        return errorResponse('Content-Type must be application/json', 415, cors);
+      }
+      if (body === 'bad_parameters') {
+        return errorResponse('Request "parameters" must be an object', 400, cors);
+      }
+
+      return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps), cors);
+    }
+
+    return errorResponse('Not Found', 404, cors);
+  }
+
+  const server = Bun.serve({
+    port: deps.config.server.port,
+    hostname: deps.config.server.host,
+    fetch: async (request: Request, bunServer): Promise<Response> => {
+      const start = Date.now();
+      const url = new URL(request.url);
+      const cors = resolveCorsHeaders(request, allowedOrigins);
+      const response = await route(request, url, cors, bunServer.requestIP(request)?.address);
+      logger.info(`${request.method} ${url.pathname} ${String(response.status)} ${String(Date.now() - start)}ms`);
+      return response;
     },
   });
 
   return {
-    stop: () => {
-      void server.stop();
-    },
+    stop: () => server.stop(false),
     port: server.port ?? deps.config.server.port,
     hostname: server.hostname ?? deps.config.server.host,
   };

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { Hex } from 'viem';
+import { createAsyncRequestStore } from './async';
 import { createCache } from './cache';
 import { createEmptyRegistry } from './plugins';
 import { createServer } from './server';
@@ -57,7 +58,7 @@ describe('createServer', () => {
   let baseUrl: string;
 
   afterEach(() => {
-    server?.stop();
+    void server?.stop();
   });
 
   test('health endpoint returns status, version, airnode', async () => {
@@ -162,6 +163,132 @@ describe('createServer', () => {
 
     expect(response.status).toBe(405);
     expect(body.error).toBe('Method Not Allowed');
+  });
+
+  test('rejects a non-JSON Content-Type with 415', async () => {
+    const deps = makeDeps();
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml' },
+      body: '<x/>',
+    });
+    expect(response.status).toBe(415);
+    expect(((await response.json()) as { error: string }).error).toBe('Content-Type must be application/json');
+  });
+
+  test('rejects an oversized request body with 413', async () => {
+    const deps = makeDeps();
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // 64 KB + 1 byte of JSON-ish payload — over MAX_BODY_BYTES.
+    const big = `{"parameters":{"x":"${'a'.repeat(64 * 1024)}"}}`;
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: big,
+    });
+    expect(response.status).toBe(413);
+    expect(((await response.json()) as { error: string }).error).toBe('Request body too large');
+  });
+
+  // ===========================================================================
+  // Async request polling — GET /requests/{requestId}
+  // ===========================================================================
+  test('GET /requests/{id} returns the pending status with a pollUrl', async () => {
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ asyncStore });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    if (!pending) throw new Error('expected a pending entry');
+
+    const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { requestId: string; status: string; pollUrl: string };
+    expect(body.requestId).toBe(pending.requestId);
+    expect(body.status).toBe('pending');
+    expect(body.pollUrl).toBe(`/requests/${pending.requestId}`);
+
+    asyncStore.stop();
+  });
+
+  test('GET /requests/{id} returns the completed result', async () => {
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ asyncStore });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    if (!pending) throw new Error('expected a pending entry');
+    asyncStore.setComplete(pending.requestId, { airnode: TEST_AIRNODE, data: '0xabcd', signature: '0x01' });
+
+    const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { requestId: string; status: string; data: string; signature: string };
+    expect(body.status).toBe('complete');
+    expect(body.requestId).toBe(pending.requestId);
+    expect(body.data).toBe('0xabcd');
+    expect(body.signature).toBe('0x01');
+
+    asyncStore.stop();
+  });
+
+  test('GET /requests/{id} returns the failed status with an error', async () => {
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ asyncStore });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    if (!pending) throw new Error('expected a pending entry');
+    asyncStore.setFailed(pending.requestId, 'API call returned an error');
+
+    const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { requestId: string; status: string; error: string };
+    expect(body.status).toBe('failed');
+    expect(body.error).toBe('API call returned an error');
+
+    asyncStore.stop();
+  });
+
+  test('GET /requests/{id} returns 404 for an unknown request id', async () => {
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ asyncStore });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const unknownId = `0x${'00'.repeat(32)}`;
+    const response = await fetch(`${baseUrl}/requests/${unknownId}`);
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { error: string }).error).toBe('Request not found');
+
+    asyncStore.stop();
+  });
+
+  test('GET /requests/{badformat} falls through to 404 Not Found', async () => {
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ asyncStore });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/requests/not-a-hex-id`);
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { error: string }).error).toBe('Not Found');
+
+    asyncStore.stop();
+  });
+
+  test('stop() resolves (graceful drain)', async () => {
+    const deps = makeDeps();
+    const handle = createServer(deps);
+    // Should be a promise that settles without throwing.
+    await handle.stop();
   });
 
   test('CORS echoes request Origin when it matches the allow-list', async () => {
