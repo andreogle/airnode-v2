@@ -1,6 +1,6 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
 import functionalPlugin from 'eslint-plugin-functional';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
 import promisePlugin from 'eslint-plugin-promise';
 import unicornPlugin from 'eslint-plugin-unicorn';
 import globals from 'globals';
@@ -34,11 +34,11 @@ export default defineConfig([
 
     plugins: {
       functional: functionalPlugin,
-      import: importPlugin,
+      'import-x': importPlugin,
     },
 
     settings: {
-      'import/resolver': {
+      'import-x/resolver': {
         typescript: true,
         node: true,
       },
@@ -76,7 +76,7 @@ export default defineConfig([
       'unicorn/prevent-abbreviations': 'off',
 
       // --- Import ordering (alphabetical) ---
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
@@ -84,10 +84,10 @@ export default defineConfig([
           'newlines-between': 'never',
         },
       ],
-      'import/no-duplicates': 'error',
-      'import/no-mutable-exports': 'error',
-      'import/no-self-import': 'error',
-      'import/no-cycle': ['error', { maxDepth: 4 }],
+      'import-x/no-duplicates': 'error',
+      'import-x/no-mutable-exports': 'error',
+      'import-x/no-self-import': 'error',
+      'import-x/no-cycle': ['error', { maxDepth: 4 }],
     },
   },
 
