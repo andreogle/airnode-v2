@@ -1,3 +1,9 @@
+[install]
+# Supply-chain hardening: refuse to install any package version published less
+# than 3 days ago, so a freshly-published malicious release can't be pulled in
+# before it's caught and yanked. 3 days = 259200 seconds.
+minimumReleaseAge = 259200
+
 [test]
 root = "src"
 coverage = true
