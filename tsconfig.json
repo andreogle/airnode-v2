@@ -25,5 +25,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // `book/` is a separate Docusaurus project with its own tsconfig and deps
+  // (installed via `bun install --cwd book`), so the root `tsc` must not try
+  // to type-check it. `**/dist` skips any compiled plugin bundles.
+  "exclude": ["**/node_modules", "**/dist", "book"]
 }
