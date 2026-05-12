@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { go } from '@api3/promise-utils';
+import { go, goSync } from '@api3/promise-utils';
 import type { Hex } from 'viem';
 import { logger } from './logger';
 
@@ -93,12 +93,31 @@ interface AirnodePlugin {
   readonly hooks: PluginHooks;
 }
 
+// A plugin module's default export is either a ready `AirnodePlugin` (no config
+// needed) or a factory that takes the validated config and returns one.
+type PluginFactory = (config: Record<string, unknown>) => AirnodePlugin;
+
+// Optional named export `configSchema`. Kept structural (anything with a
+// throwing `parse`) so plugins can use Zod, Valibot, or a hand-rolled check.
+interface PluginConfigSchema {
+  readonly parse: (value: unknown) => unknown;
+}
+
+interface PluginModule {
+  readonly default?: AirnodePlugin | PluginFactory;
+  readonly configSchema?: PluginConfigSchema;
+}
+
 // =============================================================================
 // Plugin config entry
 // =============================================================================
 interface PluginConfigEntry {
   readonly source: string;
   readonly timeout: number;
+  // Scoped config for the plugin (interpolated `${ENV}` values). Always present
+  // when derived from a parsed config (the schema defaults it to `{}`); optional
+  // here so programmatic callers can omit it.
+  readonly config?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -453,27 +472,59 @@ function createRegistry(loaded: readonly LoadedPlugin[]): PluginRegistry {
 
 // =============================================================================
 // Plugin loader
+//
+// For each entry: import the module → validate the supplied `config` against the
+// plugin's exported `configSchema` (if any) → instantiate (a factory default
+// export receives the validated config; a plain object is used as-is). Any
+// failure logs a clear error and skips that plugin rather than aborting startup.
 // =============================================================================
-async function importPlugin(pluginPath: string): Promise<AirnodePlugin> {
-  const resolved = path.resolve(pluginPath);
-  const mod = (await import(resolved)) as { default?: AirnodePlugin };
+async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Promise<LoadedPlugin | undefined> {
+  const resolved = path.isAbsolute(entry.source) ? entry.source : path.resolve(configDir, entry.source);
 
-  if (!mod.default) {
-    throw new Error(`Plugin at ${resolved} has no default export`);
+  const imported = await go(async () => (await import(resolved)) as PluginModule);
+  if (!imported.success) {
+    logger.error(`Failed to load plugin "${entry.source}": ${imported.error.message}`);
+    return undefined;
+  }
+  const mod = imported.data;
+
+  const suppliedConfig = entry.config ?? {};
+  const schema = mod.configSchema;
+  const parsed = schema
+    ? goSync(() => schema.parse(suppliedConfig))
+    : { success: true as const, data: suppliedConfig as unknown };
+  if (!parsed.success) {
+    logger.error(`Plugin "${entry.source}" config is invalid: ${parsed.error.message}`);
+    return undefined;
+  }
+  const config = (parsed.data ?? {}) as Record<string, unknown>;
+
+  const def = mod.default;
+  if (!def) {
+    logger.error(`Plugin "${entry.source}" has no default export`);
+    return undefined;
+  }
+  const built = typeof def === 'function' ? goSync(() => def(config)) : goSync(() => def);
+  if (!built.success) {
+    logger.error(`Plugin "${entry.source}" factory threw while constructing: ${built.error.message}`);
+    return undefined;
+  }
+  const plugin = built.data;
+
+  if (typeof plugin.name !== 'string' || typeof plugin.hooks !== 'object') {
+    logger.error(`Plugin "${entry.source}" is missing required "name" or "hooks" fields`);
+    return undefined;
+  }
+  if (typeof def !== 'function' && Object.keys(suppliedConfig).length > 0) {
+    logger.warn(`Plugin "${entry.source}" was given config but its default export is not a factory — config ignored`);
   }
 
-  if (typeof mod.default.name !== 'string' || typeof mod.default.hooks !== 'object') {
-    throw new TypeError(`Plugin at ${resolved} is missing required "name" or "hooks" fields`);
-  }
-
-  return mod.default;
+  logger.info(`Plugin loaded: ${plugin.name} (budget: ${String(entry.timeout)}ms)`);
+  return { plugin, timeout: entry.timeout };
 }
 
 // =============================================================================
 // Load plugins from config entries
-//
-// Each entry specifies a source (file path) and timeout budget. The plugin's
-// exported name is used for logging and budget tracking.
 // =============================================================================
 async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDir: string): Promise<PluginRegistry> {
   if (configEntries.length === 0) return createEmptyRegistry();
@@ -482,14 +533,8 @@ async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDi
 
   // eslint-disable-next-line functional/no-loop-statements
   for (const entry of configEntries) {
-    const resolvedSource = path.resolve(configDir, entry.source);
-    const result = await go(() => importPlugin(resolvedSource));
-    if (!result.success) {
-      logger.error(`Failed to load plugin "${entry.source}": ${result.error.message}`);
-      continue;
-    }
-    logger.info(`Plugin loaded: ${result.data.name} (budget: ${String(entry.timeout)}ms)`);
-    loaded.push({ plugin: result.data, timeout: entry.timeout }); // eslint-disable-line functional/immutable-data
+    const result = await loadPluginEntry(entry, configDir);
+    if (result) loaded.push(result); // eslint-disable-line functional/immutable-data
   }
 
   const registry = createRegistry(loaded);

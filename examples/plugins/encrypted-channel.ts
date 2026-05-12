@@ -27,19 +27,21 @@
 //     3. Derive AES key via HKDF-SHA256(sharedSecret)
 //     4. AES-256-GCM decrypt
 //
-// Usage:
+// Usage (in config.yaml):
 //   settings:
 //     plugins:
 //       - source: ./examples/plugins/encrypted-channel.ts
 //         timeout: 5000
-//
-// Environment:
-//   AIRNODE_PRIVATE_KEY must be set (the airnode's secp256k1 private key)
+//         config:
+//           # This plugin uses the airnode's own secp256k1 key as its ECIES key,
+//           # so you must EXPLICITLY hand it over here. (Most plugins should not
+//           # receive the signing key — only ones that genuinely need it.)
+//           privateKey: ${AIRNODE_PRIVATE_KEY}
 //
 // Client-side encryption (TypeScript):
 //   import { encrypt } from './examples/plugins/encrypted-channel';
 //   const ciphertext = encrypt(JSON.stringify(params), airnodePublicKey);
-//   // Pass ciphertext as the parameters field in the HTTP request
+//   // Pass ciphertext as the `_encrypted` parameter in the HTTP request body
 // =============================================================================
 
 import { gcm } from '@noble/ciphers/aes';
@@ -47,6 +49,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha2';
 import { randomBytes } from '@noble/hashes/utils';
+import { z } from 'zod/v4';
 
 // =============================================================================
 // Plugin types (inlined — the package does not export them yet)
@@ -89,6 +92,15 @@ interface AirnodePlugin {
 }
 
 // =============================================================================
+// Config — validated by the airnode at startup
+// =============================================================================
+export const configSchema = z.object({
+  privateKey: z.string().regex(/^0x[\da-fA-F]{64}$/, 'must be a 0x-prefixed 32-byte hex string'),
+});
+
+type Config = z.infer<typeof configSchema>;
+
+// =============================================================================
 // Constants
 // =============================================================================
 const HKDF_INFO = new TextEncoder().encode('airnode-ecies-v1');
@@ -107,7 +119,7 @@ const TAG_LENGTH = 16; // AES-GCM authentication tag
  * Output format: ephemeralPubKey (33 bytes) || nonce (12 bytes) || ciphertext || tag (16 bytes)
  *
  * This function is exported for use by sponsors/requesters who need to encrypt
- * request parameters before submitting them on-chain.
+ * request parameters before submitting them.
  */
 function encrypt(plaintext: Uint8Array, recipientPubKey: Uint8Array): Uint8Array {
   const ephemeralPrivKey = secp256k1.utils.randomPrivateKey();
@@ -164,99 +176,95 @@ function bytesToHex(bytes: Uint8Array): Hex {
 // =============================================================================
 const responseKeys = new Map<string, Uint8Array>();
 
-// =============================================================================
-// Plugin implementation
-// =============================================================================
 const PREFIX = '[encrypted-channel]';
 
-const PRIVATE_KEY_HEX = process.env['AIRNODE_PRIVATE_KEY'];
+// =============================================================================
+// Plugin factory — receives the validated config (with the airnode's private
+// key, explicitly granted) and returns the plugin.
+// =============================================================================
+export default function encryptedChannel(config: Config): AirnodePlugin {
+  const privKey = hexToBytes(config.privateKey);
 
-const plugin: AirnodePlugin = {
-  name: 'encrypted-channel',
-  hooks: {
-    // =========================================================================
-    // onBeforeApiCall — decrypt request parameters
-    //
-    // The `parameters` object is expected to have a single key `_encrypted`
-    // whose value is the hex-encoded ECIES ciphertext. After decryption, the
-    // plaintext is parsed as JSON to produce the real parameter map.
-    //
-    // The decrypted parameters may include a `_responsePublicKey` field — a
-    // hex-encoded compressed secp256k1 public key. If present, it is stored
-    // and used to encrypt the signed data in onBeforeSign.
-    // =========================================================================
-    onBeforeApiCall: (ctx: BeforeApiCallContext): BeforeApiCallResult => {
-      const encrypted = ctx.parameters['_encrypted'];
-      if (!encrypted) return;
-      if (!PRIVATE_KEY_HEX) {
-        console.error(`${PREFIX} AIRNODE_PRIVATE_KEY not set — cannot decrypt request parameters`);
-        return;
-      }
+  return {
+    name: 'encrypted-channel',
+    hooks: {
+      // =======================================================================
+      // onBeforeApiCall — decrypt request parameters
+      //
+      // The `parameters` object is expected to have a single key `_encrypted`
+      // whose value is the hex-encoded ECIES ciphertext. After decryption, the
+      // plaintext is parsed as JSON to produce the real parameter map.
+      //
+      // The decrypted parameters may include a `_responsePublicKey` field — a
+      // hex-encoded compressed secp256k1 public key. If present, it is stored
+      // and used to encrypt the signed data in onBeforeSign.
+      // =======================================================================
+      onBeforeApiCall: (ctx: BeforeApiCallContext): BeforeApiCallResult => {
+        const encrypted = ctx.parameters['_encrypted'];
+        if (!encrypted) return;
 
-      const privKey = hexToBytes(PRIVATE_KEY_HEX);
-      const ciphertext = hexToBytes(encrypted);
+        const ciphertext = hexToBytes(encrypted);
+        if (ciphertext.length < PUBKEY_LENGTH + NONCE_LENGTH + TAG_LENGTH) {
+          console.error(`${PREFIX} Encrypted payload too short (${String(ciphertext.length)} bytes)`);
+          return;
+        }
 
-      if (ciphertext.length < PUBKEY_LENGTH + NONCE_LENGTH + TAG_LENGTH) {
-        console.error(`${PREFIX} Encrypted payload too short (${String(ciphertext.length)} bytes)`);
-        return;
-      }
+        const plaintext = decrypt(ciphertext, privKey);
+        const decoded = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
 
-      const plaintext = decrypt(ciphertext, privKey);
-      const decoded = JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, string>;
+        // Extract and store the response public key if provided
+        const responsePublicKey = decoded['_responsePublicKey'];
+        if (responsePublicKey) {
+          responseKeys.set(ctx.requestId, hexToBytes(responsePublicKey)); // eslint-disable-line functional/immutable-data
+          console.info(
+            `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response encryption enabled`
+          );
+        } else {
+          console.info(
+            `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response will be plaintext (no _responsePublicKey)`
+          );
+        }
 
-      // Extract and store the response public key if provided
-      const responsePublicKey = decoded['_responsePublicKey'];
-      if (responsePublicKey) {
-        responseKeys.set(ctx.requestId, hexToBytes(responsePublicKey)); // eslint-disable-line functional/immutable-data
-        console.info(
-          `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response encryption enabled`
-        );
-      } else {
-        console.info(
-          `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): decrypted parameters, response will be plaintext (no _responsePublicKey)`
-        );
-      }
+        // Remove the meta-key and return real parameters
+        const { _responsePublicKey: _, ...realParameters } = decoded;
+        return { parameters: realParameters };
+      },
 
-      // Remove the meta-key and return real parameters
-      const { _responsePublicKey: _, ...realParameters } = decoded;
-      return { parameters: realParameters };
-    },
+      // =======================================================================
+      // onBeforeSign — encrypt data with requester's public key
+      //
+      // If a _responsePublicKey was provided during parameter decryption, the
+      // data to be signed is encrypted with that key. The HTTP response contains
+      // the ECIES ciphertext instead of plaintext ABI data.
+      //
+      // The requester must decrypt client-side to access the actual data.
+      // =======================================================================
+      onBeforeSign: (ctx: BeforeSignContext): BeforeSignResult => {
+        const responsePubKey = responseKeys.get(ctx.requestId);
+        if (!responsePubKey) return;
 
-    // =========================================================================
-    // onBeforeSign — encrypt data with requester's public key
-    //
-    // If a _responsePublicKey was provided during parameter decryption, the
-    // data to be signed is encrypted with that key. The HTTP response contains
-    // the ECIES ciphertext instead of plaintext ABI data.
-    //
-    // The requester must decrypt client-side to access the actual data.
-    // =========================================================================
-    onBeforeSign: (ctx: BeforeSignContext): BeforeSignResult => {
-      const responsePubKey = responseKeys.get(ctx.requestId);
-      if (!responsePubKey) return;
-
-      // Clean up stored key
-      responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data
-
-      const plainData = hexToBytes(ctx.data);
-      const encryptedData = encrypt(plainData, responsePubKey);
-      const encryptedHex = bytesToHex(encryptedData);
-
-      console.info(
-        `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): encrypted data (${String(plainData.length)} → ${String(encryptedData.length)} bytes)`
-      );
-
-      return { data: encryptedHex };
-    },
-
-    onError: (ctx: ErrorContext) => {
-      // Clean up any stored keys on error to prevent memory leaks
-      if (ctx.requestId) {
+        // Clean up stored key
         responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data
-      }
-    },
-  },
-};
 
-export default plugin;
+        const plainData = hexToBytes(ctx.data);
+        const encryptedData = encrypt(plainData, responsePubKey);
+        const encryptedHex = bytesToHex(encryptedData);
+
+        console.info(
+          `${PREFIX} Request ${ctx.requestId.slice(0, 10)}... (${ctx.api}/${ctx.endpoint}): encrypted data (${String(plainData.length)} → ${String(encryptedData.length)} bytes)`
+        );
+
+        return { data: encryptedHex };
+      },
+
+      onError: (ctx: ErrorContext) => {
+        // Clean up any stored keys on error to prevent memory leaks
+        if (ctx.requestId) {
+          responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data
+        }
+      },
+    },
+  };
+}
+
 export { decrypt, encrypt };

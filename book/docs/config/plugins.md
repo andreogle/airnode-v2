@@ -5,24 +5,48 @@ sidebar_position: 5
 
 # Plugin Configuration
 
-Plugins are declared in the `settings.plugins` array. Each entry specifies a source file and a timeout budget. When
-omitted or empty, no plugins are loaded.
+Plugins are declared in the `settings.plugins` array. Each entry specifies a source file, a timeout budget, and an
+optional `config` block handed to the plugin. When omitted or empty, no plugins are loaded.
 
 ```yaml
 settings:
   plugins:
     - source: ./plugins/heartbeat.ts
       timeout: 5000
+      config:
+        url: ${HEARTBEAT_URL}
     - source: ./plugins/slack-alerts.ts
       timeout: 3000
+      config:
+        webhookUrl: ${SLACK_WEBHOOK_URL}
 ```
 
 ## Fields
 
-| Field     | Type     | Required | Description                                                                                 |
-| --------- | -------- | -------- | ------------------------------------------------------------------------------------------- |
-| `source`  | `string` | Yes      | Path to the plugin file (`.ts` or `.js`). Resolved relative to the config file's directory. |
-| `timeout` | `number` | Yes      | Per-request time budget in milliseconds. Must be a positive integer.                        |
+| Field     | Type     | Required | Description                                                                                  |
+| --------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
+| `source`  | `string` | Yes      | Path to the plugin file (`.ts` or `.js`). Resolved relative to the config file's directory.  |
+| `timeout` | `number` | Yes      | Per-request time budget in milliseconds. Must be a positive integer.                         |
+| `config`  | `object` | No       | Key/value config handed to the plugin. Values support `${ENV}` interpolation. Defaults `{}`. |
+
+## Plugin config
+
+Anything a plugin needs — webhook URLs, API tokens, even the airnode's private key for a plugin that genuinely requires
+it — is passed explicitly through `config`, not read from `process.env` by the plugin. The values support `${ENV}`
+interpolation like the rest of the config, so secrets stay in your `.env`:
+
+```yaml
+plugins:
+  - source: ./plugins/slack-alerts.ts
+    timeout: 3000
+    config:
+      webhookUrl: ${SLACK_WEBHOOK_URL}
+```
+
+A plugin may export a `configSchema` describing the shape it expects. **The airnode validates `config` against it on
+startup** — a missing or malformed value (a typo'd URL, an absent required key) fails the boot with a clear error rather
+than surfacing at first-request time. If a plugin exports no schema, the shape is the plugin's own responsibility; if a
+plugin doesn't accept config at all and you give it some, it's ignored with a warning.
 
 ## Source resolution
 
@@ -59,8 +83,8 @@ each plugin receives the output of the previous one.
 
 ## Plugin name
 
-There is no `name` field in the config. The plugin's exported `name` (from its default export) is used for logging and
-budget tracking.
+There is no `name` field in the config. The plugin's exported `name` (from its default export, or from the object its
+factory returns) is used for logging and budget tracking.
 
 ## Further reading
 

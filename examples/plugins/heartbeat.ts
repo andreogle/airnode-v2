@@ -9,11 +9,15 @@
 //     plugins:
 //       - source: ./examples/plugins/heartbeat.ts
 //         timeout: 5000
+//         config:
+//           url: ${HEARTBEAT_URL}         # where to POST the heartbeat (optional)
+//           apiKey: ${HEARTBEAT_API_KEY}  # sent in the x-api-key header (optional)
 //
-// Environment variables:
-//   HEARTBEAT_URL     - URL to POST the heartbeat payload to (required)
-//   HEARTBEAT_API_KEY - API key sent in the x-api-key header (optional)
+// The airnode validates `config` against `configSchema` (below) on startup, so a
+// typo in the URL fails the boot rather than silently disabling the heartbeat.
 // =============================================================================
+
+import { z } from 'zod/v4';
 
 // =============================================================================
 // Plugin types (inlined — the package does not export them yet)
@@ -36,6 +40,16 @@ interface AirnodePlugin {
 }
 
 // =============================================================================
+// Config — validated by the airnode at startup
+// =============================================================================
+export const configSchema = z.object({
+  url: z.url().optional(),
+  apiKey: z.string().min(1).optional(),
+});
+
+type Config = z.infer<typeof configSchema>;
+
+// =============================================================================
 // Heartbeat payload
 // =============================================================================
 interface HeartbeatPayload {
@@ -47,38 +61,35 @@ interface HeartbeatPayload {
 }
 
 // =============================================================================
-// Plugin implementation
+// Plugin factory — receives the validated config and returns the plugin
 // =============================================================================
-const HEARTBEAT_URL = process.env['HEARTBEAT_URL'];
-const HEARTBEAT_API_KEY = process.env['HEARTBEAT_API_KEY'];
+export default function heartbeat(config: Config): AirnodePlugin {
+  return {
+    name: 'heartbeat',
+    hooks: {
+      onResponseSent: async (context: ResponseSentContext) => {
+        if (!config.url) return;
 
-const plugin: AirnodePlugin = {
-  name: 'heartbeat',
-  hooks: {
-    onResponseSent: async (context: ResponseSentContext) => {
-      if (!HEARTBEAT_URL) return;
+        const payload: HeartbeatPayload = {
+          timestamp: new Date().toISOString(),
+          endpointId: context.endpointId,
+          api: context.api,
+          endpoint: context.endpoint,
+          durationMs: context.duration,
+        };
 
-      const payload: HeartbeatPayload = {
-        timestamp: new Date().toISOString(),
-        endpointId: context.endpointId,
-        api: context.api,
-        endpoint: context.endpoint,
-        durationMs: context.duration,
-      };
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(config.apiKey ? { 'x-api-key': config.apiKey } : {}),
+        };
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(HEARTBEAT_API_KEY ? { 'x-api-key': HEARTBEAT_API_KEY } : {}),
-      };
-
-      await fetch(HEARTBEAT_URL, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-        signal: context.signal,
-      });
+        await fetch(config.url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal: context.signal,
+        });
+      },
     },
-  },
-};
-
-export default plugin;
+  };
+}

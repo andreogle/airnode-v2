@@ -10,11 +10,15 @@
 //     plugins:
 //       - source: ./examples/plugins/slack-alerts.ts
 //         timeout: 5000
+//         config:
+//           webhookUrl: ${SLACK_WEBHOOK_URL}   # required — create one at
+//                                               # https://api.slack.com/messaging/webhooks
 //
-// Environment variables:
-//   SLACK_WEBHOOK_URL - Slack incoming webhook URL (required)
-//     Create one at: https://api.slack.com/messaging/webhooks
+// `webhookUrl` is required: the airnode validates `config` against `configSchema`
+// (below) on startup, so a missing/malformed webhook fails the boot.
 // =============================================================================
+
+import { z } from 'zod/v4';
 
 // =============================================================================
 // Plugin types (inlined — the package does not export them yet)
@@ -36,6 +40,15 @@ interface AirnodePlugin {
 }
 
 // =============================================================================
+// Config — validated by the airnode at startup
+// =============================================================================
+export const configSchema = z.object({
+  webhookUrl: z.url(),
+});
+
+type Config = z.infer<typeof configSchema>;
+
+// =============================================================================
 // Slack message formatting
 // =============================================================================
 function formatSlackMessage(ctx: ErrorContext): string {
@@ -49,24 +62,20 @@ function formatSlackMessage(ctx: ErrorContext): string {
 }
 
 // =============================================================================
-// Plugin implementation
+// Plugin factory — receives the validated config and returns the plugin
 // =============================================================================
-const SLACK_WEBHOOK_URL = process.env['SLACK_WEBHOOK_URL'];
-
-const plugin: AirnodePlugin = {
-  name: 'slack-alerts',
-  hooks: {
-    onError: async (ctx: ErrorContext) => {
-      if (!SLACK_WEBHOOK_URL) return;
-
-      await fetch(SLACK_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: formatSlackMessage(ctx) }),
-        signal: ctx.signal,
-      });
+export default function slackAlerts(config: Config): AirnodePlugin {
+  return {
+    name: 'slack-alerts',
+    hooks: {
+      onError: async (ctx: ErrorContext) => {
+        await fetch(config.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: formatSlackMessage(ctx) }),
+          signal: ctx.signal,
+        });
+      },
     },
-  },
-};
-
-export default plugin;
+  };
+}

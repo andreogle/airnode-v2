@@ -175,6 +175,12 @@ export const serverSchema = z.object({
 const pluginEntrySchema = z.object({
   source: z.string().min(1),
   timeout: z.number().int().positive(),
+  // Explicit, scoped config handed to the plugin (instead of the plugin reaching
+  // into `process.env` itself). Values support `${ENV}` interpolation like the
+  // rest of the config. The plugin's own exported `configSchema` (if any) is
+  // validated against this at startup; otherwise the shape is the plugin's
+  // responsibility.
+  config: z.record(z.string(), z.unknown()).default({}),
 });
 
 const reclaimProofSchema = z.object({

@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Hex } from 'viem';
 import { configureLogger } from './logger';
 import {
@@ -736,5 +739,80 @@ describe('loadPlugins', () => {
     expect(registry.plugins).toHaveLength(2);
     expect(registry.plugins[0]?.name).toBe('heartbeat');
     expect(registry.plugins[1]?.name).toBe('logger');
+  });
+});
+
+// =============================================================================
+// loadPlugins — scoped config + startup validation
+// =============================================================================
+describe('loadPlugins — config', () => {
+  const projectRoot = `${import.meta.dirname}/..`;
+  const slackPath = `${projectRoot}/examples/plugins/slack-alerts.ts`;
+  const heartbeatPath = `${projectRoot}/examples/plugins/heartbeat.ts`;
+  const loggerPath = `${projectRoot}/examples/plugins/logger.ts`;
+
+  // Standalone fixture plugins (no imports, so Bun can run them from a temp dir).
+  const fixtureDir = path.join(tmpdir(), `airnode-plugin-fixtures-${String(process.pid)}`);
+  const nameFromConfigPath = path.join(fixtureDir, 'name-from-config.ts');
+  const throwingFactoryPath = path.join(fixtureDir, 'throwing-factory.ts');
+
+  beforeAll(async () => {
+    await mkdir(fixtureDir, { recursive: true });
+    await Bun.write(
+      nameFromConfigPath,
+      'export default (config) => ({ name: `cfg-${String(config.tag)}`, hooks: {} });\n'
+    );
+    await Bun.write(throwingFactoryPath, 'export default () => { throw new Error("factory boom"); };\n');
+  });
+
+  afterAll(async () => {
+    await rm(fixtureDir, { recursive: true, force: true });
+  });
+
+  test('validates config against the plugin configSchema and loads on success', async () => {
+    const registry = await loadPlugins(
+      [{ source: slackPath, timeout: 5000, config: { webhookUrl: 'https://hooks.slack.com/services/x/y/z' } }],
+      projectRoot
+    );
+    expect(registry.plugins).toHaveLength(1);
+    expect(registry.plugins[0]?.name).toBe('slack-alerts');
+  });
+
+  test('rejects a plugin whose config is missing a required field', async () => {
+    const registry = await loadPlugins([{ source: slackPath, timeout: 5000, config: {} }], projectRoot);
+    expect(registry.plugins).toHaveLength(0);
+    expect(String(errorMock.mock.calls[0]?.[0])).toContain('config is invalid');
+  });
+
+  test('rejects a plugin whose config value has the wrong shape', async () => {
+    const registry = await loadPlugins(
+      [{ source: heartbeatPath, timeout: 5000, config: { url: 'not a url' } }],
+      projectRoot
+    );
+    expect(registry.plugins).toHaveLength(0);
+    expect(String(errorMock.mock.calls[0]?.[0])).toContain('config is invalid');
+  });
+
+  test('passes the validated config to a factory default export', async () => {
+    const registry = await loadPlugins(
+      [{ source: nameFromConfigPath, timeout: 5000, config: { tag: 'xyz' } }],
+      projectRoot
+    );
+    expect(registry.plugins).toHaveLength(1);
+    expect(registry.plugins[0]?.name).toBe('cfg-xyz');
+  });
+
+  test('warns and ignores config given to a plain (non-factory) plugin', async () => {
+    const registry = await loadPlugins([{ source: loggerPath, timeout: 5000, config: { unused: true } }], projectRoot);
+    expect(registry.plugins).toHaveLength(1);
+    expect(registry.plugins[0]?.name).toBe('logger');
+    const warnings = warnMock.mock.calls.map((c) => String(c[0])).join(' ');
+    expect(warnings).toContain('config ignored');
+  });
+
+  test('skips a plugin whose factory throws while constructing', async () => {
+    const registry = await loadPlugins([{ source: throwingFactoryPath, timeout: 5000, config: {} }], projectRoot);
+    expect(registry.plugins).toHaveLength(0);
+    expect(String(errorMock.mock.calls[0]?.[0])).toContain('factory threw');
   });
 });

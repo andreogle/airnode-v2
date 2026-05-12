@@ -98,6 +98,22 @@ interface AirnodePlugin {
   readonly hooks: PluginHooks;
 }
 
+// A plugin module's default export is either a ready `AirnodePlugin` (no config
+// needed) or a factory that receives the validated `config` and returns one:
+//
+//   import { z } from 'zod/v4';
+//   export const configSchema = z.object({ webhookUrl: z.url() }); // optional — validated at startup
+//   export default (config: z.infer<typeof configSchema>) => ({ name: 'my-plugin', hooks: { ... } });
+//
+//   // ...or, with no config:
+//   export default { name: 'my-plugin', hooks: { ... } } satisfies AirnodePlugin;
+//
+// `config` values come from `settings.plugins[].config` in config.yaml and
+// support `${ENV}` interpolation. Plugins should NOT read `process.env`
+// directly — anything they need (including the airnode's private key, if they
+// genuinely require it) must be granted explicitly here.
+type PluginFactory = (config: Record<string, unknown>) => AirnodePlugin;
+
 export type {
   AfterApiCallContext,
   AfterApiCallResult,
@@ -111,6 +127,7 @@ export type {
   Hex,
   HttpRequestContext,
   HttpRequestResult,
+  PluginFactory,
   PluginHooks,
   ResponseSentContext,
 };

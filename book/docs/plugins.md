@@ -48,9 +48,28 @@ interface PluginHooks {
 }
 ```
 
+A plugin module's **default export** is either a ready `AirnodePlugin` (no config) or a **factory** that receives the
+validated `config` and returns one. It may also export a `configSchema` that the airnode validates `config` against on
+startup. Plugins should **not** read `process.env` directly — everything they need (including the airnode's private key,
+if they genuinely require it) is granted explicitly through
+[`settings.plugins[].config`](/docs/config/plugins#plugin-config).
+
+```typescript
+// no config — a plain object:
+export default { name: 'request-logger', hooks: { ... } } satisfies AirnodePlugin;
+
+// with config — a factory plus a schema validated at startup:
+import { z } from 'zod/v4';
+export const configSchema = z.object({ webhookUrl: z.url() });
+export default (config: z.infer<typeof configSchema>): AirnodePlugin => ({
+  name: 'slack-alerts',
+  hooks: { onError: (ctx) => fetch(config.webhookUrl, /* ... */) },
+});
+```
+
 ## Example plugin
 
-A simple request logger:
+A simple request logger (no config — a plain default export):
 
 ```typescript
 const plugin: AirnodePlugin = {
@@ -158,16 +177,21 @@ When multiple plugins define the same hook, they run in config-declared order:
 
 ## Configuration
 
-Add plugins in the `settings.plugins` section of your config:
+Add plugins in the `settings.plugins` section of your config. Each entry takes a `source`, a `timeout` budget, and an
+optional `config` block (with `${ENV}` interpolation) that's handed to the plugin:
 
 ```yaml
 settings:
   plugins:
     - source: ./plugins/request-logger.ts
       timeout: 5000
-    - source: ./plugins/redactor.ts
+    - source: ./plugins/slack-alerts.ts
       timeout: 3000
+      config:
+        webhookUrl: ${SLACK_WEBHOOK_URL}
 ```
+
+See [Plugin Configuration](/docs/config/plugins) for the full reference (including startup validation of `config`).
 
 During development, point `source` at a TypeScript file -- Bun runs it directly. For production, compile to a single JS
 bundle:
@@ -176,7 +200,7 @@ bundle:
 bun build src/index.ts --outfile dist/plugin.js --target bun
 ```
 
-The output must be an ES module with a default export matching the `AirnodePlugin` interface.
+The output must be an ES module whose default export is an `AirnodePlugin` (or a factory returning one).
 
 ## Example plugins
 
