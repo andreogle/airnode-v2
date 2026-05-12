@@ -8,6 +8,20 @@ sidebar_position: 9
 Plugins extend Airnode's request processing pipeline. They can reject requests, modify parameters, transform responses,
 alter encoded data, and observe events -- all without modifying the core node.
 
+:::danger Plugins run as trusted code
+
+A plugin runs **inside the airnode process** with the airnode's full privileges -- its environment variables, its
+filesystem, and its signing key. There is no sandbox. An `onBeforeSign` plugin can substitute the exact bytes the
+airnode signs, so it effectively shares signing-key authority (the airnode logs a `SECURITY:` warning at startup listing
+any such plugins). The `config:` block (below) is for clean configuration -- explicit, validated, no implicit
+`process.env` grubbing -- **not** a security boundary.
+
+**Only run plugins you would trust with your private key.** Pin and review plugin sources the same way you protect the
+key itself; when running third-party plugins, prefer real environment variables or a secret manager over an on-disk
+`.env` (a plugin can read files the airnode can reach).
+
+:::
+
 ## Hook overview
 
 Six hooks fire at specific points in the pipeline:

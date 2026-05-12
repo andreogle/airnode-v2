@@ -48,6 +48,9 @@ startup** — a missing or malformed value (a typo'd URL, an absent required key
 than surfacing at first-request time. If a plugin exports no schema, the shape is the plugin's own responsibility; if a
 plugin doesn't accept config at all and you give it some, it's ignored with a warning.
 
+`config` is a configuration mechanism, not a sandbox: plugins still run as trusted code inside the airnode process. See
+[Plugins → trust](/docs/plugins) before adding one.
+
 ## Source resolution
 
 The `source` path is resolved relative to the config file's directory, not the working directory. This means the same
