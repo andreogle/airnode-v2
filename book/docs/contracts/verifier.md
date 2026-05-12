@@ -24,7 +24,7 @@ function verifyAndFulfill(
     address airnode,          // expected signer
     bytes32 endpointId,       // specification-bound endpoint hash
     uint256 timestamp,        // data timestamp
-    bytes calldata data,      // ABI-encoded response (up to 4KB)
+    bytes calldata data,      // signed payload (opaque bytes — ABI value, FHE ciphertext, or JSON hash)
     bytes calldata signature, // EIP-191 personal signature
     address callbackAddress,  // contract to forward data to
     bytes4 callbackSelector   // function selector on the callback

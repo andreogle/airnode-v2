@@ -12,7 +12,7 @@ key management.
 
 - The `airnode` binary on your `PATH` (or a known install path)
 - A validated `config.yaml`
-- A `.env` file with `AIRNODE_PRIVATE_KEY`
+- A `.env` file with `AIRNODE_MNEMONIC` (or `AIRNODE_PRIVATE_KEY`)
 
 ## Direct
 
@@ -112,13 +112,15 @@ docker compose up -d
 
 ## Environment variables
 
-| Variable              | Required | Description                                                      |
-| --------------------- | -------- | ---------------------------------------------------------------- |
-| `AIRNODE_PRIVATE_KEY` | Yes      | Hex-encoded private key (with `0x` prefix). Signs all responses. |
-| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                      |
-| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                   |
+| Variable              | Required | Description                                                                        |
+| --------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `AIRNODE_MNEMONIC`    | Yes\*    | BIP-39 mnemonic. Signs all responses. Takes precedence over `AIRNODE_PRIVATE_KEY`. |
+| `AIRNODE_PRIVATE_KEY` | Yes\*    | Hex-encoded private key (with `0x` prefix). Signs all responses.                    |
+| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                        |
+| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                     |
 
-Any `${VAR}` referenced in your config must also be set in the environment.
+\* Exactly one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required. Any `${VAR}` referenced in your config must
+also be set in the environment.
 
 ## Graceful shutdown
 

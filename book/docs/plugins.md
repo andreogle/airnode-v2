@@ -17,9 +17,13 @@ Six hooks fire at specific points in the pipeline:
 | `onHttpRequest`   | Mutation    | Reject the request       | After endpoint resolution, before auth |
 | `onBeforeApiCall` | Mutation    | Request parameters       | Before the upstream API call           |
 | `onAfterApiCall`  | Mutation    | Response data and status | After the upstream API responds        |
-| `onBeforeSign`    | Mutation    | Encoded data             | After encoding, before signing         |
+| `onBeforeSign`    | Mutation    | The data about to be signed | After encoding (and FHE encryption, if any), before signing |
 | `onResponseSent`  | Observation | Nothing (read-only)      | After the signed response is sent      |
 | `onError`         | Observation | Nothing (read-only)      | When an error occurs at any stage      |
+
+For an `encrypt`-configured endpoint, `onBeforeSign` sees the FHE ciphertext (`abi.encode(bytes32 handle, bytes proof)`),
+not the plaintext-encoded value. Every hook context also includes a `requestId` (a per-request hex id), in addition to
+the fields shown below.
 
 **Mutation hooks** can change the pipeline. If a mutation hook fails or times out, the request is **dropped** rather
 than processed without the plugin's intervention. This prevents data leaks if the plugin exists for security purposes.

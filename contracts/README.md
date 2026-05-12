@@ -41,7 +41,9 @@ The fields:
 - **endpointId** — a specification-bound hash committing to the API URL, path, method, parameters, and encoding rules.
   Two independent airnodes serving the same API with the same config produce the same endpoint ID.
 - **timestamp** — unix timestamp (seconds) of when the data was produced.
-- **data** — ABI-encoded response, up to 4096 bytes.
+- **data** — the signed payload: an ABI-encoded value, an FHE ciphertext, or `keccak256` of the raw JSON response. The
+  contract treats it as opaque `bytes` and forwards it to the callback unchanged (no size limit on-chain; the HTTP
+  request body is capped at 64 KB by the server).
 
 The endpoint ID is a separate field (not buried inside another hash) so future on-chain verifiers — including TLS proof
 verifiers — can inspect it directly and check it against a proven API specification.
@@ -71,7 +73,7 @@ function verifyAndFulfill(
     address airnode,          // expected signer
     bytes32 endpointId,       // specification-bound endpoint hash
     uint256 timestamp,        // data timestamp
-    bytes calldata data,      // ABI-encoded response (up to 4KB)
+    bytes calldata data,      // signed payload (opaque bytes — ABI value, FHE ciphertext, or JSON hash)
     bytes calldata signature, // EIP-191 personal signature
     address callbackAddress,  // contract to forward data to
     bytes4 callbackSelector   // function selector on the callback

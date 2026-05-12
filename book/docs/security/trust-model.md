@@ -87,17 +87,20 @@ aggregate the results off-chain or submit them to an on-chain quorum verifier. T
 the source: each airnode commits to its own specific endpoint, and an attacker would need to compromise multiple
 unrelated providers to manipulate the aggregate.
 
-### Future: TLS proofs and third-party trust
+### TLS proofs and third-party trust
 
-TLS Notary (or zkTLS) can produce cryptographic proof that the data came from a specific HTTPS endpoint. This would
-eliminate the need to trust the operator's honesty -- the proof shows the data was not fabricated. When TLS proof
-technology matures, it can be integrated as a plugin or proof mode without changing the core architecture.
+zkTLS / TLS Notary produces cryptographic proof that the data came from a specific HTTPS endpoint, eliminating the need
+to trust the operator's honesty -- the proof shows the data was not fabricated. Airnode integrates this today via the
+Reclaim protocol: when `settings.proof` is configured and an endpoint declares `responseMatches`, each response carries
+an attestation of the upstream call. See [TLS Proofs](/docs/concepts/proofs). (Proofs are non-fatal — a gateway outage
+just omits the `proof` field rather than failing the request — and the consumer verifies the attestor signature
+on-chain, not Airnode.)
 
-TLS proofs are particularly significant for third-party operators. Today, a third-party operator cannot prove they are
-actually calling the API they claim. With TLS proofs, the cryptographic proof itself demonstrates the data came from the
-API provider's HTTPS endpoint -- regardless of who operates the airnode. This could make third-party operation viable
-for use cases where the API provider does not want to run infrastructure, while still preserving verifiable data
-provenance. Until then, first-party operation remains the only trust model where the data source is guaranteed.
+TLS proofs are particularly significant for third-party operators. A third-party operator cannot, by signature alone,
+prove it is actually calling the API it claims. With a TLS proof, the cryptographic proof itself demonstrates the data
+came from the API provider's HTTPS endpoint -- regardless of who operates the airnode. This makes third-party operation
+viable for use cases where the API provider does not want to run infrastructure, while still preserving verifiable data
+provenance. Without a proof, first-party operation remains the only trust model where the data source is guaranteed.
 
 ### Future: TEE attestation
 

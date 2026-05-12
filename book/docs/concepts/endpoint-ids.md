@@ -178,7 +178,8 @@ These fields do not affect the endpoint ID:
 | `api.auth`                     | Client-facing auth is an operator choice, not a data specification |
 | `api.timeout`                  | Operational config, not data specification                         |
 | `api.cache` / `endpoint.cache` | Caching is an optimization, not a data property                    |
-| `endpoint.push`                | Push interval is operational, not data-related                     |
+| `endpoint.mode`                | `sync` / `async` / `stream` is a delivery choice, not a data spec  |
+| `endpoint.auth`                | Endpoint-level client auth override, like `api.auth`               |
 | Secret parameters              | Parameters marked `secret: true` or with `${ENV_VAR}` fixed values |
 | Default values                 | Defaults are convenience for clients, not part of the spec         |
 

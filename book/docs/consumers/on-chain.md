@@ -16,7 +16,7 @@ AirnodeVerifier contract, which verifies the signature and forwards the data to 
 ### Flow
 
 1. Your off-chain client calls the airnode HTTP endpoint and receives signed data.
-2. Your client calls `verify_and_fulfill()` on AirnodeVerifier with the signed data and your callback address.
+2. Your client calls `verifyAndFulfill()` on AirnodeVerifier with the signed data and your callback address.
 3. AirnodeVerifier recovers the signer, checks replay protection, and calls your callback.
 4. Your callback receives the data and acts on it.
 
@@ -54,4 +54,4 @@ only be fulfilled once.
 
 - Your dApp needs data on demand (user-initiated actions like swaps, mints, settlements).
 - You want to pay gas only when data is actually consumed.
-- You need arbitrary data types beyond a single `int224` value.
+- You need arbitrary ABI-encoded data, not just a single numeric value.

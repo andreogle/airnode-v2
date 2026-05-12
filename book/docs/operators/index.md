@@ -24,7 +24,8 @@ provider's. See the [Trust Model](/docs/security/trust-model) for details.
 airnode generate-mnemonic
 ```
 
-This outputs a private key and its corresponding Ethereum address. The address is your Airnode's on-chain identity.
+This outputs a BIP-39 mnemonic and its corresponding Ethereum address. The address is your Airnode's on-chain identity.
+(`airnode address` re-derives it later from `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY`.)
 
 ## 2. Create config.yaml
 
@@ -59,7 +60,7 @@ See the [Config Reference](/docs/config) for all available fields.
 ## 3. Create .env
 
 ```bash
-AIRNODE_PRIVATE_KEY=0x...  # from step 1
+AIRNODE_MNEMONIC=your twelve word mnemonic ...  # from step 1 (or AIRNODE_PRIVATE_KEY=0x...)
 ```
 
 Add any environment variables referenced in your config (e.g., `${COINGECKO_API_KEY}`).
@@ -98,11 +99,14 @@ Expected response:
 
 ## Environment variables
 
-| Variable              | Required | Description                                                      |
-| --------------------- | -------- | ---------------------------------------------------------------- |
-| `AIRNODE_PRIVATE_KEY` | Yes      | Hex-encoded private key (with `0x` prefix). Signs all responses. |
-| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                      |
-| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                   |
+| Variable              | Required | Description                                                                          |
+| --------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `AIRNODE_MNEMONIC`    | Yes\*    | BIP-39 mnemonic. Signs all responses. Takes precedence over `AIRNODE_PRIVATE_KEY`.   |
+| `AIRNODE_PRIVATE_KEY` | Yes\*    | Hex-encoded private key (with `0x` prefix). Signs all responses.                      |
+| `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                          |
+| `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                       |
+
+\* Exactly one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required.
 
 Bun automatically loads `.env` files from the working directory.
 

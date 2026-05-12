@@ -79,7 +79,7 @@ requested. Endpoints without `responseMatches` skip proof generation even when p
 ## `fhe`
 
 Configures FHE encryption of encoded responses. When set to an object, any endpoint with an
-[`encrypt`](/docs/config/apis#encrypt) block has its ABI-encoded value replaced with an FHE ciphertext before signing.
+[`encrypt`](/docs/config/apis#encryption-fhe) block has its ABI-encoded value replaced with an FHE ciphertext before signing.
 
 ### No FHE (default)
 

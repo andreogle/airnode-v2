@@ -25,7 +25,7 @@ server:
 | `port`                        | `number`   | Yes      | --          | TCP port the server listens on.                                                                     |
 | `host`                        | `string`   | No       | `'0.0.0.0'` | Bind address. Use `127.0.0.1` to restrict to localhost.                                             |
 | `cors`                        | `object`   | No       | --          | CORS configuration. When omitted, `Access-Control-Allow-Origin: *` is used.                         |
-| `cors.origins`                | `string[]` | No       | `['*']`     | Allowed origins. Each entry is joined with `, ` in the response header.                             |
+| `cors.origins`                | `string[]` | No       | `['*']`     | Allow-list of origins. The request's `Origin` is reflected back only if it matches an entry.        |
 | `rateLimit`                   | `object`   | No       | --          | Per-IP rate limiting. When omitted, no rate limiting is applied.                                    |
 | `rateLimit.window`            | `number`   | Yes      | --          | Time window in milliseconds.                                                                        |
 | `rateLimit.max`               | `number`   | Yes      | --          | Maximum requests per IP within the window.                                                          |
@@ -66,9 +66,13 @@ trivially spoofable.
 
 ## CORS
 
-CORS headers are included on every response. The `OPTIONS` preflight handler returns:
+CORS headers are included on every response (and on the `OPTIONS` preflight, which returns `204`):
 
-- `Access-Control-Allow-Origin` -- from `cors.origins`
+- `Access-Control-Allow-Origin`:
+  - **No `cors` configured (or `origins: ['*']`)** -- `*`.
+  - **`cors.origins` is an allow-list** -- the request's `Origin` header is reflected back **only if it matches** an
+    entry on the list (plus `Vary: Origin`). A non-matching or absent `Origin` gets `Access-Control-Allow-Origin: null`.
+    Multiple origins are never concatenated into one header — that is invalid and browsers reject it.
 - `Access-Control-Allow-Methods` -- `GET, POST, OPTIONS`
 - `Access-Control-Allow-Headers` -- `Content-Type, X-Api-Key, Authorization, X-Payment-Proof`
 - `Access-Control-Max-Age` -- `86400` (24 hours)
@@ -82,4 +86,4 @@ server:
       - 'https://staging.example.com'
 ```
 
-To disable CORS restrictions (allow all origins), omit the `cors` field or set `origins: ['*']`.
+To allow any origin, omit the `cors` field or set `origins: ['*']`.

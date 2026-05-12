@@ -199,7 +199,7 @@ uniqueness key.
 | `404`  | Unknown endpoint ID                                |
 | `413`  | Request body too large (> 64KB)                    |
 | `415`  | Content-Type must be application/json              |
-| `429`  | Rate limit exceeded                                |
+| `429`  | Too many requests (rate limit exceeded)            |
 | `502`  | Upstream API error or internal processing failure  |
 
 ## Health check
