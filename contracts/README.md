@@ -109,29 +109,32 @@ a particular hash has been submitted.
 
 ### Writing a consumer contract
 
-Your contract receives the callback and decides what to do with the data. At minimum, check that you trust the airnode:
+Your contract receives the callback. Because `verifyAndFulfill` is **permissionless** and signed payloads are
+**public**, a consumer must run four checks — see `src/examples/AirnodePriceConsumer.sol` for a documented reference.
+The essentials:
 
 ```solidity
-contract MyConsumer {
-  address public trustedAirnode;
-  int256 public lastPrice;
+function fulfill(
+  bytes32 requestHash,
+  address attestedAirnode,
+  bytes32 attestedEndpointId,
+  uint256 attestedAt,
+  bytes calldata data
+) external {
+  require(msg.sender == verifier, 'Not the verifier'); // 1. only AirnodeVerifier checked the signature
+  require(attestedAirnode == airnode, 'Untrusted airnode'); // 2. the Airnode you trust
+  require(attestedEndpointId == endpointId, 'Wrong endpoint'); // 3. the feed you trust (pins the encoding)
+  require(attestedAt <= block.timestamp, 'Future timestamp'); // 4a. not from the future
+  require(block.timestamp - attestedAt <= maxStaleness, 'Stale'); // 4b. fresh enough
 
-  constructor(address _airnode) {
-    trustedAirnode = _airnode;
-  }
-
-  function fulfill(
-    bytes32, // requestHash (unused here)
-    address airnode,
-    bytes32, // endpointId (unused here)
-    uint256, // timestamp (unused here)
-    bytes calldata data
-  ) external {
-    require(airnode == trustedAirnode, 'Untrusted airnode');
-    lastPrice = abi.decode(data, (int256));
-  }
+  int256 price = abi.decode(data, (int256));
+  // ...use price
 }
 ```
+
+Dropping check **1** is the worst mistake — without it anyone can call `fulfill(...)` directly with made-up arguments,
+since the consumer itself never verifies a signature. Dropping **2** or **3** lets an attacker feed you a different
+Airnode's (or a different endpoint's) data. Dropping **4** lets anyone replay an old signed payload forever.
 
 ---
 
@@ -190,11 +193,15 @@ after each sequence. **Symbolic tests** prove properties hold for ALL possible i
 contracts/
   src/
     AirnodeVerifier.sol                 Signature verification + callback forwarding
+    examples/
+      AirnodePriceConsumer.sol          Reference consumer (the four required checks)
+      ConfidentialPriceFeed.sol         FHE-ciphertext consumer (ingests an encrypted value)
+      ITFHE.sol                         Minimal fhEVM interface used by the FHE example
   test/
-    AirnodeVerifier.t.sol               Unit tests
-    AirnodeVerifier.invariant.t.sol     Invariant (stateful fuzz) tests
-    AirnodeVerifier.symbolic.t.sol      Symbolic execution tests (Halmos)
-    MockCallback.sol                    Mock + reverting callback contracts
+    AirnodeVerifier.{t,invariant.t,symbolic.t}.sol     Unit / invariant / symbolic tests
+    AirnodePriceConsumer.t.sol          Consumer tests (the four checks, out-of-order, fuzz)
+    ConfidentialPriceFeed.{t,invariant.t,symbolic.t}.sol
+    MockCallback.sol / MockTFHE.sol     Test doubles
   lib/
     forge-std/                          Foundry standard library
   foundry.toml                          Foundry config (prague EVM)

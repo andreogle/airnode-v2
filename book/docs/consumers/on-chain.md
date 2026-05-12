@@ -22,33 +22,56 @@ AirnodeVerifier contract, which verifies the signature and forwards the data to 
 
 ### Consumer contract
 
-Your contract receives the callback and decides what to do with the data. At minimum, verify that you trust the airnode
-address.
+Your contract receives the callback. `verifyAndFulfill` is **permissionless** (anyone can submit any valid
+Airnode-signed payload and point the callback anywhere) and signed payloads are **public**, so your `fulfill` must run
+four checks before trusting the data. A documented reference is
+[`AirnodePriceConsumer.sol`](https://github.com/api3dao/airnode-v2/blob/main/contracts/src/examples/AirnodePriceConsumer.sol);
+the essentials:
 
 ```solidity
-contract MyConsumer {
-  address public trustedAirnode;
+function fulfill(
+  bytes32 requestHash,
+  address attestedAirnode,
+  bytes32 attestedEndpointId,
+  uint256 attestedAt,
+  bytes calldata data
+) external {
+  require(msg.sender == verifier, 'Not the verifier'); // 1. only AirnodeVerifier checked the signature
+  require(attestedAirnode == airnode, 'Untrusted airnode'); // 2. the Airnode you trust
+  require(attestedEndpointId == endpointId, 'Wrong endpoint'); // 3. the feed you trust (this also pins the encoding)
+  require(attestedAt <= block.timestamp, 'Future timestamp'); // 4a. not from the future
+  require(block.timestamp - attestedAt <= maxStaleness, 'Stale'); // 4b. fresh enough
 
-  constructor(address _airnode) {
-    trustedAirnode = _airnode;
-  }
-
-  function fulfill(
-    bytes32, // requestHash (unique per submission)
-    address airnode, // the signer's address
-    bytes32, // endpointId
-    uint256, // timestamp
-    bytes calldata data
-  ) external {
-    require(airnode == trustedAirnode, 'Untrusted');
-    int256 price = abi.decode(data, (int256));
-    // use price
-  }
+  int256 price = abi.decode(data, (int256));
+  // ...use price
 }
 ```
 
-The `requestHash` is `keccak256(endpointId, timestamp, data)` and serves as the replay key. Each unique combination can
-only be fulfilled once.
+(`requestHash` is `keccak256(endpointId, timestamp, data)` and is AirnodeVerifier's replay key — each unique payload can
+only be fulfilled once, globally.)
+
+### Security checklist
+
+The single most likely place a consumer loses money is forgetting one of these. In `fulfill`:
+
+- **`msg.sender == verifier`** — your contract does **not** verify the signature itself; it trusts that AirnodeVerifier
+  did. So it must reject calls that didn't come from AirnodeVerifier — otherwise anyone can call `fulfill(...)` directly
+  with fabricated arguments. This is the worst one to skip.
+- **`airnode == trustedAirnode`** — AirnodeVerifier confirms the signature recovers to the supplied `airnode`, but that
+  address is chosen by the submitter. Pin the specific Airnode you trust. (Check this even though you also check the
+  endpoint ID — a rogue Airnode that knows the public endpoint-ID formula can sign under any endpoint ID.)
+- **`endpointId == trustedEndpointId`** — one Airnode signs many endpoints. Without this, an attacker feeds you a
+  different endpoint's data (a different asset, a feed with different encoding). The endpoint ID also commits to the
+  endpoint's encoding spec, so pinning it pins the `abi.decode` shape you use.
+- **Freshness** — `attestedAt <= block.timestamp` (reject future-dated, clock-skewed/manipulated timestamps) and
+  `block.timestamp - attestedAt <= maxStaleness` (a signed payload never expires on its own — anyone can replay an old
+  one forever).
+- **Encoding** — `abi.decode` `data` with the exact type the endpoint produces. Don't assume `int256` for an endpoint
+  you haven't pinned; an endpoint with open/requester-controlled encoding (`_type`/`_path`/`_times`) signs whatever
+  shape the requester picked.
+
+If a check fails, **revert** (or ignore) — and note that a revert inside `fulfill` does not revert AirnodeVerifier's
+`verifyAndFulfill`: the request is still marked fulfilled (anti-griefing), your state just stays put.
 
 ### When to use
 
