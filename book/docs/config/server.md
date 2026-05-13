@@ -26,21 +26,25 @@ server:
 | `host`                        | `string`   | No       | `'0.0.0.0'` | Bind address. Use `127.0.0.1` to restrict to localhost.                                             |
 | `cors`                        | `object`   | No       | --          | CORS configuration. When omitted, `Access-Control-Allow-Origin: *` is used.                         |
 | `cors.origins`                | `string[]` | No       | `['*']`     | Allow-list of origins. The request's `Origin` is reflected back only if it matches an entry.        |
-| `rateLimit`                   | `object`   | No       | --          | Per-IP rate limiting. When omitted, no rate limiting is applied.                                    |
+| `rateLimit`                   | `object`   | **Yes**  | --          | Per-IP rate limiting (required). Set `max` very high to effectively disable it.                     |
 | `rateLimit.window`            | `number`   | Yes      | --          | Time window in milliseconds.                                                                        |
 | `rateLimit.max`               | `number`   | Yes      | --          | Maximum requests per IP within the window.                                                          |
 | `rateLimit.trustForwardedFor` | `boolean`  | No       | `false`     | Use the first `X-Forwarded-For` entry as the client IP. Only enable behind a trusted reverse proxy. |
 
 ## Minimal
 
-The only required field is `port`:
+`port` and `rateLimit` are required:
 
 ```yaml
 server:
   port: 3000
+  rateLimit:
+    window: 60000
+    max: 100
 ```
 
-This binds to `0.0.0.0:3000` with no rate limiting and a default `Access-Control-Allow-Origin: *` header.
+This binds to `0.0.0.0:3000` with a default `Access-Control-Allow-Origin: *` header. If you front the airnode with your
+own WAF/CDN and want that to be the limiter, set `rateLimit.max` to a very large number.
 
 ## Rate limiting
 

@@ -56,7 +56,13 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
 
   const testConfig: Config = {
     ...parsed,
-    server: { ...parsed.server, port: 0, rateLimit: undefined, ...serverOverrides },
+    server: {
+      ...parsed.server,
+      port: 0,
+      // Effectively no limit by default; rate-limit scenarios override this.
+      rateLimit: { window: 60_000, max: 1_000_000, trustForwardedFor: false },
+      ...serverOverrides,
+    },
     settings: { ...parsed.settings, plugins: [], ...settingsOverrides },
     apis: options.apiOverrides ? options.apiOverrides(rewriteApiUrls(parsed.apis)) : rewriteApiUrls(parsed.apis),
   };

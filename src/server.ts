@@ -184,12 +184,9 @@ function createServer(deps: ServerDependencies): ServerHandle {
       return handlePreflight(cors);
     }
 
-    if (rateLimitConfig) {
-      const ip = resolveClientIp(request, peerAddress, rateLimitConfig.trustForwardedFor);
-      const allowed = checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max);
-      if (!allowed) {
-        return errorResponse('Too Many Requests', 429, cors);
-      }
+    const ip = resolveClientIp(request, peerAddress, rateLimitConfig.trustForwardedFor);
+    if (!checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max)) {
+      return errorResponse('Too Many Requests', 429, cors);
     }
 
     if (url.pathname === '/health' && request.method === 'GET') {

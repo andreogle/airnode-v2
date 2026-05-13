@@ -19,6 +19,7 @@ function makeConfig(overrides: Partial<Config['server']> = {}): Config {
       port: 0,
       host: '127.0.0.1',
       cors: { origins: ['*'] },
+      rateLimit: { window: 60_000, max: 1_000_000, trustForwardedFor: false }, // effectively unlimited; tests override
       ...overrides,
     },
     apis: [

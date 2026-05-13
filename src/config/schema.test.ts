@@ -65,6 +65,11 @@ apis:
     expect(() => configSchema.parse(parseYaml(raw))).toThrow();
   });
 
+  test('rejects a config without server.rateLimit', () => {
+    const raw = MINIMAL_CONFIG.replace('\n  rateLimit:\n    window: 60000\n    max: 100', '');
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
   test('rejects empty apis array', () => {
     const raw = MINIMAL_CONFIG.replace(/apis:[\s\S]*$/, 'apis: []');
     expect(() => configSchema.parse(parseYaml(raw))).toThrow();
@@ -340,6 +345,9 @@ const FHE_CONFIG = `
 version: '1.0'
 server:
   port: 3000
+  rateLimit:
+    window: 60000
+    max: 100
 settings:
   fhe:
     network: sepolia

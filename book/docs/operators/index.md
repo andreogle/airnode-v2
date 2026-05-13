@@ -34,6 +34,9 @@ version: '1.0'
 
 server:
   port: 3000
+  rateLimit:
+    window: 60000
+    max: 100
 
 settings:
   proof: none

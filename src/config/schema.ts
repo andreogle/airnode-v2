@@ -166,7 +166,11 @@ export const serverSchema = z.object({
   port: z.number().int().positive(),
   host: z.string().default('0.0.0.0'),
   cors: corsSchema.optional(),
-  rateLimit: rateLimitSchema.optional(),
+  // Required. Every airnode endpoint that calls an upstream API costs the
+  // operator (metered API quotas, RPC quotas for x402), so a per-IP ceiling is
+  // not optional. Set `max` very high if you front the airnode with your own
+  // WAF/CDN and want it to be the limiter.
+  rateLimit: rateLimitSchema,
 });
 
 // =============================================================================
