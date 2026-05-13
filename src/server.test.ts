@@ -3,6 +3,7 @@ import type { Hex } from 'viem';
 import { createAsyncRequestStore } from './async';
 import { createCache } from './cache';
 import { createEmptyRegistry } from './plugins';
+import { createSemaphore } from './semaphore';
 import { createServer } from './server';
 import type { ServerDependencies, ServerHandle } from './server';
 import { createAirnodeAccount } from './sign';
@@ -30,7 +31,7 @@ function makeConfig(overrides: Partial<Config['server']> = {}): Config {
         endpoints: [{ name: 'test', path: '/data', method: 'GET', parameters: [] }],
       },
     ],
-    settings: { timeout: 10_000, proof: 'none', fhe: 'none', plugins: [] },
+    settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
   } as unknown as Config;
 }
 
@@ -43,6 +44,8 @@ function makeDeps(overrides: Partial<ServerDependencies> = {}): ServerDependenci
     endpointMap: new Map(),
     plugins: createEmptyRegistry(),
     cache: createCache(),
+    asyncStore: undefined,
+    apiCallSemaphore: createSemaphore(100),
     settings: config.settings,
     handleRequest: mock(() => Promise.resolve(Response.json({ ok: true }, { status: 200 }))),
     ...overrides,

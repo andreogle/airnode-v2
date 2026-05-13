@@ -221,6 +221,10 @@ const fheSchema = z.union([
 
 export const settingsSchema = z.object({
   timeout: z.number().int().positive().default(10_000),
+  // Process-wide ceiling on concurrent upstream API calls. A burst of requests
+  // can't fan out more `fetch`es than this to your (metered) APIs; over the cap,
+  // a request waits up to its API `timeout` for a slot, then gets a 503.
+  maxConcurrentApiCalls: z.number().int().positive().default(50),
   proof: proofSchema.default('none'),
   fhe: fheSchema.default('none'),
   plugins: z.array(pluginEntrySchema).default([]),

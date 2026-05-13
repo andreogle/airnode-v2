@@ -8,6 +8,7 @@ import { buildEndpointMap } from '../../endpoint';
 import { logger } from '../../logger';
 import { handleEndpointRequest } from '../../pipeline';
 import { loadPlugins } from '../../plugins';
+import { createSemaphore } from '../../semaphore';
 import { createServer } from '../../server';
 import { accountFromEnv } from '../../sign';
 import { VERSION } from '../../version';
@@ -56,6 +57,7 @@ export const start = new Command('start')
 
     const cache = createCache();
     const asyncStore = createAsyncRequestStore();
+    const apiCallSemaphore = createSemaphore(config.settings.maxConcurrentApiCalls);
     const server = createServer({
       config,
       account,
@@ -64,6 +66,7 @@ export const start = new Command('start')
       plugins,
       cache,
       asyncStore,
+      apiCallSemaphore,
       settings: config.settings,
       handleRequest: handleEndpointRequest,
     });

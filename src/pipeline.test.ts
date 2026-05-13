@@ -8,6 +8,7 @@ import type { ResolvedEndpoint } from './endpoint';
 import { handleEndpointRequest } from './pipeline';
 import type { PipelineDependencies, RawResponseBody, SignedResponseBody } from './pipeline';
 import { createEmptyRegistry } from './plugins';
+import { createSemaphore } from './semaphore';
 import { createAirnodeAccount } from './sign';
 import type { Api, ClientAuth, Endpoint } from './types';
 
@@ -60,6 +61,7 @@ void mock.module('@zama-fhe/relayer-sdk/node', () => ({
 
 const FHE_SETTINGS = {
   timeout: 10_000,
+  maxConcurrentApiCalls: 50,
   proof: 'none' as const,
   fhe: { network: 'sepolia' as const, rpcUrl: 'https://eth-sepolia.example.com', verifier: TEST_AIRNODE },
   plugins: [],
@@ -110,7 +112,8 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     endpointMap: new Map(),
     plugins: createEmptyRegistry(),
     cache: createCache(),
-    settings: { timeout: 10_000, proof: 'none', fhe: 'none', plugins: [] },
+    apiCallSemaphore: createSemaphore(100),
+    settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
     ...overrides,
   };
 }
@@ -587,6 +590,27 @@ describe('handleEndpointRequest', () => {
     expect(response.status).toBe(502);
     expect(body.error).toBe('API returned no data to encode');
   });
+
+  test('returns 503 when the upstream-call concurrency cap is saturated', async () => {
+    const sem = createSemaphore(1);
+    const held = await sem.acquire(1000); // hold the only slot
+    if (!held) throw new Error('expected a slot');
+
+    // The endpoint's API timeout doubles as the semaphore-acquire deadline; keep it short.
+    const resolved = makeResolved({ timeout: 40 }, { encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const deps = makeDeps({ endpointMap, apiCallSemaphore: sem });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as { error: string }).error).toBe(
+      'Server busy — too many upstream calls in flight'
+    );
+    expect(fetchMock).not.toHaveBeenCalled(); // never reached the upstream
+
+    held();
+  });
 });
 
 // =============================================================================
@@ -654,6 +678,7 @@ describe('handleEndpointRequest — TLS proof', () => {
   const ATTESTOR = '0x0000000000000000000000000000000000000002';
   const PROOF_SETTINGS = {
     timeout: 10_000,
+    maxConcurrentApiCalls: 50,
     proof: { type: 'reclaim' as const, gatewayUrl: GATEWAY_URL, timeout: 5000 },
     fhe: 'none' as const,
     plugins: [],

@@ -1,12 +1,7 @@
 import { goSync } from '@api3/promise-utils';
 import type { Hex } from 'viem';
-import type { PrivateKeyAccount } from 'viem/accounts';
-import type { AsyncRequestStore } from './async';
-import type { ResponseCache } from './cache';
-import type { ResolvedEndpoint } from './endpoint';
 import { logger } from './logger';
 import type { PipelineDependencies } from './pipeline';
-import type { PluginRegistry } from './plugins';
 import { checkRateLimit } from './rate-limit';
 import type { TokenBucket } from './rate-limit';
 import type { Config } from './types';
@@ -14,15 +9,8 @@ import type { Config } from './types';
 // =============================================================================
 // Types
 // =============================================================================
-interface ServerDependencies {
+interface ServerDependencies extends PipelineDependencies {
   readonly config: Config;
-  readonly account: PrivateKeyAccount;
-  readonly airnode: Hex;
-  readonly endpointMap: ReadonlyMap<Hex, ResolvedEndpoint>;
-  readonly plugins: PluginRegistry;
-  readonly cache: ResponseCache;
-  readonly asyncStore?: AsyncRequestStore;
-  readonly settings: Config['settings'];
   readonly handleRequest: (
     request: Request,
     endpointId: Hex,

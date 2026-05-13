@@ -9,6 +9,7 @@ import type { ResolvedEndpoint } from '../src/endpoint';
 import { handleEndpointRequest } from '../src/pipeline';
 import { createEmptyRegistry } from '../src/plugins';
 import type { PluginRegistry } from '../src/plugins';
+import { createSemaphore } from '../src/semaphore';
 import { createServer } from '../src/server';
 import type { ServerHandle } from '../src/server';
 import { createAirnodeAccount } from '../src/sign';
@@ -70,6 +71,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
   const endpointMap = buildEndpointMap(testConfig);
   const cache = createCache();
   const asyncStore = createAsyncRequestStore();
+  const apiCallSemaphore = createSemaphore(testConfig.settings.maxConcurrentApiCalls);
 
   const server = createServer({
     config: testConfig,
@@ -79,6 +81,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     plugins: options.plugins ?? createEmptyRegistry(),
     cache,
     asyncStore,
+    apiCallSemaphore,
     settings: testConfig.settings,
     handleRequest: handleEndpointRequest,
   });

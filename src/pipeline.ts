@@ -13,6 +13,7 @@ import { logger, runWithContext } from './logger';
 import type { PluginRegistry, RequestPlugins } from './plugins';
 import type { ReclaimProof } from './proof';
 import { requestProof } from './proof';
+import type { Semaphore } from './semaphore';
 import { signResponse } from './sign';
 import type { ClientAuth, Encoding, Endpoint, Settings } from './types';
 
@@ -30,6 +31,8 @@ interface PipelineDependencies {
   readonly cache: ResponseCache;
   readonly asyncStore?: AsyncRequestStore;
   readonly settings: Settings;
+  // Process-wide cap on concurrent upstream API calls (from `settings.maxConcurrentApiCalls`).
+  readonly apiCallSemaphore: Semaphore;
 }
 
 // Request-scoped view: `plugins` is a single request's session, so its budgets
@@ -280,7 +283,23 @@ async function executeApiCall(
 
   const resolvedParameters = beforeResult.parameters;
 
+  // Bound concurrent upstream calls process-wide. If no slot opens up within the
+  // endpoint's own timeout window, the request would have timed out anyway — fail
+  // fast with 503 rather than queue indefinitely.
+  const slot = await deps.apiCallSemaphore.acquire(resolved.api.timeout);
+  if (!slot) {
+    logger.warn(`Upstream-call concurrency limit reached; rejecting request for endpoint ${endpointId}`);
+    void deps.plugins.callError({
+      requestId,
+      error: new Error('Upstream-call concurrency limit reached'),
+      stage: 'apiCall',
+      endpointId,
+    });
+    return jsonResponse({ error: 'Server busy — too many upstream calls in flight' }, 503);
+  }
   const apiResult = await go(() => callApi(resolved.api, resolved.endpoint, resolvedParameters));
+  slot(); // release the slot before any conditional return below
+
   if (!apiResult.success) {
     logger.error(`API call failed for endpoint ${endpointId}: ${apiResult.error.message}`);
     void deps.plugins.callError({ requestId, error: apiResult.error, stage: 'apiCall', endpointId });

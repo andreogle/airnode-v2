@@ -10,6 +10,7 @@ The `settings` section configures global behavior. It is placed immediately afte
 ```yaml
 settings:
   timeout: 10000 # default, ms
+  maxConcurrentApiCalls: 50 # default
   proof: none
   fhe: none
   plugins:
@@ -19,12 +20,13 @@ settings:
 
 ## Fields
 
-| Field     | Type               | Required | Default  | Description                                            |
-| --------- | ------------------ | -------- | -------- | ------------------------------------------------------ |
-| `timeout` | `number`           | No       | `10000`  | Global upstream API request timeout in milliseconds.   |
-| `proof`   | `string \| object` | No       | `'none'` | Proof mode. See [Proof](#proof).                       |
-| `fhe`     | `string \| object` | No       | `'none'` | FHE encryption relayer. See [FHE](#fhe).               |
-| `plugins` | `array`            | No       | `[]`     | Plugin entries. See [Plugin Configuration](./plugins). |
+| Field                   | Type               | Required | Default  | Description                                            |
+| ----------------------- | ------------------ | -------- | -------- | ------------------------------------------------------ |
+| `timeout`               | `number`           | No       | `10000`  | Global upstream API request timeout in milliseconds.   |
+| `maxConcurrentApiCalls` | `number`           | No       | `50`     | Process-wide ceiling on concurrent upstream API calls. |
+| `proof`                 | `string \| object` | No       | `'none'` | Proof mode. See [Proof](#proof).                       |
+| `fhe`                   | `string \| object` | No       | `'none'` | FHE encryption relayer. See [FHE](#fhe).               |
+| `plugins`               | `array`            | No       | `[]`     | Plugin entries. See [Plugin Configuration](./plugins). |
 
 ## `timeout`
 
@@ -34,6 +36,18 @@ with `apis[].timeout`.
 ```yaml
 settings:
   timeout: 15000 # 15 seconds for all APIs by default
+```
+
+## `maxConcurrentApiCalls`
+
+A process-wide cap on how many upstream API calls can be in flight at once, across all requests. A burst of requests
+can't fan out more `fetch`es than this to your (metered) APIs. When the cap is reached, a request waits for a slot up to
+the relevant API's `timeout`, then gives up with `503 Server busy`. The per-IP `server.rateLimit` bounds the inflow;
+this bounds the fan-out to upstreams.
+
+```yaml
+settings:
+  maxConcurrentApiCalls: 100
 ```
 
 ## `proof`
