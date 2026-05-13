@@ -181,15 +181,14 @@ curl http://localhost:3000/health
 ```json
 {
   "status": "ok",
-  "version": "2.0.0-alpha.0",
   "airnode": "0x..."
 }
 ```
 
 ## Routes
 
-| Method | Path                      | Description                                   |
-| ------ | ------------------------- | --------------------------------------------- |
-| `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters              |
-| `GET`  | `/requests/{requestId}`   | Poll an async request for its result          |
-| `GET`  | `/health`                 | Health check with version and airnode address |
+| Method | Path                      | Description                             |
+| ------ | ------------------------- | --------------------------------------- |
+| `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters        |
+| `GET`  | `/requests/{requestId}`   | Poll an async request for its result    |
+| `GET`  | `/health`                 | Health check (status + airnode address) |

@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { VERSION } from '../../src/version';
 import { AIRNODE_ADDRESS, createTestServer } from '../helpers';
 import type { TestContext } from '../helpers';
 
@@ -14,14 +13,12 @@ afterAll(() => {
 });
 
 describe('S20 — Health endpoint', () => {
-  test('returns status, version, and airnode address', async () => {
+  test('returns status and the airnode address (no version field)', async () => {
     const response = await fetch(`${ctx.baseUrl}/health`);
-    const body = (await response.json()) as { status: string; version: string; airnode: string };
+    const body = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe('ok');
-    expect(body.version).toBe(VERSION);
-    expect(body.airnode).toBe(AIRNODE_ADDRESS);
+    expect(body).toEqual({ status: 'ok', airnode: AIRNODE_ADDRESS });
   });
 
   test('returns 404 for unknown routes', async () => {

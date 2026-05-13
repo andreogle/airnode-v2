@@ -151,7 +151,7 @@ The `AIRNODE_PRIVATE_KEY` controls the airnode's on-chain identity and signs all
 
 ## Health checks
 
-The `/health` endpoint returns the node's status, version, and airnode address:
+The `/health` endpoint returns the node's status and airnode address:
 
 ```bash
 curl http://localhost:3000/health
@@ -160,9 +160,9 @@ curl http://localhost:3000/health
 ```json
 {
   "status": "ok",
-  "version": "2.0.0-alpha.0",
   "airnode": "0x..."
 }
 ```
 
-Use this for Docker `HEALTHCHECK`, load balancer probes, or uptime monitoring.
+Use this for Docker `HEALTHCHECK`, load balancer probes, or uptime monitoring. (To check the binary version, run
+`airnode --version` — the version is deliberately not exposed on `/health`.)

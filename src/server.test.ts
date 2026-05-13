@@ -7,7 +7,6 @@ import { createServer } from './server';
 import type { ServerDependencies, ServerHandle } from './server';
 import { createAirnodeAccount } from './sign';
 import type { Config } from './types';
-import { VERSION } from './version';
 
 const TEST_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const TEST_AIRNODE: Hex = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -61,18 +60,16 @@ describe('createServer', () => {
     void server?.stop();
   });
 
-  test('health endpoint returns status, version, airnode', async () => {
+  test('health endpoint returns status and airnode (no version)', async () => {
     const deps = makeDeps();
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
     const response = await fetch(`${baseUrl}/health`);
-    const body = (await response.json()) as { status: string; version: string; airnode: string };
+    const body = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
-    expect(body.status).toBe('ok');
-    expect(body.version).toBe(VERSION);
-    expect(body.airnode).toBe(TEST_AIRNODE);
+    expect(body).toEqual({ status: 'ok', airnode: TEST_AIRNODE });
   });
 
   test('POST to /endpoints/{id} calls handleRequest', async () => {

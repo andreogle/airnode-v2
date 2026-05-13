@@ -15,7 +15,7 @@ starts, loads the config, and serves requests.
 | ------ | ------------------------- | ---------------------------------------------------- |
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters in the request body |
 | `GET`  | `/requests/{requestId}`   | Poll an async request for its result                 |
-| `GET`  | `/health`                 | Health check returning version and airnode address   |
+| `GET`  | `/health`                 | Health check (status + airnode address)              |
 
 CORS preflight (`OPTIONS`) is handled automatically. Rate limiting uses a token bucket per client IP, configured via
 `server.rateLimit`.

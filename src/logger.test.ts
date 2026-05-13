@@ -237,3 +237,27 @@ describe('runWithContext', () => {
     expect(result).toBe('async result');
   });
 });
+
+describe('secret redaction', () => {
+  test('strips a URL query string from a log message', () => {
+    logger.error('API call failed: https://api.example.com/v3/price?x_cg_pro_api_key=SUPERSECRET&vs=usd');
+    const output = lastCall(errorMock);
+    expect(output).toContain('https://api.example.com/v3/price?[redacted]');
+    expect(output).not.toContain('SUPERSECRET');
+    expect(output).not.toContain('x_cg_pro_api_key');
+  });
+
+  test('leaves a URL without a query string alone', () => {
+    logger.info('GET https://api.example.com/health 200 3ms');
+    expect(lastCall(infoMock)).toContain('https://api.example.com/health 200 3ms');
+  });
+
+  test('redacts the query string in an Error message and stack (json format)', () => {
+    configureLogger('json');
+    logger.error('upstream unreachable', new Error('connect failed: https://api.example.com/p?token=LEAK'));
+    const entry = JSON.parse(lastCall(errorMock)) as { error: { message: string; stack: string } };
+    expect(entry.error.message).toBe('connect failed: https://api.example.com/p?[redacted]');
+    expect(entry.error.message).not.toContain('LEAK');
+    expect(entry.error.stack).not.toContain('LEAK');
+  });
+});

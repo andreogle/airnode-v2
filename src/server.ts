@@ -10,7 +10,6 @@ import type { PluginRegistry } from './plugins';
 import { checkRateLimit } from './rate-limit';
 import type { TokenBucket } from './rate-limit';
 import type { Config } from './types';
-import { VERSION } from './version';
 
 // =============================================================================
 // Types
@@ -194,7 +193,10 @@ function createServer(deps: ServerDependencies): ServerHandle {
     }
 
     if (url.pathname === '/health' && request.method === 'GET') {
-      return jsonResponse({ status: 'ok', version: VERSION, airnode: deps.airnode }, 200, cors);
+      // Deliberately no version field — don't volunteer build info on an
+      // unauthenticated endpoint. The airnode address (the actual identity) is
+      // useful for "is this the airnode I expect?" and is public anyway.
+      return jsonResponse({ status: 'ok', airnode: deps.airnode }, 200, cors);
     }
 
     // Async request polling
@@ -244,9 +246,17 @@ function createServer(deps: ServerDependencies): ServerHandle {
     return errorResponse('Not Found', 404, cors);
   }
 
+  // Connection idle timeout (seconds, Bun caps it at 255). Set it explicitly,
+  // and high enough that a legitimate request waiting on a slow upstream + TLS
+  // proof isn't killed mid-flight, while still bounding connections that just
+  // sit there. Worst-case wait ≈ upstream timeout + proof timeout + overhead.
+  const proofTimeoutMs = deps.settings.proof === 'none' ? 0 : deps.settings.proof.timeout;
+  const idleTimeout = Math.min(255, Math.ceil((deps.settings.timeout + proofTimeoutMs) / 1000) + 20);
+
   const server = Bun.serve({
     port: deps.config.server.port,
     hostname: deps.config.server.host,
+    idleTimeout,
     fetch: async (request: Request, bunServer): Promise<Response> => {
       const start = Date.now();
       const url = new URL(request.url);

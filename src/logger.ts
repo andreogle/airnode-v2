@@ -26,6 +26,15 @@ export function getContext(): LogContext | undefined {
 
 const MIN_MESSAGE_WIDTH = 80;
 
+// Strip the query string from any URL in a log line. Upstream API credentials are
+// usually passed in headers, but some APIs (and the resulting fetch error
+// messages) put them in `?api_key=…`; this keeps them out of logs / aggregators.
+const URL_WITH_QUERY = /(\bhttps?:\/\/[^\s?#"'`<>]*)\?[^\s#"'`<>]*/gi;
+
+function redactSecrets(text: string): string {
+  return text.replaceAll(URL_WITH_QUERY, '$1?[redacted]');
+}
+
 function formatText(level: LogLevel, message: string, context: LogContext | undefined): string {
   const timestamp = new Date().toISOString();
   const paddedMessage = message.padEnd(MIN_MESSAGE_WIDTH);
@@ -40,14 +49,23 @@ function formatJson(level: LogLevel, message: string, context: LogContext | unde
     level,
     message,
     ...(context ? { requestId: context.requestId } : {}),
-    ...(error ? { error: { name: error.name, message: error.message, stack: error.stack } } : {}),
+    ...(error
+      ? {
+          error: {
+            name: error.name,
+            message: redactSecrets(error.message),
+            stack: error.stack ? redactSecrets(error.stack) : undefined,
+          },
+        }
+      : {}),
   };
 
   return JSON.stringify(entry);
 }
 
-function formatEntry(level: LogLevel, message: string, error?: Error): string {
+function formatEntry(level: LogLevel, rawMessage: string, error?: Error): string {
   const context = logStore.getStore();
+  const message = redactSecrets(rawMessage);
 
   if (logFormat === 'json') {
     return formatJson(level, message, context, error);
@@ -58,7 +76,7 @@ function formatEntry(level: LogLevel, message: string, error?: Error): string {
     return base;
   }
 
-  return `${base}\n${error.stack}`;
+  return `${base}\n${redactSecrets(error.stack)}`;
 }
 
 export const logger = {

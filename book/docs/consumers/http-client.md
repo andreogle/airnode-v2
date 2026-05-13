@@ -208,5 +208,9 @@ uniqueness key.
 curl http://airnode.example.com/health
 ```
 
-Returns the airnode address and version. Use this to verify the server is running and to discover the airnode address
-for signature verification.
+```json
+{ "status": "ok", "airnode": "0x..." }
+```
+
+Use this to verify the server is running and to discover the airnode address for signature verification. (No version
+field — build info isn't exposed on this endpoint.)
