@@ -15,7 +15,7 @@ import type { ReclaimProof } from './proof';
 import { requestProof } from './proof';
 import type { Semaphore } from './semaphore';
 import { signResponse } from './sign';
-import type { ClientAuth, Encoding, Endpoint, Settings } from './types';
+import type { ClientAuth, Config, Encoding, Endpoint, Settings } from './types';
 
 // =============================================================================
 // Types
@@ -31,6 +31,10 @@ interface PipelineDependencies {
   readonly cache: ResponseCache;
   readonly asyncStore?: AsyncRequestStore;
   readonly settings: Settings;
+  // Same value as `config.server.rateLimit` — duplicated here so the pipeline
+  // can read it (e.g. the x402 verification limit) without depending on the
+  // whole Config shape.
+  readonly rateLimit: Config['server']['rateLimit'];
   // Process-wide cap on concurrent upstream API calls (from `settings.maxConcurrentApiCalls`).
   readonly apiCallSemaphore: Semaphore;
 }
@@ -514,7 +518,11 @@ async function handleEndpointRequest(
 
   // Authenticate
   const auth = resolveAuth(resolved);
-  const authResult = await authenticateRequest(request, { airnode: deps.airnode, endpointId, clientIp }, auth);
+  const authResult = await authenticateRequest(
+    request,
+    { airnode: deps.airnode, endpointId, clientIp, x402RateLimit: deps.rateLimit.x402 },
+    auth
+  );
   if (!authResult.authenticated) {
     if (isPaymentRequired(authResult)) {
       return jsonResponse(authResult.paymentDetails, 402);

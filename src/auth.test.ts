@@ -423,4 +423,26 @@ describe('x402 auth', () => {
     const ok = await authenticateRequest(makeRequest(proofHeader(stillOkProof)), otherIpCtx, x402Config);
     expect(ok.authenticated).toBe(true);
   });
+
+  test('honors a custom x402RateLimit from config', async () => {
+    setRpcClientFactory(() => fakeRpc({ txFrom: '0x000000000000000000000000000000000000bEEF', txTo: RECIPIENT }));
+    const ipCtx: AuthContext = {
+      ...CTX,
+      clientIp: '203.0.113.77', // a fresh IP, so the bucket is full
+      x402RateLimit: { window: 60_000, max: 3 },
+    };
+
+    // Burn the tight 3-token budget.
+    for (let i = 0; i < 3; i++) {
+      const txHash: Hex = `0xaa${i.toString(16).padStart(62, '0')}`;
+      const proof = await makeSignedProof({ txHash });
+      const r = await authenticateRequest(makeRequest(proofHeader(proof)), ipCtx, x402Config);
+      expect(expectError(r)).toBe('Payment verification failed');
+    }
+
+    // Fourth attempt is blocked by the configured limit.
+    const overflow = await makeSignedProof({ txHash: `0xbb${'00'.repeat(31)}` });
+    const blocked = await authenticateRequest(makeRequest(proofHeader(overflow)), ipCtx, x402Config);
+    expect(expectError(blocked)).toBe('Too many x402 verification attempts — slow down');
+  });
 });

@@ -13,15 +13,28 @@ const TEST_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5ef
 const TEST_AIRNODE: Hex = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const TEST_ACCOUNT = createAirnodeAccount(TEST_PRIVATE_KEY);
 const TEST_ENDPOINT_ID: Hex = '0x04e77a11d6561a70385e2e8e315989cb24bb35128cb4d5a8b3ece93a3c72295b';
-function makeConfig(overrides: Partial<Config['server']> = {}): Config {
+const DEFAULT_RATE_LIMIT: Config['server']['rateLimit'] = {
+  // effectively unlimited; tests override
+  window: 60_000,
+  max: 1_000_000,
+  trustForwardedFor: false,
+  x402: { window: 60_000, max: 1_000_000 },
+};
+
+type ServerOverrides = Partial<Omit<Config['server'], 'rateLimit'>> & {
+  readonly rateLimit?: Partial<Config['server']['rateLimit']>;
+};
+
+function makeConfig(overrides: ServerOverrides = {}): Config {
+  const { rateLimit: rateLimitOverride, ...serverOverrides } = overrides;
   return {
     version: '1.0',
     server: {
       port: 0,
       host: '127.0.0.1',
       cors: { origins: ['*'] },
-      rateLimit: { window: 60_000, max: 1_000_000, trustForwardedFor: false }, // effectively unlimited; tests override
-      ...overrides,
+      rateLimit: { ...DEFAULT_RATE_LIMIT, ...rateLimitOverride },
+      ...serverOverrides,
     },
     apis: [
       {
@@ -47,6 +60,7 @@ function makeDeps(overrides: Partial<ServerDependencies> = {}): ServerDependenci
     asyncStore: undefined,
     apiCallSemaphore: createSemaphore(100),
     settings: config.settings,
+    rateLimit: config.server.rateLimit,
     handleRequest: mock(() => Promise.resolve(Response.json({ ok: true }, { status: 200 }))),
     ...overrides,
   };
@@ -327,7 +341,7 @@ describe('createServer', () => {
 
   test('rate limiting returns 429 after max requests', async () => {
     const deps = makeDeps({
-      config: makeConfig({ rateLimit: { window: 60_000, max: 3, trustForwardedFor: false } }),
+      config: makeConfig({ rateLimit: { max: 3 } }),
     });
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
@@ -349,7 +363,7 @@ describe('createServer', () => {
 
   test('rate limiting buckets by X-Forwarded-For when trustForwardedFor is set', async () => {
     const deps = makeDeps({
-      config: makeConfig({ rateLimit: { window: 60_000, max: 1, trustForwardedFor: true } }),
+      config: makeConfig({ rateLimit: { max: 1, trustForwardedFor: true } }),
     });
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
@@ -367,7 +381,7 @@ describe('createServer', () => {
 
   test('rate limiting ignores X-Forwarded-For unless trustForwardedFor is set', async () => {
     const deps = makeDeps({
-      config: makeConfig({ rateLimit: { window: 60_000, max: 1, trustForwardedFor: false } }),
+      config: makeConfig({ rateLimit: { max: 1 } }),
     });
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;

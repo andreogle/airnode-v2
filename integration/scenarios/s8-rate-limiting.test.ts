@@ -5,7 +5,7 @@ import type { TestContext } from '../helpers';
 let ctx: TestContext;
 
 beforeAll(async () => {
-  ctx = await createTestServer({ server: { rateLimit: { window: 60_000, max: 3, trustForwardedFor: false } } });
+  ctx = await createTestServer({ server: { rateLimit: { max: 3 } } });
 });
 
 afterAll(() => {

@@ -9,9 +9,13 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 
 settings:
   timeout: 15000
+  maxConcurrentApiCalls: 50
   proof: none # or: { type: reclaim, gatewayUrl: 'http://localhost:5177/v1/prove' }
   plugins:
     - source: ../../plugins/heartbeat.ts

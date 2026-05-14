@@ -16,6 +16,9 @@ interface AuthContext {
   // programmatic test callers can omit it; production always passes it from
   // the server's `resolveClientIp(...)`. Missing IPs share one ('unknown') bucket.
   readonly clientIp?: string;
+  // Operator-tunable x402 verification rate-limit (`server.rateLimit.x402`).
+  // Optional here so programmatic callers can omit it; defaults to 30/min/IP.
+  readonly x402RateLimit?: { readonly window: number; readonly max: number };
 }
 
 interface AuthSuccess {
@@ -170,10 +173,11 @@ const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
 // otherwise drain the operator's RPC quota. A separate, much stricter per-IP
 // token bucket on x402 verification attempts (the global `server.rateLimit`
 // counts every route equally — `/health` probes shouldn't shrink the budget
-// available to fight off an x402 flood).
+// available to fight off an x402 flood). The window/max are operator-tunable
+// via `server.rateLimit.x402`; the defaults below apply when the caller
+// (e.g. a programmatic test) doesn't pass values through `AuthContext`.
 // =============================================================================
-const X402_RATE_LIMIT_WINDOW_MS = 60_000;
-const X402_RATE_LIMIT_MAX = 30;
+const DEFAULT_X402_RATE_LIMIT = { window: 60_000, max: 30 } as const;
 const x402AttemptBuckets = new Map<string, TokenBucket>();
 
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -284,7 +288,8 @@ async function checkX402(
   // drain the operator's RPC quota. The bucket is independent of the global
   // limit; missing client IPs (programmatic callers) share an 'unknown' bucket.
   const verifierIp = context.clientIp ?? 'unknown';
-  if (!checkRateLimit(verifierIp, x402AttemptBuckets, X402_RATE_LIMIT_WINDOW_MS, X402_RATE_LIMIT_MAX)) {
+  const limit = context.x402RateLimit ?? DEFAULT_X402_RATE_LIMIT;
+  if (!checkRateLimit(verifierIp, x402AttemptBuckets, limit.window, limit.max)) {
     return { authenticated: false, error: 'Too many x402 verification attempts — slow down' };
   }
 

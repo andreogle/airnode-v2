@@ -24,7 +24,7 @@ async function hit(baseUrl: string, forwardedFor: string): Promise<number> {
 
 describe('S42 — X-Forwarded-For rate limiting', () => {
   test('with trustForwardedFor on, each forwarded client has an independent bucket', async () => {
-    ctx = await createTestServer({ server: { rateLimit: { window: 60_000, max: 3, trustForwardedFor: true } } });
+    ctx = await createTestServer({ server: { rateLimit: { max: 3, trustForwardedFor: true } } });
 
     expect(await hit(ctx.baseUrl, '1.2.3.4')).toBe(200);
     expect(await hit(ctx.baseUrl, '1.2.3.4')).toBe(200);
@@ -38,7 +38,7 @@ describe('S42 — X-Forwarded-For rate limiting', () => {
   });
 
   test('with trustForwardedFor off, the header is ignored and all callers share one bucket', async () => {
-    ctx = await createTestServer({ server: { rateLimit: { window: 60_000, max: 3, trustForwardedFor: false } } });
+    ctx = await createTestServer({ server: { rateLimit: { max: 3 } } });
 
     expect(await hit(ctx.baseUrl, '1.1.1.1')).toBe(200);
     expect(await hit(ctx.baseUrl, '2.2.2.2')).toBe(200);

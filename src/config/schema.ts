@@ -153,6 +153,17 @@ const corsSchema = z.object({
   origins: z.array(z.string().min(1)).default(['*']),
 });
 
+// Separate, stricter per-IP bucket on x402 verification attempts. Each
+// verification fires several chain-RPC reads, so an unauthenticated flooder
+// would otherwise drain the operator's RPC quota even at a generous global
+// `rateLimit.max`. The challenge response (no proof yet → 402) is unaffected;
+// only submitted proofs draw from this bucket. Same `clientIp` as the global
+// limit, so `trustForwardedFor` applies consistently.
+const x402RateLimitSchema = z.object({
+  window: z.number().int().positive(),
+  max: z.number().int().positive(),
+});
+
 const rateLimitSchema = z.object({
   window: z.number().int().positive(),
   max: z.number().int().positive(),
@@ -160,6 +171,7 @@ const rateLimitSchema = z.object({
   // every client shares one bucket. Set this only if a *trusted* proxy sets
   // `X-Forwarded-For` — its first entry is then used as the rate-limit key.
   trustForwardedFor: z.boolean().default(false),
+  x402: x402RateLimitSchema,
 });
 
 export const serverSchema = z.object({
@@ -224,7 +236,7 @@ export const settingsSchema = z.object({
   // Process-wide ceiling on concurrent upstream API calls. A burst of requests
   // can't fan out more `fetch`es than this to your (metered) APIs; over the cap,
   // a request waits up to its API `timeout` for a slot, then gets a 503.
-  maxConcurrentApiCalls: z.number().int().positive().default(50),
+  maxConcurrentApiCalls: z.number().int().positive(),
   proof: proofSchema.default('none'),
   fhe: fheSchema.default('none'),
   plugins: z.array(pluginEntrySchema).default([]),

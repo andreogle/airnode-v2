@@ -114,6 +114,12 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     cache: createCache(),
     apiCallSemaphore: createSemaphore(100),
     settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
+    rateLimit: {
+      window: 60_000,
+      max: 1_000_000,
+      trustForwardedFor: false,
+      x402: { window: 60_000, max: 1_000_000 },
+    },
     ...overrides,
   };
 }

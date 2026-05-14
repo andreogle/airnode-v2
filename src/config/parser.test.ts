@@ -109,7 +109,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -141,7 +145,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -164,7 +172,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test

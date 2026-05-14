@@ -5,8 +5,12 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
   # FHE relayer connection. With `fhe` configured, any endpoint that has an
   # `encrypt` block gets its ABI-encoded value replaced with an FHE ciphertext

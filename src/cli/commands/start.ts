@@ -68,6 +68,7 @@ export const start = new Command('start')
       asyncStore,
       apiCallSemaphore,
       settings: config.settings,
+      rateLimit: config.server.rateLimit,
       handleRequest: handleEndpointRequest,
     });
 

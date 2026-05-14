@@ -40,14 +40,24 @@ function rewriteApiUrls(apis: readonly Api[]): Api[] {
 }
 
 interface TestServerOptions {
-  readonly server?: Partial<Config['server']>;
+  readonly server?: Partial<Omit<Config['server'], 'rateLimit'>> & {
+    readonly rateLimit?: Partial<Config['server']['rateLimit']>;
+  };
   readonly settings?: Partial<Config['settings']>;
   readonly plugins?: PluginRegistry;
   readonly apiOverrides?: (apis: readonly Api[]) => Api[];
 }
 
+const DEFAULT_TEST_RATE_LIMIT: Config['server']['rateLimit'] = {
+  // Effectively no limit by default; rate-limit scenarios override this.
+  window: 60_000,
+  max: 1_000_000,
+  trustForwardedFor: false,
+  x402: { window: 60_000, max: 1_000_000 },
+};
+
 async function createTestServer(options: TestServerOptions = {}): Promise<TestContext> {
-  const serverOverrides = options.server ?? {};
+  const { rateLimit: rateLimitOverride, ...serverOverrides } = options.server ?? {};
   const settingsOverrides = options.settings ?? {};
   await loadEnvFile(ENV_PATH);
 
@@ -60,8 +70,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     server: {
       ...parsed.server,
       port: 0,
-      // Effectively no limit by default; rate-limit scenarios override this.
-      rateLimit: { window: 60_000, max: 1_000_000, trustForwardedFor: false },
+      rateLimit: { ...DEFAULT_TEST_RATE_LIMIT, ...rateLimitOverride },
       ...serverOverrides,
     },
     settings: { ...parsed.settings, plugins: [], ...settingsOverrides },
@@ -83,6 +92,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     asyncStore,
     apiCallSemaphore,
     settings: testConfig.settings,
+    rateLimit: testConfig.server.rateLimit,
     handleRequest: handleEndpointRequest,
   });
 

@@ -10,7 +10,7 @@ The `settings` section configures global behavior. It is placed immediately afte
 ```yaml
 settings:
   timeout: 10000 # default, ms
-  maxConcurrentApiCalls: 50 # default
+  maxConcurrentApiCalls: 50
   proof: none
   fhe: none
   plugins:
@@ -23,7 +23,7 @@ settings:
 | Field                   | Type               | Required | Default  | Description                                            |
 | ----------------------- | ------------------ | -------- | -------- | ------------------------------------------------------ |
 | `timeout`               | `number`           | No       | `10000`  | Global upstream API request timeout in milliseconds.   |
-| `maxConcurrentApiCalls` | `number`           | No       | `50`     | Process-wide ceiling on concurrent upstream API calls. |
+| `maxConcurrentApiCalls` | `number`           | **Yes**  | --       | Process-wide ceiling on concurrent upstream API calls. |
 | `proof`                 | `string \| object` | No       | `'none'` | Proof mode. See [Proof](#proof).                       |
 | `fhe`                   | `string \| object` | No       | `'none'` | FHE encryption relayer. See [FHE](#fhe).               |
 | `plugins`               | `array`            | No       | `[]`     | Plugin entries. See [Plugin Configuration](./plugins). |

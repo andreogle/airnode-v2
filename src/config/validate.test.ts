@@ -8,7 +8,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: TestApi
@@ -64,7 +68,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -88,7 +96,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis: []
 `;
@@ -101,6 +113,7 @@ apis: []
     const yaml = `
 version: '1.0'
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -125,7 +138,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Duplicate
@@ -154,7 +171,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Weather
@@ -180,7 +201,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
   plugins:
     - source: ./heartbeat.js
@@ -209,7 +234,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -239,7 +268,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -264,7 +297,11 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    x402:
+      window: 60000
+      max: 30
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis:
   - name: Test
@@ -290,6 +327,7 @@ version: '1.0'
 server:
   port: -1
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 apis: []
 `;
