@@ -480,7 +480,8 @@ async function handleEndpointRequest(
   request: Request,
   endpointId: Hex,
   parameters: Record<string, string>,
-  deps: PipelineDependencies
+  deps: PipelineDependencies,
+  clientIp: string = 'unknown'
 ): Promise<Response> {
   const start = Date.now();
 
@@ -513,7 +514,7 @@ async function handleEndpointRequest(
 
   // Authenticate
   const auth = resolveAuth(resolved);
-  const authResult = await authenticateRequest(request, { airnode: deps.airnode, endpointId }, auth);
+  const authResult = await authenticateRequest(request, { airnode: deps.airnode, endpointId, clientIp }, auth);
   if (!authResult.authenticated) {
     if (isPaymentRequired(authResult)) {
       return jsonResponse(authResult.paymentDetails, 402);

@@ -15,7 +15,8 @@ interface ServerDependencies extends PipelineDependencies {
     request: Request,
     endpointId: Hex,
     parameters: Record<string, string>,
-    deps: PipelineDependencies
+    deps: PipelineDependencies,
+    clientIp: string
   ) => Promise<Response>;
 }
 
@@ -225,7 +226,7 @@ function createServer(deps: ServerDependencies): ServerHandle {
         return errorResponse('Request "parameters" must be an object', 400, cors);
       }
 
-      return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps), cors);
+      return withCorsHeaders(await deps.handleRequest(request, endpointId, body, deps, ip), cors);
     }
 
     return errorResponse('Not Found', 404, cors);

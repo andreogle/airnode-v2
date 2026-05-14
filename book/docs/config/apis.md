@@ -111,6 +111,10 @@ uniqueness key — it can be redeemed exactly once.
 
 `expiresAt` must be a future unix-seconds timestamp no further ahead than 10 minutes; longer-lived proofs are rejected.
 
+Submitted proofs are additionally rate-limited **per client IP** before the airnode touches the chain RPC — currently 30
+attempts per minute per IP. The unpaid 402 challenge path is unaffected. This is independent of `server.rateLimit` and
+keeps an unauthenticated flooder from draining the operator's RPC quota by spamming bogus proofs.
+
 ### Multiple auth methods
 
 Auth can be an array. Any method succeeding is sufficient (any-of semantics):

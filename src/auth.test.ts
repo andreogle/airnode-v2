@@ -393,4 +393,34 @@ describe('x402 auth', () => {
     const r2 = await authenticateRequest(makeRequest({ 'X-Api-Key': 'backup-key' }), CTX, auth);
     expect(r2.authenticated).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Per-IP rate limit on verification attempts (RPC-DoS guard)
+  // ---------------------------------------------------------------------------
+  test('rate-limits x402 verification attempts per client IP', async () => {
+    // Use a payer-mismatch failure (not receiptFails) so each attempt returns
+    // immediately without burning RPC retry delays — keeps the test sub-second.
+    setRpcClientFactory(() => fakeRpc({ txFrom: '0x000000000000000000000000000000000000bEEF', txTo: RECIPIENT }));
+    const ipCtx: AuthContext = { ...CTX, clientIp: '203.0.113.42' }; // a fresh IP, so the bucket is full
+
+    // Burn through the per-IP budget. Each call fails verification (not rate-limit) and consumes a token.
+    for (let i = 0; i < 30; i++) {
+      const txHash: Hex = `0x${i.toString(16).padStart(64, '0')}`;
+      const proof = await makeSignedProof({ txHash });
+      const r = await authenticateRequest(makeRequest(proofHeader(proof)), ipCtx, x402Config);
+      expect(expectError(r)).toBe('Payment verification failed');
+    }
+
+    // The next attempt is gated by the bucket before it ever hits the (fake) RPC.
+    const overflowProof = await makeSignedProof({ txHash: `0x${'ff'.repeat(32)}` });
+    const blocked = await authenticateRequest(makeRequest(proofHeader(overflowProof)), ipCtx, x402Config);
+    expect(expectError(blocked)).toBe('Too many x402 verification attempts — slow down');
+
+    // A different IP has its own bucket — not affected.
+    const otherIpCtx: AuthContext = { ...CTX, clientIp: '203.0.113.99' };
+    setRpcClientFactory(() => fakeRpc({ txTo: RECIPIENT, txValue: 1_000_000n }));
+    const stillOkProof = await makeSignedProof({ txHash: `0x${'cc'.repeat(32)}` });
+    const ok = await authenticateRequest(makeRequest(proofHeader(stillOkProof)), otherIpCtx, x402Config);
+    expect(ok.authenticated).toBe(true);
+  });
 });

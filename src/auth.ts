@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { go, goSync } from '@api3/promise-utils';
 import { type Hex, createPublicClient, encodePacked, http, keccak256, recoverMessageAddress, toHex } from 'viem';
 import { createBoundedMap } from './bounded-map';
+import { checkRateLimit } from './rate-limit';
+import type { TokenBucket } from './rate-limit';
 import type { ClientAuth, ClientAuthMethod } from './types';
 
 // =============================================================================
@@ -10,6 +12,10 @@ import type { ClientAuth, ClientAuthMethod } from './types';
 interface AuthContext {
   readonly endpointId: Hex;
   readonly airnode: Hex;
+  // Client IP for the dedicated x402-verification rate-limit. Optional so
+  // programmatic test callers can omit it; production always passes it from
+  // the server's `resolveClientIp(...)`. Missing IPs share one ('unknown') bucket.
+  readonly clientIp?: string;
 }
 
 interface AuthSuccess {
@@ -156,6 +162,20 @@ const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
   refuseEvictionIf: (entry) => Date.now() - entry.usedAt < PROOF_RETENTION_MS,
 });
 
+// =============================================================================
+// x402 DoS guard — verification rate limit
+//
+// `verifyPayment` hits the chain RPC (3 reads × up to 3 retries) per attempt,
+// so unauthenticated callers spamming bogus `X-Payment-Proof` headers would
+// otherwise drain the operator's RPC quota. A separate, much stricter per-IP
+// token bucket on x402 verification attempts (the global `server.rateLimit`
+// counts every route equally — `/health` probes shouldn't shrink the budget
+// available to fight off an x402 flood).
+// =============================================================================
+const X402_RATE_LIMIT_WINDOW_MS = 60_000;
+const X402_RATE_LIMIT_MAX = 30;
+const x402AttemptBuckets = new Map<string, TokenBucket>();
+
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const TX_HASH_REGEX = /^0x[\da-fA-F]{64}$/;
 const ADDRESS_REGEX = /^0x[\da-fA-F]{40}$/;
@@ -256,6 +276,16 @@ async function checkX402(
         expiresAt: Math.floor(Date.now() / 1000) + Math.floor(config.expiry / 1000),
       },
     };
+  }
+
+  // A submitted proof — whether bogus or not — will hit the chain RPC in
+  // verifyPayment. Apply a stricter per-IP bucket here so an attacker can't use
+  // a single permissive `server.rateLimit` to flood the verification path and
+  // drain the operator's RPC quota. The bucket is independent of the global
+  // limit; missing client IPs (programmatic callers) share an 'unknown' bucket.
+  const verifierIp = context.clientIp ?? 'unknown';
+  if (!checkRateLimit(verifierIp, x402AttemptBuckets, X402_RATE_LIMIT_WINDOW_MS, X402_RATE_LIMIT_MAX)) {
+    return { authenticated: false, error: 'Too many x402 verification attempts — slow down' };
   }
 
   const parsed = parsePaymentProof(proofHeader);
