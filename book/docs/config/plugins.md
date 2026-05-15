@@ -84,6 +84,20 @@ Guidelines:
 Plugins run in the order they are declared. For mutation hooks (`onBeforeApiCall`, `onAfterApiCall`, `onBeforeSign`),
 each plugin receives the output of the previous one.
 
+## Caching interaction
+
+The HTTP response cache (`apis[].cache.maxAge` or `endpoints[].cache.maxAge`) stores the entire signed response — data,
+signature, and timestamp — for the TTL window. Cached responses bypass the upstream API call, which also bypasses every
+hook from `onBeforeApiCall` onward:
+
+- `onBeforeApiCall`, `onAfterApiCall`, `onBeforeSign` — **only fire on the first request in each cache window**. Cached
+  hits within the TTL never invoke them.
+- `onHttpRequest`, `onResponseSent`, `onError` — fire on every request, cached or not.
+
+If your plugin tracks per-request signal (heartbeats, counters, alerting), put that work in `onResponseSent` or
+`onHttpRequest`. Don't rely on the mutation hooks to run once per HTTP request — they run once per upstream API call,
+which can be much rarer.
+
 ## Plugin name
 
 There is no `name` field in the config. The plugin's exported `name` (from its default export, or from the object its

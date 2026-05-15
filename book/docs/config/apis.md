@@ -153,6 +153,17 @@ cache:
 response until the TTL expires. A cached response replays the same signature and timestamp, so within `maxAge` every
 caller (and every on-chain submission) gets the identical signed payload.
 
+:::warning On-chain race within the cache window
+Because every caller in a TTL window receives the **byte-identical** signed response, only the first on-chain submission
+through `AirnodeVerifier` succeeds. The verifier's `fulfilled[]` mapping treats subsequent submissions of the same
+`(endpointId, timestamp, data)` as replays and reverts with `"Already fulfilled"` — the second and third callers pay gas
+for a failed transaction.
+
+For endpoints whose consumers race to submit on-chain (price feeds, single-fulfillment auctions), set a short `maxAge`
+(e.g. 1000ms) or omit `cache` entirely so each caller gets a fresh signature. Caching is most useful for off-chain
+verification flows or endpoints with a single intended on-chain submitter.
+:::
+
 ## Endpoint-level fields
 
 Each endpoint describes one upstream API route:
