@@ -184,7 +184,7 @@ endpoints:
 | `method`          | `string` | No       | `GET`   | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.                                 |
 | `mode`            | `string` | No       | `sync`  | Response mode: `sync`, `async`, or `stream`.                                             |
 | `parameters`      | `array`  | No       | `[]`    | Parameter definitions. See [Parameters](#parameters).                                    |
-| `encoding`        | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed.                                    |
+| `encoding`        | `object` | No       | --      | ABI encoding rules. When omitted, raw JSON is signed. See [Encoding](#encoding).         |
 | `encrypt`         | `object` | No       | --      | FHE-encrypt the encoded value before signing. See [Encryption (FHE)](#encryption-fhe).   |
 | `responseMatches` | `array`  | No       | --      | Regex patterns for TLS proof response matching. See [responseMatches](#responsematches). |
 | `auth`            | `object` | No       | --      | Overrides API-level auth for this endpoint.                                              |
@@ -406,15 +406,19 @@ encoding:
   times: '1e18'
 ```
 
-| Field   | Type     | Required | Description                                                                     |
-| ------- | -------- | -------- | ------------------------------------------------------------------------------- |
-| `type`  | `string` | No       | Solidity type(s) for ABI encoding: `int256`, `uint256`, `bool`, `bytes32`, etc. |
-| `path`  | `string` | No       | JSONPath expression to extract the value from the API response.                 |
-| `times` | `string` | No       | Multiplier applied before encoding. Converts decimals to integers for Solidity. |
+| Field   | Type     | Required | Description                                                                                        |
+| ------- | -------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `type`  | `string` | **Yes**  | Solidity type(s): `int256`, `uint256`, `bool`, `bytes32`, etc. Or `'*'` for requester-controlled.  |
+| `path`  | `string` | **Yes**  | JSONPath expression to extract the value. Or `'*'` for requester-controlled.                       |
+| `times` | `string` | No       | Multiplier applied before encoding. Only valid for numeric types (`int256` / `uint256`). Or `'*'`. |
 
-All fields are optional individually. The encoding is complete when both `type` and `path` are present — either from the
-config, from the requester's request parameters, or a combination of both. See
-[requester-specified encoding](#requester-specified-encoding) below.
+When the `encoding` block is present, `type` and `path` are both required. Each is either a **concrete value** (pins the
+field; requester reserved params are ignored) or the **wildcard sentinel `'*'`** (delegates the field to the matching
+request parameter — see [requester-specified encoding](#requester-specified-encoding)).
+
+`times` is optional and only meaningful for numeric ABI types. Setting `times` on a non-numeric type (e.g. `bytes32`) is
+rejected at config-validation time. Absent `times` on a numeric type means **no multiplier** — the upstream value is
+truncated toward zero if fractional.
 
 ### Multi-value encoding
 
@@ -459,36 +463,57 @@ no value at the configured path.
 
 ### Requester-specified encoding
 
-Clients can control encoding by passing reserved parameters in their request body: `_type`, `_path`, and optionally
-`_times`. These parameters are consumed by the pipeline and never sent to the upstream API.
+A field set to the literal `'*'` delegates that field to the matching request parameter (`_type`, `_path`, `_times`).
+These reserved parameters are consumed by the pipeline and never sent to the upstream API. Without an explicit `'*'`,
+the operator's value is pinned and any reserved param the client sends for that field is silently ignored.
 
-**Three modes:**
+**Two modes:**
 
-1. **Operator-fixed** — the endpoint has a complete `encoding` block (`type` + `path`). Client reserved parameters are
-   ignored. The endpoint ID commits to this encoding.
-2. **Partial** — the endpoint has an `encoding` block with some fields (e.g. `type` only). The client fills in the
-   missing fields via `_path` or `_times`. Operator fields take precedence.
-3. **Requester-only** — no `encoding` block. The client provides `_type` and `_path`. If neither is provided, raw JSON
-   mode is used.
+1. **Pinned** — every encoding field is a concrete value. Client reserved parameters are ignored. The endpoint ID
+   commits to the exact encoding shape.
+2. **Per-field wildcard** — one or more fields are `'*'`. The client must supply the matching reserved parameter; a
+   missing one returns 400. The endpoint ID records which fields are wildcarded.
+
+There is **no third "implicit" mode** — omitting `type` or `path` is a config error, and an endpoint without an
+`encoding` block always returns raw JSON regardless of any reserved parameters the client sends.
+
+```yaml
+# Pinned — operator chose the entire encoding shape
+encoding:
+  type: int256
+  path: $.ethereum.usd
+  times: '1e18'
+```
+
+```yaml
+# Partial wildcard — operator pins the type, lets the client choose the JSONPath
+encoding:
+  type: int256
+  path: '*'
+```
+
+```yaml
+# Fully open — every field is requester-controlled
+encoding:
+  type: '*'
+  path: '*'
+  times: '*'
+```
 
 ```bash
-# Requester chooses what to extract from a raw endpoint
+# Calling a fully-open endpoint
 curl -X POST http://localhost:3000/endpoints/{endpointId} \
   -H "Content-Type: application/json" \
   -d '{"parameters":{"ids":"ethereum","vs_currencies":"usd","_type":"int256","_path":"$.ethereum.usd","_times":"1e18"}}'
 ```
 
-```yaml
-# Partial: operator fixes the type, requester chooses the path
-endpoints:
-  - name: flexiblePrice
-    path: /simple/price
-    encoding:
-      type: int256
-    # path comes from the requester's _path parameter
-```
+If any `'*'` field is missing its corresponding reserved parameter from the request, the server returns 400.
 
-If the merged result has `_type` without `_path` (or vice versa), the server returns 400.
+:::warning Breaking change Earlier versions allowed clients to supply `_type`/`_path`/`_times` against any endpoint
+where the operator hadn't pinned those fields — including endpoints with no `encoding` block at all. That implicit mode
+is gone: a missing field is now "operator chose nothing" (config error for `type`/`path`), and only an explicit `'*'`
+opens a field to requester control. This prevents a half-configured endpoint from silently signing client-chosen shapes.
+:::
 
 ## Encryption (FHE)
 

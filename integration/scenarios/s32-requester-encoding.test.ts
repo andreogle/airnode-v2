@@ -13,10 +13,10 @@ afterAll(() => {
   ctx.stop();
 });
 
-describe('S32 — Requester-specified encoding', () => {
-  test('encodes response when client sends _type and _path', async () => {
-    // coinPriceRaw has no encoding block — uses requester params
-    const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPriceRaw');
+describe('S32 — Requester-specified encoding (operator opts in with `*`)', () => {
+  test('client _type/_path/_times fill in the wildcards', async () => {
+    // coinPriceFlex has encoding: { type: '*', path: '*', times: '*' }
+    const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPriceFlex');
     const response = await post(
       ctx.baseUrl,
       endpointId,
@@ -26,21 +26,36 @@ describe('S32 — Requester-specified encoding', () => {
     const body = (await response.json()) as { data: Hex; signature: Hex };
 
     expect(response.status).toBe(200);
-    expect(body.data).toMatch(/^0x/);
     expect(body.signature).toMatch(/^0x/);
 
-    // Decode: 3000.5 * 1e18 ≈ 3000.5e18
     const [decoded] = decodeAbiParameters([{ type: 'int256' }], body.data);
+    // 3000.5 * 1e18
     expect(decoded).toBeGreaterThan(3_000_000_000_000_000_000_000n);
     expect(decoded).toBeLessThan(3_001_000_000_000_000_000_000n);
   });
 
-  test('returns raw JSON when no encoding and no reserved params', async () => {
+  test('returns 400 when a wildcard reserved param is missing', async () => {
+    const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPriceFlex');
+    const response = await post(
+      ctx.baseUrl,
+      endpointId,
+      { ids: 'ethereum', vs_currencies: 'usd', _type: 'int256', _times: '1e18' }, // missing _path
+      { 'X-Api-Key': CLIENT_API_KEY }
+    );
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('_path');
+  });
+
+  test('no encoding block returns raw JSON — reserved params are ignored', async () => {
+    // coinPriceRaw has no encoding block. Client _type/_path must NOT synthesize
+    // an encoding out of nothing — raw mode wins.
     const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPriceRaw');
     const response = await post(
       ctx.baseUrl,
       endpointId,
-      { ids: 'ethereum', vs_currencies: 'usd' },
+      { ids: 'ethereum', vs_currencies: 'usd', _type: 'int256', _path: '$.ethereum.usd' },
       { 'X-Api-Key': CLIENT_API_KEY }
     );
     const body = (await response.json()) as { rawData: unknown; data: undefined };
@@ -50,23 +65,8 @@ describe('S32 — Requester-specified encoding', () => {
     expect(body.data).toBeUndefined();
   });
 
-  test('returns 400 when _type is provided without _path', async () => {
-    const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPriceRaw');
-    const response = await post(
-      ctx.baseUrl,
-      endpointId,
-      { ids: 'ethereum', vs_currencies: 'usd', _type: 'int256' },
-      { 'X-Api-Key': CLIENT_API_KEY }
-    );
-    const body = (await response.json()) as { error: string };
-
-    expect(response.status).toBe(400);
-    expect(body.error).toContain('_type');
-    expect(body.error).toContain('_path');
-  });
-
-  test('operator-fixed encoding takes precedence', async () => {
-    // coinPrice HAS an encoding block — requester params should be ignored
+  test('operator-pinned encoding silently ignores client reserved params', async () => {
+    // coinPrice HAS a fully-pinned encoding block — requester params must be ignored
     const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPrice');
     const response = await post(
       ctx.baseUrl,
@@ -77,9 +77,8 @@ describe('S32 — Requester-specified encoding', () => {
     const body = (await response.json()) as { data: Hex };
 
     expect(response.status).toBe(200);
-    // Should encode $.ethereum.usd (operator-fixed), not $.ethereum.usd_24h_vol
     const [decoded] = decodeAbiParameters([{ type: 'int256' }], body.data);
-    // 3000.5 * 1e18 — price, not volume
+    // 3000.5 * 1e18 — price, NOT volume the client tried to swap to
     expect(decoded).toBeGreaterThan(3_000_000_000_000_000_000_000n);
     expect(decoded).toBeLessThan(3_001_000_000_000_000_000_000n);
   });

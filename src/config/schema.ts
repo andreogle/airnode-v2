@@ -26,12 +26,40 @@ export const parameterSchema = z
 
 // =============================================================================
 // Encoding (response processing)
+//
+// `type` and `path` are required. Each field is either a concrete value or the
+// wildcard sentinel `'*'`, which tells the pipeline to read the matching
+// reserved parameter (`_type`, `_path`, `_times`) from the request. Omitting a
+// field (only `times` is omittable) means the operator chose no value — never
+// "the client may fill it in." That removes the prior footgun where an
+// operator omitting `path` silently let any client pick the JSONPath and have
+// it signed.
+//
+// `times` is only meaningful for numeric ABI types (`int256` / `uint256`,
+// possibly comma-separated). A refinement rejects `times` on non-numeric
+// encodings rather than silently ignoring it.
 // =============================================================================
-export const encodingSchema = z.object({
-  type: z.string().min(1).optional(),
-  path: z.string().min(1).optional(),
-  times: z.string().optional(),
-});
+const ENCODING_WILDCARD = '*';
+const NUMERIC_ENCODING_TYPES = new Set(['int256', 'uint256']);
+
+function isNumericEncodingType(type: string): boolean {
+  if (type === ENCODING_WILDCARD) return true;
+  return type
+    .split(',')
+    .map((t) => t.trim())
+    .every((t) => NUMERIC_ENCODING_TYPES.has(t));
+}
+
+export const encodingSchema = z
+  .object({
+    type: z.string().min(1),
+    path: z.string().min(1),
+    times: z.string().min(1).optional(),
+  })
+  .refine((e) => e.times === undefined || isNumericEncodingType(e.type), {
+    message: '`times` is only valid when every `type` entry is a numeric ABI type (`int256` or `uint256`)',
+    path: ['times'],
+  });
 
 // =============================================================================
 // FHE encryption (per-endpoint opt-in)
@@ -124,11 +152,19 @@ export const endpointSchema = z
   .refine(
     (endpoint) => {
       if (!endpoint.encrypt) return true;
-      if (!endpoint.encoding?.type || !endpoint.encoding.path) return false;
-      return ENCRYPTABLE_ENCODING_TYPES.has(endpoint.encoding.type);
+      if (!endpoint.encoding) return false;
+      // FHE-encrypted endpoints must concretely pin encoding — the operator
+      // approved a specific encryption shape, so requester wildcards (`*`) and
+      // `times` overrides are not allowed. A wildcard `path` would let any
+      // client pick what gets encrypted; a wildcard `times` would let them
+      // change the encrypted plaintext's magnitude.
+      const { type, path, times } = endpoint.encoding;
+      if (type === '*' || path === '*' || times === '*') return false;
+      return ENCRYPTABLE_ENCODING_TYPES.has(type);
     },
     {
-      message: '`encrypt` requires `encoding` with `path` set and `type` set to `int256` or `uint256`',
+      message:
+        '`encrypt` requires `encoding` with concrete (non-wildcard) `type` (`int256` or `uint256`), `path`, and `times`',
       path: ['encrypt'],
     }
   );

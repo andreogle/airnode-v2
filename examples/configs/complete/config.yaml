@@ -106,6 +106,25 @@ apis:
             required: true
         description: Raw JSON response — no ABI encoding
 
+      - name: coinPriceFlex
+        path: /simple/price
+        method: GET
+        parameters:
+          - name: ids
+            in: query
+            required: true
+          - name: vs_currencies
+            in: query
+            required: true
+        encoding:
+          # All wildcards — requester must supply `_type`, `_path`, `_times`.
+          # The endpoint ID still commits to "this is a flex-encoded endpoint",
+          # but the specific encoding shape is chosen per-request.
+          type: '*'
+          path: '*'
+          times: '*'
+        description: Requester-controlled encoding (operator-approved)
+
   - name: WeatherAPI
     url: http://localhost:5123
     headers:

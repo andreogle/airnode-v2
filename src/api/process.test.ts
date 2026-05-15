@@ -68,6 +68,35 @@ describe('processResponse', () => {
     });
   });
 
+  // Flat upstream responses (no object wrapper) are extracted with `path: '$'`.
+  // The upstream layer parses the body via JSON.parse, so any JSON primitive
+  // (number, numeric string, bool, hex string) round-trips into a single value.
+  describe('flat (root-level) upstream responses', () => {
+    test('encodes a bare number with path $', () => {
+      const result = processResponse(3000, { type: 'int256', path: '$' });
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000000000000000000bb8');
+    });
+
+    test('encodes a bare numeric string with path $ and a multiplier', () => {
+      const result = processResponse('3000.5', { type: 'int256', path: '$', times: '1e18' });
+      // 3000.5 * 1e18 = 3000500000000000000000
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000a2a84d64ab6f920000');
+    });
+
+    test('encodes a bare bool with path $', () => {
+      const result = processResponse(true, { type: 'bool', path: '$' });
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000000000000000000001');
+    });
+
+    test('encodes a bare hex string as bytes32 with path $', () => {
+      const result = processResponse(
+        '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+        { type: 'bytes32', path: '$' }
+      );
+      expect(result).toBe('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    });
+  });
+
   describe('with multiplier', () => {
     test('applies times multiplier', () => {
       const result = processResponse({ price: 1.5 }, { type: 'uint256', path: '$.price', times: '1000' });

@@ -126,8 +126,7 @@ describe('deriveEndpointId', () => {
 
     const id1 = deriveEndpointId(api, withEncoding);
     const id2 = deriveEndpointId(api, withEncodingAndTimes);
-    expect(id1).toBe('0xfb31eaae55bac2e9be9da60c0e56d004c66a435f21250ce62045679c95ae78c8');
-    expect(id1).toBe(keccak256(toHex('https://api.example.com|/price|GET||type=int256,path=$.price,times=*')));
+    expect(id1).toBe(keccak256(toHex('https://api.example.com|/price|GET||type=int256,path=$.price,times=')));
     expect(id2).toBe(keccak256(toHex('https://api.example.com|/price|GET||type=int256,path=$.price,times=1e18')));
     expect(id1).not.toBe(id2);
   });
@@ -144,25 +143,16 @@ describe('deriveEndpointId', () => {
     expect(deriveEndpointId(api, withEncoding)).not.toBe(deriveEndpointId(api, withoutEncoding));
   });
 
-  test('partial encoding uses * wildcards for client-controlled fields', () => {
+  test('wildcards in encoding fields flow through to the endpoint ID', () => {
     const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
 
-    const typeOnly = makeEndpoint({ name: 'e', path: '/p', encoding: { type: 'int256' } });
-    expect(deriveEndpointId(api, typeOnly)).toBe(
-      keccak256(toHex('https://api.example.com|/p|GET||type=int256,path=*,times=*'))
+    const pathWildcard = makeEndpoint({ name: 'e', path: '/p', encoding: { type: 'int256', path: '*' } });
+    expect(deriveEndpointId(api, pathWildcard)).toBe(
+      keccak256(toHex('https://api.example.com|/p|GET||type=int256,path=*,times='))
     );
 
-    const pathAndTimes = makeEndpoint({
-      name: 'e',
-      path: '/p',
-      encoding: { path: '$.price', times: '1e18' },
-    });
-    expect(deriveEndpointId(api, pathAndTimes)).toBe(
-      keccak256(toHex('https://api.example.com|/p|GET||type=*,path=$.price,times=1e18'))
-    );
-
-    const empty = makeEndpoint({ name: 'e', path: '/p', encoding: {} });
-    expect(deriveEndpointId(api, empty)).toBe(
+    const allWildcard = makeEndpoint({ name: 'e', path: '/p', encoding: { type: '*', path: '*', times: '*' } });
+    expect(deriveEndpointId(api, allWildcard)).toBe(
       keccak256(toHex('https://api.example.com|/p|GET||type=*,path=*,times=*'))
     );
   });
@@ -178,11 +168,10 @@ describe('deriveEndpointId', () => {
     });
 
     const id = deriveEndpointId(api, encrypted);
-    expect(id).toBe('0xc6bbb158d6ebf7effa84b467548af6f7bdc94b283aa046a20d0fc925795ecabd');
     expect(id).toBe(
       keccak256(
         toHex(
-          'https://api.example.com|/price|GET||type=int256,path=$.price,times=*|fhe=euint256,contract=0x5fbdb2315678afecb367f032d93f642f64180aa3'
+          'https://api.example.com|/price|GET||type=int256,path=$.price,times=|fhe=euint256,contract=0x5fbdb2315678afecb367f032d93f642f64180aa3'
         )
       )
     );

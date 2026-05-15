@@ -192,27 +192,37 @@ async function fetchProofIfEnabled(
 }
 
 // =============================================================================
-// Requester-specified encoding
+// Encoding resolution
 //
-// Clients can pass _type, _path, and _times in their request parameters to
-// control encoding. Three modes:
+// Operator config drives encoding. A field set to the wildcard sentinel `'*'`
+// explicitly delegates to the matching reserved request parameter (`_type`,
+// `_path`, `_times`); a concrete value pins it and silently ignores anything
+// the client sent for that field. There is no implicit "operator omitted it,
+// so client may fill it in" path — the schema requires `type` and `path` to
+// be present, and `times` is meaningful for numeric types only.
 //
-// 1. Operator-fixed: encoding block has type+path. Requester params ignored.
-// 2. Partial: encoding block has some fields (e.g. type only). Requester
-//    fills in the rest. Operator fields take precedence.
-// 3. Requester-only: no encoding block. Requester provides _type+_path.
+// Endpoints without any `encoding` block return raw JSON with a signature
+// over the JSON hash; reserved params never synthesize an encoding out of
+// nothing.
 //
-// If the merged result has neither type nor path, raw mode is used. If it
-// has one but not the other, return 400.
+// Resolution can fail in two ways: the client failed to supply a value for a
+// wildcard field (e.g. `type: '*'` but no `_type`), or the resolved value is
+// otherwise malformed. Both surface as 400 to the requester rather than 500.
 // =============================================================================
 const RESERVED_PARAM_TYPE = '_type';
 const RESERVED_PARAM_PATH = '_path';
 const RESERVED_PARAM_TIMES = '_times';
+const ENCODING_WILDCARD = '*';
 
 interface ResolvedEncoding {
   readonly type: string;
   readonly path: string;
   readonly times?: string;
+}
+
+interface InvalidEncoding {
+  readonly invalid: true;
+  readonly message: string;
 }
 
 // Reserved encoding parameters are typed as strings but the request body's
@@ -225,18 +235,42 @@ function reservedString(parameters: Record<string, string>, key: string): string
   return typeof value === 'string' ? value : undefined;
 }
 
+function resolveField(
+  configValue: string | undefined,
+  parameters: Record<string, string>,
+  reservedKey: string
+): { readonly value: string | undefined; readonly invalid?: string } {
+  if (configValue === undefined) return { value: undefined };
+  if (configValue !== ENCODING_WILDCARD) return { value: configValue };
+  const supplied = reservedString(parameters, reservedKey);
+  if (supplied === undefined || supplied === '') {
+    return { value: undefined, invalid: `Endpoint requires \`${reservedKey}\` request parameter` };
+  }
+  return { value: supplied };
+}
+
 function resolveEncoding(
   configEncoding: Encoding | undefined,
   parameters: Record<string, string>
-): ResolvedEncoding | 'invalid' | undefined {
-  const type = configEncoding?.type ?? reservedString(parameters, RESERVED_PARAM_TYPE);
-  const path = configEncoding?.path ?? reservedString(parameters, RESERVED_PARAM_PATH);
-  const times = configEncoding?.times ?? reservedString(parameters, RESERVED_PARAM_TIMES);
+): ResolvedEncoding | InvalidEncoding | undefined {
+  if (!configEncoding) return undefined;
 
-  if (!type && !path) return undefined;
-  if (!type || !path) return 'invalid';
+  const type = resolveField(configEncoding.type, parameters, RESERVED_PARAM_TYPE);
+  if (type.invalid) return { invalid: true, message: type.invalid };
 
-  return times ? { type, path, times } : { type, path };
+  const path = resolveField(configEncoding.path, parameters, RESERVED_PARAM_PATH);
+  if (path.invalid) return { invalid: true, message: path.invalid };
+
+  const times = resolveField(configEncoding.times, parameters, RESERVED_PARAM_TIMES);
+  if (times.invalid) return { invalid: true, message: times.invalid };
+
+  if (!type.value || !path.value) {
+    return { invalid: true, message: 'Endpoint encoding is incomplete' };
+  }
+
+  return times.value
+    ? { type: type.value, path: path.value, times: times.value }
+    : { type: type.value, path: path.value };
 }
 
 // =============================================================================
@@ -324,10 +358,10 @@ async function executeApiCall(
 
   const apiResponse = afterResult.response;
 
-  // Resolve encoding: merge operator config with requester params (operator takes precedence)
+  // Resolve encoding: operator-pinned fields win; `*` fields take the matching request reserved param
   const encoding = resolveEncoding(resolved.endpoint.encoding, resolvedParameters);
-  if (encoding === 'invalid') {
-    return jsonResponse({ error: 'Both _type and _path are required for encoding' }, 400);
+  if (encoding && 'invalid' in encoding) {
+    return jsonResponse({ error: encoding.message }, 400);
   }
 
   if (encoding) {

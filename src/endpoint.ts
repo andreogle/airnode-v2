@@ -32,13 +32,20 @@ function buildParameterSpec(
   return specs.join(',');
 }
 
+// Encoding fields are flattened into the endpoint ID so two endpoints that
+// differ only in encoding (e.g. one pins `path`, the other wildcards it) get
+// distinct IDs. `type` and `path` are required by the schema; `times` is
+// optional and absent is rendered as the empty string. The literal `*` is
+// what an operator writes to delegate the field to a request reserved param,
+// and it flows through unchanged so a consumer reading the canonical spec
+// (off-chain) can tell which fields are wildcarded.
 function buildEncodingSpec(encoding?: {
-  readonly type?: string;
-  readonly path?: string;
+  readonly type: string;
+  readonly path: string;
   readonly times?: string;
 }): string {
   if (!encoding) return '';
-  return `type=${encoding.type ?? '*'},path=${encoding.path ?? '*'},times=${encoding.times ?? '*'}`;
+  return `type=${encoding.type},path=${encoding.path},times=${encoding.times ?? ''}`;
 }
 
 // FHE-encrypted endpoints commit to the ciphertext type and the bound consumer

@@ -205,6 +205,100 @@ apis:
     });
   });
 
+  test('rejects encoding missing required type', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          path: $.data`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
+  test('rejects encoding missing required path', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: int256`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
+  test('rejects encoding with an empty path', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: int256
+          path: ''`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
+  test('accepts path: "$" (root) for flat upstream responses', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: int256
+          path: "$"
+          times: '1e18'`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect(result.apis[0]?.endpoints[0]?.encoding).toEqual({ type: 'int256', path: '$', times: '1e18' });
+  });
+
+  test('accepts wildcard sentinels for type and path', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: '*'
+          path: '*'`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect(result.apis[0]?.endpoints[0]?.encoding).toEqual({ type: '*', path: '*' });
+  });
+
+  test('accepts wildcard times alongside a wildcard type', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: '*'
+          path: '*'
+          times: '*'`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect(result.apis[0]?.endpoints[0]?.encoding).toEqual({ type: '*', path: '*', times: '*' });
+  });
+
+  test('rejects times on a non-numeric type', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: bytes32
+          path: $.data
+          times: '1e18'`
+    );
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow('times');
+  });
+
+  test('accepts times on a numeric type', () => {
+    const raw = MINIMAL_CONFIG.replace(
+      'path: /test',
+      `path: /test
+        encoding:
+          type: uint256
+          path: $.data
+          times: '1e18'`
+    );
+    const result = configSchema.parse(parseYaml(raw));
+    expect(result.apis[0]?.endpoints[0]?.encoding?.times).toBe('1e18');
+  });
+
   test('validates endpoint-level auth override', () => {
     const raw = MINIMAL_CONFIG.replace(
       'path: /test',
@@ -455,8 +549,18 @@ describe('encrypt', () => {
     expect(() => configSchema.parse(parseYaml(FHE_CONFIG.replace('type: int256', 'type: bytes32')))).toThrow('encrypt');
   });
 
-  test('rejects encrypt when encoding.path is missing', () => {
+  test('rejects encrypt when encoding.path is missing (path is required by schema)', () => {
     const raw = FHE_CONFIG.replace('          path: $.price\n', '');
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow();
+  });
+
+  test('rejects encrypt when encoding.path is a wildcard', () => {
+    const raw = FHE_CONFIG.replace('path: $.price', "path: '*'");
+    expect(() => configSchema.parse(parseYaml(raw))).toThrow('encrypt');
+  });
+
+  test('rejects encrypt when encoding.type is a wildcard', () => {
+    const raw = FHE_CONFIG.replace('type: int256', "type: '*'");
     expect(() => configSchema.parse(parseYaml(raw))).toThrow('encrypt');
   });
 
