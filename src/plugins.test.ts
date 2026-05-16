@@ -4,13 +4,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Hex } from 'viem';
 import { configureLogger } from './logger';
-import {
-  createEmptyRegistry,
-  createRegistry,
-  loadPlugins,
-  type AirnodePlugin,
-  type BeforeApiCallContext,
-} from './plugins';
+import { createRegistry, loadPlugins, type AirnodePlugin, type BeforeApiCallContext } from './plugins';
 
 const infoMock = mock();
 const errorMock = mock();
@@ -39,47 +33,43 @@ function makeLoaded(
 const ENDPOINT_ID: Hex = `0x${'aa'.repeat(32)}`;
 
 // =============================================================================
-// createEmptyRegistry
+// Empty registry — `createRegistry([])` is the canonical no-plugin state
 // =============================================================================
-describe('createEmptyRegistry', () => {
+describe('createRegistry([]) — empty', () => {
   test('has no plugins', () => {
-    const registry = createEmptyRegistry();
+    const registry = createRegistry([]);
     expect(registry.plugins).toHaveLength(0);
   });
 
-  test('hasApiHooks is false', () => {
-    const registry = createEmptyRegistry();
-    expect(registry.hasApiHooks).toBe(false);
-  });
-
-  test('callHttpRequest returns undefined when no plugins reject', async () => {
-    const registry = createEmptyRegistry();
-    const result = await registry.beginRequest().callHttpRequest({
-      requestId: ENDPOINT_ID,
-      endpointId: ENDPOINT_ID,
-      api: 'coingecko',
-      endpoint: 'price',
-      parameters: { coinId: 'bitcoin' },
-    });
+  test('callHttpRequest returns undefined', async () => {
+    const result = await createRegistry([])
+      .beginRequest()
+      .callHttpRequest({
+        requestId: ENDPOINT_ID,
+        endpointId: ENDPOINT_ID,
+        api: 'coingecko',
+        endpoint: 'price',
+        parameters: { coinId: 'bitcoin' },
+      });
     expect(result).toBeUndefined();
   });
 
   test('callBeforeApiCall passes through parameters', async () => {
-    const registry = createEmptyRegistry();
-    const result = await registry.beginRequest().callBeforeApiCall({
-      requestId: ENDPOINT_ID,
-      endpointId: ENDPOINT_ID,
-      api: 'coingecko',
-      endpoint: 'price',
-      parameters: { coinId: 'bitcoin' },
-    });
+    const result = await createRegistry([])
+      .beginRequest()
+      .callBeforeApiCall({
+        requestId: ENDPOINT_ID,
+        endpointId: ENDPOINT_ID,
+        api: 'coingecko',
+        endpoint: 'price',
+        parameters: { coinId: 'bitcoin' },
+      });
     expect(result).toEqual({ parameters: { coinId: 'bitcoin' }, dropped: false });
   });
 
   test('callAfterApiCall passes through response', async () => {
-    const registry = createEmptyRegistry();
     const response = { data: { price: 100 }, status: 200 };
-    const result = await registry.beginRequest().callAfterApiCall({
+    const result = await createRegistry([]).beginRequest().callAfterApiCall({
       requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
@@ -91,8 +81,7 @@ describe('createEmptyRegistry', () => {
   });
 
   test('callBeforeSign passes through data', async () => {
-    const registry = createEmptyRegistry();
-    const result = await registry.beginRequest().callBeforeSign({
+    const result = await createRegistry([]).beginRequest().callBeforeSign({
       requestId: ENDPOINT_ID,
       endpointId: ENDPOINT_ID,
       api: 'coingecko',
@@ -235,27 +224,6 @@ describe('createRegistry', () => {
     });
 
     expect(order).toEqual([1, 2, 3]);
-  });
-
-  // ===========================================================================
-  // hasApiHooks
-  // ===========================================================================
-  test('hasApiHooks is true when a plugin has onBeforeApiCall', () => {
-    const plugins: AirnodePlugin[] = [{ name: 'api-hook', hooks: { onBeforeApiCall: () => {} } }];
-    const registry = createRegistry(makeLoaded(plugins));
-    expect(registry.hasApiHooks).toBe(true);
-  });
-
-  test('hasApiHooks is true when a plugin has onBeforeSign', () => {
-    const plugins: AirnodePlugin[] = [{ name: 'sign-hook', hooks: { onBeforeSign: () => {} } }];
-    const registry = createRegistry(makeLoaded(plugins));
-    expect(registry.hasApiHooks).toBe(true);
-  });
-
-  test('hasApiHooks is false for observation-only hooks', () => {
-    const plugins: AirnodePlugin[] = [{ name: 'observer', hooks: { onResponseSent: () => {}, onError: () => {} } }];
-    const registry = createRegistry(makeLoaded(plugins));
-    expect(registry.hasApiHooks).toBe(false);
   });
 });
 
@@ -705,7 +673,7 @@ describe('loadPlugins', () => {
   });
 
   test('logs error for non-existent plugin file', async () => {
-    const registry = await loadPlugins([{ source: '/nonexistent/ghost.ts', timeout: 5000 }], projectRoot);
+    const registry = await loadPlugins([{ source: '/nonexistent/ghost.ts', timeout: 5000, config: {} }], projectRoot);
     expect(registry.plugins).toHaveLength(0);
 
     const errorOutput = String(errorMock.mock.calls[0]?.[0]);
@@ -714,14 +682,17 @@ describe('loadPlugins', () => {
 
   test('loads a valid plugin file by absolute source path', async () => {
     const heartbeatPath = `${projectRoot}/examples/plugins/heartbeat.ts`;
-    const registry = await loadPlugins([{ source: heartbeatPath, timeout: 5000 }], projectRoot);
+    const registry = await loadPlugins([{ source: heartbeatPath, timeout: 5000, config: {} }], projectRoot);
 
     expect(registry.plugins).toHaveLength(1);
     expect(registry.plugins[0]?.name).toBe('heartbeat');
   });
 
   test('resolves relative source paths against configDir', async () => {
-    const registry = await loadPlugins([{ source: './examples/plugins/logger.ts', timeout: 5000 }], projectRoot);
+    const registry = await loadPlugins(
+      [{ source: './examples/plugins/logger.ts', timeout: 5000, config: {} }],
+      projectRoot
+    );
 
     expect(registry.plugins).toHaveLength(1);
     expect(registry.plugins[0]?.name).toBe('logger');
@@ -730,8 +701,8 @@ describe('loadPlugins', () => {
   test('loads multiple plugins in order', async () => {
     const registry = await loadPlugins(
       [
-        { source: './examples/plugins/heartbeat.ts', timeout: 3000 },
-        { source: './examples/plugins/logger.ts', timeout: 7000 },
+        { source: './examples/plugins/heartbeat.ts', timeout: 3000, config: {} },
+        { source: './examples/plugins/logger.ts', timeout: 7000, config: {} },
       ],
       projectRoot
     );

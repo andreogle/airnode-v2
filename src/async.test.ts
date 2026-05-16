@@ -1,17 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import type { Hex } from 'viem';
 import { createAsyncRequestStore } from './async';
 import type { AsyncRequestStore, PendingRequest } from './async';
 
+function mustCreate(store: AsyncRequestStore): PendingRequest {
+  const req = store.create();
+  if (!req) throw new Error('async store unexpectedly full');
+  return req;
+}
+
 describe('createAsyncRequestStore', () => {
-  const ENDPOINT_ID: Hex = '0x04e77a11d6561a70385e2e8e315989cb24bb35128cb4d5a8b3ece93a3c72295b';
-
-  function mustCreate(store: AsyncRequestStore): PendingRequest {
-    const req = store.create(ENDPOINT_ID);
-    if (!req) throw new Error('async store unexpectedly full');
-    return req;
-  }
-
   test('creates a pending request', () => {
     const store = createAsyncRequestStore();
     const req = mustCreate(store);
@@ -81,20 +78,20 @@ describe('createAsyncRequestStore', () => {
 
   test('refuses new requests when full of in-flight requests', () => {
     const store = createAsyncRequestStore();
-    Array.from({ length: 100 }, () => store.create(ENDPOINT_ID));
-    expect(store.create(ENDPOINT_ID)).toBeUndefined();
+    Array.from({ length: 100 }, () => store.create());
+    expect(store.create()).toBeUndefined();
     store.stop();
   });
 
   test('a freshly finished request is retained for polling but still holds its slot', () => {
     const store = createAsyncRequestStore();
     const created = Array.from({ length: 100 }, () => {
-      const req = store.create(ENDPOINT_ID);
+      const req = store.create();
       if (req) store.setComplete(req.requestId, { ok: true });
       return req;
     });
     // The slots are still occupied (results retained), so a new request is refused...
-    expect(store.create(ENDPOINT_ID)).toBeUndefined();
+    expect(store.create()).toBeUndefined();
     // ...and the finished results remain retrievable in the meantime.
     const first = created[0];
     expect(first && store.get(first.requestId)?.result).toEqual({ ok: true });

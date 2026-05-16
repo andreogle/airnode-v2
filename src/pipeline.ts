@@ -411,7 +411,7 @@ function handleAsyncRequest(
   const store = deps.asyncStore;
   if (!store) return jsonResponse({ error: 'Async not configured' }, 500);
 
-  const pending = store.create(endpointId);
+  const pending = store.create();
   if (!pending) {
     return jsonResponse({ error: 'Too many pending requests' }, 503);
   }

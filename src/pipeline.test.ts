@@ -7,7 +7,7 @@ import { deriveEndpointId } from './endpoint';
 import type { ResolvedEndpoint } from './endpoint';
 import { handleEndpointRequest } from './pipeline';
 import type { PipelineDependencies, RawResponseBody, SignedResponseBody } from './pipeline';
-import { createEmptyRegistry } from './plugins';
+import { createRegistry } from './plugins';
 import { createSemaphore } from './semaphore';
 import { createAirnodeAccount } from './sign';
 import type { Api, ClientAuth, Endpoint } from './types';
@@ -110,7 +110,7 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     account: TEST_ACCOUNT,
     airnode: TEST_AIRNODE,
     endpointMap: new Map(),
-    plugins: createEmptyRegistry(),
+    plugins: createRegistry([]),
     cache: createCache(),
     apiCallSemaphore: createSemaphore(100),
     settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },

@@ -18,7 +18,6 @@ src/
   cli/              CLI entry point (commander.js) and commands
   config/           Schema (Zod v4), parser, validator, env interpolation
   api/              HTTP call building and response processing
-  abi-encode.ts     ABI encoding (0x01 + string[] name-value pairs)
   server.ts         Bun.serve HTTP server (routes, CORS, rate limiting)
   pipeline.ts       Request processing pipeline (auth → validate → cache → plugins → API call → encode → encrypt → sign)
   proof.ts          TLS proof gateway client (Reclaim)

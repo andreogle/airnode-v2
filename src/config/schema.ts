@@ -224,7 +224,7 @@ export const serverSchema = z.object({
 // =============================================================================
 // Settings
 // =============================================================================
-const pluginEntrySchema = z.object({
+export const pluginEntrySchema = z.object({
   source: z.string().min(1),
   timeout: z.number().int().positive(),
   // Explicit, scoped config handed to the plugin (instead of the plugin reaching

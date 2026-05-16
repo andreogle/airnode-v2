@@ -2,6 +2,7 @@ import path from 'node:path';
 import { go, goSync } from '@api3/promise-utils';
 import type { Hex } from 'viem';
 import { logger } from './logger';
+import type { PluginConfigEntry } from './types';
 
 // =============================================================================
 // API call result
@@ -106,18 +107,6 @@ interface PluginConfigSchema {
 interface PluginModule {
   readonly default?: AirnodePlugin | PluginFactory;
   readonly configSchema?: PluginConfigSchema;
-}
-
-// =============================================================================
-// Plugin config entry
-// =============================================================================
-interface PluginConfigEntry {
-  readonly source: string;
-  readonly timeout: number;
-  // Scoped config for the plugin (interpolated `${ENV}` values). Always present
-  // when derived from a parsed config (the schema defaults it to `{}`); optional
-  // here so programmatic callers can omit it.
-  readonly config?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -226,27 +215,7 @@ interface RequestPlugins {
 
 interface PluginRegistry {
   readonly plugins: readonly AirnodePlugin[];
-  readonly hasApiHooks: boolean;
   readonly beginRequest: () => RequestPlugins;
-}
-
-const EMPTY_REQUEST_PLUGINS: RequestPlugins = {
-  // The `undefined` is the HttpRequestResult "no rejection" value — Promise.resolve() would be Promise<void>.
-  // eslint-disable-next-line unicorn/no-useless-undefined
-  callHttpRequest: () => Promise.resolve(undefined),
-  callBeforeApiCall: (ctx) => Promise.resolve({ parameters: ctx.parameters, dropped: false }),
-  callAfterApiCall: (ctx) => Promise.resolve({ response: ctx.response, dropped: false }),
-  callBeforeSign: (ctx) => Promise.resolve({ data: ctx.data, dropped: false }),
-  callResponseSent: () => Promise.resolve(),
-  callError: () => Promise.resolve(),
-};
-
-function createEmptyRegistry(): PluginRegistry {
-  return {
-    plugins: [],
-    hasApiHooks: false,
-    beginRequest: () => EMPTY_REQUEST_PLUGINS,
-  };
 }
 
 // =============================================================================
@@ -450,11 +419,9 @@ async function callBeforeSignHook(
 // =============================================================================
 function createRegistry(loaded: readonly LoadedPlugin[]): PluginRegistry {
   const plugins = loaded.map((l) => l.plugin);
-  const hasApiHooks = plugins.some((p) => p.hooks.onBeforeApiCall || p.hooks.onAfterApiCall || p.hooks.onBeforeSign);
 
   return {
     plugins,
-    hasApiHooks,
     beginRequest: () => {
       // Per-request budget map — never shared with other in-flight requests.
       const budgets = createBudgetMap(loaded);
@@ -488,7 +455,7 @@ async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Pro
   }
   const mod = imported.data;
 
-  const suppliedConfig = entry.config ?? {};
+  const suppliedConfig = entry.config;
   const schema = mod.configSchema;
   const parsed = schema
     ? goSync(() => schema.parse(suppliedConfig))
@@ -527,7 +494,7 @@ async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Pro
 // Load plugins from config entries
 // =============================================================================
 async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDir: string): Promise<PluginRegistry> {
-  if (configEntries.length === 0) return createEmptyRegistry();
+  if (configEntries.length === 0) return createRegistry([]);
 
   const loaded: LoadedPlugin[] = [];
 
@@ -535,12 +502,6 @@ async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDi
   for (const entry of configEntries) {
     const result = await loadPluginEntry(entry, configDir);
     if (result) loaded.push(result); // eslint-disable-line functional/immutable-data
-  }
-
-  const registry = createRegistry(loaded);
-
-  if (registry.hasApiHooks) {
-    logger.warn('Plugins with API/sign hooks detected — inline execution enabled for hook interception');
   }
 
   // Surface plugins that can rewrite signed payload bytes. These plugins can
@@ -558,10 +519,10 @@ async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDi
     }
   }
 
-  return registry;
+  return createRegistry(loaded);
 }
 
-export { createEmptyRegistry, createRegistry, loadPlugins };
+export { createRegistry, loadPlugins };
 export type {
   AfterApiCallContext,
   AfterApiCallResult,
@@ -575,7 +536,6 @@ export type {
   HttpRequestContext,
   HttpRequestResult,
   LoadedPlugin,
-  PluginConfigEntry,
   PluginHooks,
   PluginRegistry,
   RequestPlugins,

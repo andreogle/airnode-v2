@@ -7,7 +7,7 @@ import { parseConfig } from '../src/config/parser';
 import { buildEndpointMap } from '../src/endpoint';
 import type { ResolvedEndpoint } from '../src/endpoint';
 import { handleEndpointRequest } from '../src/pipeline';
-import { createEmptyRegistry } from '../src/plugins';
+import { createRegistry } from '../src/plugins';
 import type { PluginRegistry } from '../src/plugins';
 import { createSemaphore } from '../src/semaphore';
 import { createServer } from '../src/server';
@@ -87,7 +87,7 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
     account,
     airnode: account.address,
     endpointMap,
-    plugins: options.plugins ?? createEmptyRegistry(),
+    plugins: options.plugins ?? createRegistry([]),
     cache,
     asyncStore,
     apiCallSemaphore,

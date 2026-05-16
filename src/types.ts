@@ -8,6 +8,7 @@ import type {
   encodingSchema,
   endpointSchema,
   parameterSchema,
+  pluginEntrySchema,
   serverSchema,
   settingsSchema,
 } from './config/schema';
@@ -24,3 +25,4 @@ export type Cache = z.infer<typeof cacheSchema>;
 export type Server = z.infer<typeof serverSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type Fhe = Settings['fhe'];
+export type PluginConfigEntry = z.infer<typeof pluginEntrySchema>;

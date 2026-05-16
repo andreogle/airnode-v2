@@ -19,7 +19,7 @@ interface PendingRequest {
 }
 
 interface AsyncRequestStore {
-  readonly create: (endpointId: Hex) => PendingRequest | undefined;
+  readonly create: () => PendingRequest | undefined;
   readonly get: (requestId: string) => PendingRequest | undefined;
   readonly setProcessing: (requestId: Hex) => void;
   readonly setComplete: (requestId: Hex, result: unknown) => void;
@@ -51,7 +51,7 @@ function createAsyncRequestStore(): AsyncRequestStore {
   });
 
   return {
-    create: (_endpointId) => {
+    create: () => {
       const requestId: Hex = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
       const entry: PendingRequest = { requestId, status: 'pending', createdAt: Date.now() };
       return store.set(requestId, entry) ? entry : undefined;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { Hex } from 'viem';
 import { createAsyncRequestStore } from './async';
 import { createCache } from './cache';
-import { createEmptyRegistry } from './plugins';
+import { createRegistry } from './plugins';
 import { createSemaphore } from './semaphore';
 import { createServer } from './server';
 import type { ServerDependencies, ServerHandle } from './server';
@@ -55,7 +55,7 @@ function makeDeps(overrides: Partial<ServerDependencies> = {}): ServerDependenci
     account: TEST_ACCOUNT,
     airnode: TEST_AIRNODE,
     endpointMap: new Map(),
-    plugins: createEmptyRegistry(),
+    plugins: createRegistry([]),
     cache: createCache(),
     asyncStore: undefined,
     apiCallSemaphore: createSemaphore(100),
@@ -219,7 +219,7 @@ describe('createServer', () => {
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
-    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    const pending = asyncStore.create();
     if (!pending) throw new Error('expected a pending entry');
 
     const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
@@ -238,7 +238,7 @@ describe('createServer', () => {
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
-    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    const pending = asyncStore.create();
     if (!pending) throw new Error('expected a pending entry');
     asyncStore.setComplete(pending.requestId, { airnode: TEST_AIRNODE, data: '0xabcd', signature: '0x01' });
 
@@ -259,7 +259,7 @@ describe('createServer', () => {
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
-    const pending = asyncStore.create(TEST_ENDPOINT_ID);
+    const pending = asyncStore.create();
     if (!pending) throw new Error('expected a pending entry');
     asyncStore.setFailed(pending.requestId, 'API call returned an error');
 
