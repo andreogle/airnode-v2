@@ -125,6 +125,8 @@ Bun automatically loads `.env` files from the working directory.
 
 ## Next steps
 
-- [Deployment](/docs/operators/deployment) -- run in production with systemd, Docker, or Docker Compose
-- [Config Reference](/docs/config) -- full configuration documentation
-- [Plugins](/docs/plugins) -- extend Airnode with custom hooks
+- [Publishing Endpoints](/docs/operators/publishing-endpoints) — what to share with consumers so they can call your
+  airnode
+- [Deployment](/docs/operators/deployment) — run in production with systemd, Docker, or Docker Compose
+- [Config Reference](/docs/config) — full configuration documentation
+- [Plugins](/docs/plugins) — extend Airnode with custom hooks

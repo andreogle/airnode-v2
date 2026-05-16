@@ -1,9 +1,22 @@
 import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
+// Audience-first navigation: a reader landing on the docs picks "I'm an
+// operator" or "I'm a consumer" first, then drills into concepts /
+// reference / security as needed. Concepts come after the audience tracks
+// because they make more sense once you know what you're building.
 const sidebars: SidebarsConfig = {
   docs: [
     'introduction',
-    'v1-comparison',
+    {
+      type: 'category',
+      label: 'Operators',
+      items: ['operators/index', 'operators/deployment', 'operators/publishing-endpoints'],
+    },
+    {
+      type: 'category',
+      label: 'Consumers',
+      items: ['consumers/getting-started', 'consumers/http-client', 'consumers/on-chain'],
+    },
     {
       type: 'category',
       label: 'Concepts',
@@ -18,23 +31,8 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Guides',
-      items: ['guides/system-overview'],
-    },
-    {
-      type: 'category',
-      label: 'Config',
+      label: 'Config Reference',
       items: ['config/index', 'config/server', 'config/settings', 'config/apis', 'config/plugins'],
-    },
-    {
-      type: 'category',
-      label: 'Airnode Operators',
-      items: ['operators/index', 'operators/deployment'],
-    },
-    {
-      type: 'category',
-      label: 'Consumers',
-      items: ['consumers/getting-started', 'consumers/http-client', 'consumers/on-chain'],
     },
     'plugins',
     {
@@ -49,6 +47,7 @@ const sidebars: SidebarsConfig = {
     },
     'troubleshooting',
     'cli',
+    'v1-comparison',
     'roadmap',
   ],
 };

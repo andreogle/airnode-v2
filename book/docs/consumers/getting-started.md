@@ -139,10 +139,24 @@ Raw responses need no decoding. Access the JSON directly:
 const ethPrice = rawData.ethereum.usd; // 3842.17
 ```
 
+## You're done (if you only need the value off-chain)
+
+At this point you have:
+
+- A verified `airnode` address (proves who signed it).
+- A decoded `value` (the price, the temperature, whatever the endpoint serves).
+- A `timestamp` (so you can decide if the value is fresh enough for your use case).
+
+That's the full off-chain consumer loop. Use the value in your app, run your own staleness check
+(`Date.now() / 1000 - timestamp < maxAgeSeconds`), and store or forward the signed payload if you want to prove
+provenance to a downstream system later — `(airnode, endpointId, timestamp, data, signature)` is a self-contained
+attestation that anyone can re-verify.
+
 ## Step 7: Submit on-chain (optional)
 
-Pass the signed data to an on-chain verifier contract. See [On-Chain Integration](/docs/consumers/on-chain) for contract
-examples using AirnodeVerifier.
+If you instead want a smart contract to consume the data, hand `(airnode, endpointId, timestamp, data, signature)` to
+`AirnodeVerifier.verifyAndFulfill(...)`. The verifier checks the signature and forwards to your callback. See
+[On-Chain Integration](/docs/consumers/on-chain) for contract examples.
 
 ## Choosing encoding at request time
 

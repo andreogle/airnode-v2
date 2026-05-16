@@ -127,6 +127,41 @@ value wins. If the endpoint has no `encoding` block at all, you'll get raw JSON 
 **Fix:** Reduce the request payload size. If you need to send large bodies, check whether the parameters can be
 simplified.
 
+### `Too Many Requests` (429)
+
+**Cause:** You've exceeded `server.rateLimit.max` requests per IP within `server.rateLimit.window`. Each upstream API
+call costs the operator (metered API quotas), so the airnode caps per-IP throughput.
+
+**Fix:** Throttle your client. If you're behind a NAT or shared IP, ask the operator whether they trust an
+`X-Forwarded-For` header from your environment — if so, they can enable `rateLimit.trustForwardedFor` and the limit
+applies per real client.
+
+### `Too many x402 verification attempts — slow down` (401)
+
+**Cause:** You're an x402 client and you're submitting payment proofs faster than `server.rateLimit.x402.max` per
+`window`. This is a separate, stricter bucket from the global rate limit — each submitted proof triggers several
+chain-RPC reads, so unauthenticated flooders are throttled hard.
+
+**Fix:** Slow down proof submission. Only submit proofs for transactions you actually intend the airnode to verify;
+don't speculatively spam unverified `txHash` values.
+
+### `Payment required` (402)
+
+**Cause:** The endpoint has `auth.type: 'x402'` and you haven't supplied a valid payment proof.
+
+**Fix:** The 402 response body includes `airnode`, `endpointId`, `amount`, `token`, `network`, `recipient`, and
+`expiresAt`. Send the on-chain transfer, then retry with an `X-Payment-Proof` header containing
+`{ "txHash": "0x…", "expiresAt": <unix-seconds>, "signature": "0x…" }`. The signature is over
+`keccak256(encodePacked(airnode, endpointId, uint64(expiresAt)))` from the payer's EOA.
+
+### `Server busy` (503)
+
+**Cause:** The airnode is already running `settings.maxConcurrentApiCalls` upstream requests and your request waited
+its full timeout for a slot without getting one.
+
+**Fix:** Operator-side: raise `maxConcurrentApiCalls` if the upstream can handle it, or front the airnode with a CDN
+that caches frequent endpoints. Client-side: slow your request rate or add jitter.
+
 ## Upstream API errors
 
 ### `API call failed` (502)
@@ -151,6 +186,75 @@ response.
 
 **Fix:** Inspect the actual upstream response and adjust the `path` in the endpoint's encoding config. Common causes:
 the API changed its response format, a nested field was renamed, or the path uses the wrong separator.
+
+## FHE encryption errors
+
+### `FHE encryption failed` (502)
+
+**Cause:** The endpoint has an `encrypt` block, but the relayer rejected the encryption attempt. Common subcauses
+appear in the server log: a negative integer for an unsigned ciphertext (`euint*` types are unsigned), a value that
+overflows the chosen ciphertext type, or the relayer being unreachable.
+
+**Fix:** Check the airnode logs for the specific error. Common fixes: choose a larger `encrypt.type` (e.g.
+`euint256` instead of `euint64`); pin a non-negative encoding (`uint256` instead of `int256`); or verify
+`settings.fhe.rpcUrl` and `settings.fhe.apiKey` are correct.
+
+### `Endpoint requires FHE encryption but settings.fhe is not configured`
+
+**Cause:** An endpoint has `encrypt: { ... }` but `settings.fhe` is `'none'`.
+
+**Fix:** Either remove `encrypt` from the endpoint or set `settings.fhe` to a configured relayer block.
+Config-validation catches this at startup, so seeing it at runtime usually means the config was edited without
+restarting.
+
+## Plugin errors
+
+### `Plugin "X" budget exhausted` (request dropped, 403)
+
+**Cause:** A plugin defining a mutation hook (`onHttpRequest`, `onBeforeApiCall`, `onAfterApiCall`, `onBeforeSign`) has
+spent its full `timeout` budget on previous hook invocations within the same request. Mutation hooks are fail-closed —
+once the budget is gone, the request is dropped rather than being processed without the plugin's intervention.
+
+**Fix:** Operator-side: raise the plugin's `timeout` in `settings.plugins[].timeout`. Plugin-author side: pass each
+hook's `signal` to your `fetch` calls so cancellation actually propagates, and avoid unnecessary work in earlier hooks.
+
+### Plugin runs only on the first request in a cache window
+
+**Cause:** Not an error — by design. Cached responses bypass the upstream API call, which also bypasses the
+`onBeforeApiCall`, `onAfterApiCall`, and `onBeforeSign` hooks. Only `onHttpRequest`, `onResponseSent`, and `onError`
+fire on every request.
+
+**Fix:** If you need per-request signal, use `onResponseSent` or `onHttpRequest`. See
+[Plugins → Caching interaction](/docs/config/plugins#caching-interaction).
+
+## Async endpoint errors
+
+### `Request not found` (404) on `GET /requests/{requestId}`
+
+**Cause:** The request ID is wrong, or it's older than the async store's retention window (10 minutes for in-flight
+requests, 1 minute for completed/failed results). Finished results are evicted promptly so an unrelated request can
+take its slot.
+
+**Fix:** Poll within the retention window. If you waited longer, the result is gone — re-submit the request.
+
+### `Service Unavailable` (503) from a `mode: async` endpoint
+
+**Cause:** The async store is at its 100-entry cap and no slot can be safely evicted (every entry is still in-flight
+within its TTL or holds an unread result within its retention window).
+
+**Fix:** This indicates sustained submission rate exceeding the airnode's async capacity. Wait, retry, or have the
+operator review whether `mode: async` is appropriate for that workload.
+
+## CORS errors
+
+### Browser rejects response: `CORS policy: No 'Access-Control-Allow-Origin' header`
+
+**Cause:** The airnode's `server.cors` is configured with an `origins` allow-list that doesn't include your origin.
+Non-matching origins receive `Access-Control-Allow-Origin: null`, which browsers refuse.
+
+**Fix:** Operator-side: add your origin to `server.cors.origins`, or remove the `cors` block entirely (defaults to
+allowing every origin). Verify with `curl -i -H 'Origin: https://your-app.example' …` — the airnode echoes the matched
+origin back in the response header.
 
 ## General debugging
 
