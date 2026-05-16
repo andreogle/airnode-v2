@@ -87,18 +87,10 @@ client can verify the signature locally or submit it to an on-chain contract.
 
 ## Signature Format
 
-All responses are signed with the same scheme:
-
-```
-hash = keccak256(encodePacked(endpointId, timestamp, data))
-signature = EIP-191 personal sign over hash
-```
-
-The three fields (`endpointId`, `timestamp`, `data`) are packed separately -- not nested in another hash. This enables
-on-chain contracts to inspect each field independently for freshness checks and TLS proof verification.
-
-For raw (unencoded) responses, `data` is the keccak256 hash of the stable-stringified (sorted-key) JSON response. The
-full JSON is returned in the `rawData` field alongside the signature over its hash.
+All responses are signed with the same EIP-191 scheme over
+`keccak256(encodePacked(endpointId, timestamp, data))`. For raw (unencoded) responses, `data` is the keccak256 hash of
+the stable-stringified JSON. See [Signing and Verification](/docs/concepts/signing) for the full format, off-chain
+verification code, and the raw-response hashing rules.
 
 ## Startup
 

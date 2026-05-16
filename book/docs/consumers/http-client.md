@@ -61,35 +61,12 @@ The `proof` field is only present when [TLS proofs](/docs/concepts/proofs) are e
 
 ## Signature format
 
-Every response is signed by the airnode's private key using EIP-191 personal sign:
+Every response is EIP-191 personal-signed over
+`keccak256(encodePacked(endpointId, timestamp, data))`. The signature proves the airnode endorsed this data at this
+timestamp for this endpoint. Anyone can verify it without trusting the transport layer.
 
-```
-messageHash = keccak256(encodePacked(endpointId, timestamp, data))
-signature = EIP-191 personal sign over messageHash
-```
-
-The signature proves the airnode endorsed this data at this timestamp for this endpoint. Anyone can verify it without
-trusting the transport layer.
-
-## Verifying signatures off-chain
-
-Use viem (or any EIP-191 library) to recover the signer and confirm it matches the expected airnode address.
-
-```typescript
-import { recoverAddress, hashMessage, keccak256, encodePacked } from 'viem';
-
-const messageHash = keccak256(encodePacked(['bytes32', 'uint256', 'bytes'], [endpointId, BigInt(timestamp), data]));
-
-const recovered = await recoverAddress({
-  hash: hashMessage({ raw: messageHash }),
-  signature,
-});
-
-// recovered === airnode address
-```
-
-If the recovered address does not match the airnode address you expect, the data has been tampered with or was signed by
-a different key.
+See [Signing and Verification](/docs/concepts/signing) for the full format, the raw-response hashing variant, and the
+off-chain verification snippet using viem.
 
 ## Authentication
 

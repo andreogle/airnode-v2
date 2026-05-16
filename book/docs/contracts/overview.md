@@ -31,14 +31,11 @@ Client --> HTTP request --> Airnode --> upstream API --> sign response --> HTTP 
 
 ## Signature format
 
-The contract verifies:
+`AirnodeVerifier` checks an EIP-191 signature over
+`keccak256(abi.encodePacked(endpointId, timestamp, data))`. See
+[Signing and Verification](/docs/concepts/signing) for the full format and off-chain verification.
 
-```
-messageHash = keccak256(encodePacked(endpointId, timestamp, data))
-signature = EIP-191 personal sign over messageHash
-```
-
-The fields:
+The fields it commits to:
 
 - **endpointId** -- a specification-bound hash committing to the API URL, path, method, parameters, and encoding rules.
   Two independent airnodes serving the same API with the same config produce the same endpoint ID.

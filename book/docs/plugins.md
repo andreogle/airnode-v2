@@ -191,23 +191,13 @@ When multiple plugins define the same hook, they run in config-declared order:
 
 ## Configuration
 
-Add plugins in the `settings.plugins` section of your config. Each entry takes a `source`, a `timeout` budget, and an
-optional `config` block (with `${ENV}` interpolation) that's handed to the plugin:
+Operators wire plugins into the YAML config under `settings.plugins`. See
+[Plugin Configuration](/docs/config/plugins) for the field reference, source-path resolution, `config:` block, startup
+validation, and timeout-budget guidelines.
 
-```yaml
-settings:
-  plugins:
-    - source: ./plugins/request-logger.ts
-      timeout: 5000
-    - source: ./plugins/slack-alerts.ts
-      timeout: 3000
-      config:
-        webhookUrl: ${SLACK_WEBHOOK_URL}
-```
+## Distribution
 
-See [Plugin Configuration](/docs/config/plugins) for the full reference (including startup validation of `config`).
-
-During development, point `source` at a TypeScript file -- Bun runs it directly. For production, compile to a single JS
+During development, point `source` at a TypeScript file — Bun runs it directly. For production, compile to a single JS
 bundle:
 
 ```bash

@@ -133,12 +133,9 @@ only plugins from trusted sources.
 
 ### Signature verification
 
-```
-messageHash = keccak256(encodePacked(endpointId, timestamp, data))
-ethSignedHash = EIP-191 prefix + messageHash
-recovered = ecrecover(ethSignedHash, signature)
-assert recovered == airnode
-```
+`AirnodeVerifier` recovers the signer from an EIP-191 signature over
+`keccak256(encodePacked(endpointId, timestamp, data))` and asserts it matches the airnode address the caller claimed.
+See [Signing and Verification](/docs/concepts/signing) for the full format.
 
-AirnodeVerifier uses this verification. The `endpointId` is a top-level field (not buried inside another hash) so future
-on-chain verifiers -- including TLS proof verifiers -- can inspect it directly.
+`endpointId` is a top-level field (not buried inside another hash) so future on-chain verifiers — including TLS proof
+verifiers — can inspect it directly without reconstructing a nested hash structure.
