@@ -18,6 +18,15 @@ jobs:
       - run: bunx tsc --noEmit
       - run: bun test
 
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run test:integration
+
   contracts:
     name: Foundry tests
     runs-on: ubuntu-latest
