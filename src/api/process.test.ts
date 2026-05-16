@@ -89,10 +89,10 @@ describe('processResponse', () => {
     });
 
     test('encodes a bare hex string as bytes32 with path $', () => {
-      const result = processResponse(
-        '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
-        { type: 'bytes32', path: '$' }
-      );
+      const result = processResponse('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef', {
+        type: 'bytes32',
+        path: '$',
+      });
       expect(result).toBe('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
     });
   });
