@@ -31,8 +31,7 @@ Client --> HTTP request --> Airnode --> upstream API --> sign response --> HTTP 
 
 ## Signature format
 
-`AirnodeVerifier` checks an EIP-191 signature over
-`keccak256(abi.encodePacked(endpointId, timestamp, data))`. See
+`AirnodeVerifier` checks an EIP-191 signature over `keccak256(abi.encodePacked(endpointId, timestamp, data))`. See
 [Signing and Verification](/docs/concepts/signing) for the full format and off-chain verification.
 
 The fields it commits to:

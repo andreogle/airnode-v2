@@ -61,9 +61,9 @@ The `proof` field is only present when [TLS proofs](/docs/concepts/proofs) are e
 
 ## Signature format
 
-Every response is EIP-191 personal-signed over
-`keccak256(encodePacked(endpointId, timestamp, data))`. The signature proves the airnode endorsed this data at this
-timestamp for this endpoint. Anyone can verify it without trusting the transport layer.
+Every response is EIP-191 personal-signed over `keccak256(encodePacked(endpointId, timestamp, data))`. The signature
+proves the airnode endorsed this data at this timestamp for this endpoint. Anyone can verify it without trusting the
+transport layer.
 
 See [Signing and Verification](/docs/concepts/signing) for the full format, the raw-response hashing variant, and the
 off-chain verification snippet using viem.

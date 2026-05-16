@@ -191,9 +191,8 @@ When multiple plugins define the same hook, they run in config-declared order:
 
 ## Configuration
 
-Operators wire plugins into the YAML config under `settings.plugins`. See
-[Plugin Configuration](/docs/config/plugins) for the field reference, source-path resolution, `config:` block, startup
-validation, and timeout-budget guidelines.
+Operators wire plugins into the YAML config under `settings.plugins`. See [Plugin Configuration](/docs/config/plugins)
+for the field reference, source-path resolution, `config:` block, startup validation, and timeout-budget guidelines.
 
 ## Distribution
 

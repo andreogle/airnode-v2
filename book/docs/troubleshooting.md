@@ -156,8 +156,8 @@ don't speculatively spam unverified `txHash` values.
 
 ### `Server busy` (503)
 
-**Cause:** The airnode is already running `settings.maxConcurrentApiCalls` upstream requests and your request waited
-its full timeout for a slot without getting one.
+**Cause:** The airnode is already running `settings.maxConcurrentApiCalls` upstream requests and your request waited its
+full timeout for a slot without getting one.
 
 **Fix:** Operator-side: raise `maxConcurrentApiCalls` if the upstream can handle it, or front the airnode with a CDN
 that caches frequent endpoints. Client-side: slow your request rate or add jitter.
@@ -191,13 +191,13 @@ the API changed its response format, a nested field was renamed, or the path use
 
 ### `FHE encryption failed` (502)
 
-**Cause:** The endpoint has an `encrypt` block, but the relayer rejected the encryption attempt. Common subcauses
-appear in the server log: a negative integer for an unsigned ciphertext (`euint*` types are unsigned), a value that
-overflows the chosen ciphertext type, or the relayer being unreachable.
+**Cause:** The endpoint has an `encrypt` block, but the relayer rejected the encryption attempt. Common subcauses appear
+in the server log: a negative integer for an unsigned ciphertext (`euint*` types are unsigned), a value that overflows
+the chosen ciphertext type, or the relayer being unreachable.
 
-**Fix:** Check the airnode logs for the specific error. Common fixes: choose a larger `encrypt.type` (e.g.
-`euint256` instead of `euint64`); pin a non-negative encoding (`uint256` instead of `int256`); or verify
-`settings.fhe.rpcUrl` and `settings.fhe.apiKey` are correct.
+**Fix:** Check the airnode logs for the specific error. Common fixes: choose a larger `encrypt.type` (e.g. `euint256`
+instead of `euint64`); pin a non-negative encoding (`uint256` instead of `int256`); or verify `settings.fhe.rpcUrl` and
+`settings.fhe.apiKey` are correct.
 
 ### `Endpoint requires FHE encryption but settings.fhe is not configured`
 
@@ -232,8 +232,8 @@ fire on every request.
 ### `Request not found` (404) on `GET /requests/{requestId}`
 
 **Cause:** The request ID is wrong, or it's older than the async store's retention window (10 minutes for in-flight
-requests, 1 minute for completed/failed results). Finished results are evicted promptly so an unrelated request can
-take its slot.
+requests, 1 minute for completed/failed results). Finished results are evicted promptly so an unrelated request can take
+its slot.
 
 **Fix:** Poll within the retention window. If you waited longer, the result is gone — re-submit the request.
 

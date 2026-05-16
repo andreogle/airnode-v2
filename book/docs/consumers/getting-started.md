@@ -187,17 +187,17 @@ out of nothing.
 
 ## What can go wrong
 
-| Status | Error                                                | What to do                                                                                |
-| ------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `400`  | `Missing required parameter(s): X`                   | Add the missing parameters to your request body.                                          |
-| `400`  | `` Endpoint requires `_type` request parameter ``    | The operator marked `type: '*'`. Supply `_type` in `parameters`.                          |
-| `400`  | `` Endpoint requires `_path` request parameter ``    | The operator marked `path: '*'`. Supply `_path` in `parameters`.                          |
-| `400`  | `` Endpoint requires `_times` request parameter ``   | The operator marked `times: '*'`. Supply `_times` in `parameters`.                        |
-| `401`  | `Missing X-Api-Key header`                           | The endpoint requires authentication. Add `X-Api-Key: your-key` to the request.           |
-| `401`  | `Invalid API key`                                    | The key value is wrong. Check with the airnode operator.                                  |
-| `404`  | `Endpoint not found`                                 | The endpoint ID is incorrect. Verify the ID with the operator.                            |
-| `413`  | `Request body too large`                             | The request body exceeds 64KB. Reduce the payload size.                                   |
-| `415`  | `Content-Type must be application/json`              | Set `Content-Type: application/json`.                                                     |
-| `429`  | `Too Many Requests`                                  | Wait and retry. The airnode has a request rate limit configured.                          |
-| `502`  | `API call failed`                                    | The upstream API is unreachable or returning errors. Try again later.                     |
-| `502`  | `No value found at path: $.X`                        | The upstream response shape changed or the path is wrong. Contact the operator.           |
+| Status | Error                                            | What to do                                                                      |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `400`  | `Missing required parameter(s): X`               | Add the missing parameters to your request body.                                |
+| `400`  | ``Endpoint requires `_type` request parameter``  | The operator marked `type: '*'`. Supply `_type` in `parameters`.                |
+| `400`  | ``Endpoint requires `_path` request parameter``  | The operator marked `path: '*'`. Supply `_path` in `parameters`.                |
+| `400`  | ``Endpoint requires `_times` request parameter`` | The operator marked `times: '*'`. Supply `_times` in `parameters`.              |
+| `401`  | `Missing X-Api-Key header`                       | The endpoint requires authentication. Add `X-Api-Key: your-key` to the request. |
+| `401`  | `Invalid API key`                                | The key value is wrong. Check with the airnode operator.                        |
+| `404`  | `Endpoint not found`                             | The endpoint ID is incorrect. Verify the ID with the operator.                  |
+| `413`  | `Request body too large`                         | The request body exceeds 64KB. Reduce the payload size.                         |
+| `415`  | `Content-Type must be application/json`          | Set `Content-Type: application/json`.                                           |
+| `429`  | `Too Many Requests`                              | Wait and retry. The airnode has a request rate limit configured.                |
+| `502`  | `API call failed`                                | The upstream API is unreachable or returning errors. Try again later.           |
+| `502`  | `No value found at path: $.X`                    | The upstream response shape changed or the path is wrong. Contact the operator. |

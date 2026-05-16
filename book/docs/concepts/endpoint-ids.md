@@ -67,17 +67,17 @@ types (`int256` / `uint256`).
 
 Three valid configurations:
 
-| Operator config                                                                       | Encoding spec in ID                           | Who controls what                                     |
-| ------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
-| `encoding: { type: int256, path: $.price, times: '1e18' }` — fully pinned             | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
-| `encoding: { type: int256, path: '*', times: '1e18' }` — pin type & multiplier        | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
-| `encoding: { type: '*', path: '*', times: '*' }` — all wildcards (fully open)         | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
-| No `encoding` block at all                                                            | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
+| Operator config                                                                | Encoding spec in ID                           | Who controls what                                     |
+| ------------------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------- |
+| `encoding: { type: int256, path: $.price, times: '1e18' }` — fully pinned      | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
+| `encoding: { type: int256, path: '*', times: '1e18' }` — pin type & multiplier | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
+| `encoding: { type: '*', path: '*', times: '*' }` — all wildcards (fully open)  | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
+| No `encoding` block at all                                                     | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
 
-Client-supplied fields are **silently ignored** for any field the operator pinned. If the operator sets
-`type: int256`, the request's `_type` parameter has no effect on encoding (it's still consumed by the pipeline and never
-sent to the upstream API). Wildcard fields require the matching reserved parameter: omitting `_path` on an endpoint
-with `path: '*'` returns 400.
+Client-supplied fields are **silently ignored** for any field the operator pinned. If the operator sets `type: int256`,
+the request's `_type` parameter has no effect on encoding (it's still consumed by the pipeline and never sent to the
+upstream API). Wildcard fields require the matching reserved parameter: omitting `_path` on an endpoint with `path: '*'`
+returns 400.
 
 ### FHE-encrypted endpoints
 
