@@ -95,11 +95,15 @@ curl -X POST http://airnode.example.com/endpoints/0x... \
 **Fix:** Include all required parameters in the `parameters` object of the request body. Check the endpoint
 specification for the full parameter list.
 
-### `Both _type and _path are required for encoding` (400)
+### ``Endpoint requires `_type` request parameter`` (400)
 
-**Cause:** The request includes `_type` without `_path` or vice versa. These reserved parameters must be sent together.
+(Or `` `_path` ``, or `` `_times` ``.)
 
-**Fix:** Send both `_type` and `_path`, or omit both to get a raw JSON response.
+**Cause:** The operator marked one or more encoding fields with the wildcard `'*'`. Each wildcard field requires the
+matching reserved parameter (`_type` / `_path` / `_times`) in the request body. This 400 means at least one is missing.
+
+**Fix:** Supply every wildcarded field. The operator's documentation should list which fields are wildcarded — they
+correspond to whichever ones appear as `*` in the canonical endpoint spec.
 
 ```json
 {
@@ -107,11 +111,14 @@ specification for the full parameter list.
     "ids": "ethereum",
     "vs_currencies": "usd",
     "_type": "int256",
-    "_path": "ethereum.usd",
-    "_times": "1000000000000000000"
+    "_path": "$.ethereum.usd",
+    "_times": "1e18"
   }
 }
 ```
+
+If the operator pinned a field, any reserved parameter you send for that field is silently ignored — the operator's
+value wins. If the endpoint has no `encoding` block at all, you'll get raw JSON back regardless of reserved parameters.
 
 ### `Request body too large` (413)
 

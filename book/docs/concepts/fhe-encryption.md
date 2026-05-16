@@ -206,9 +206,10 @@ encrypted. The auction contract compares `FHE.gt(bid, reservePrice)` without rev
   on-chain submission of a cached ciphertext succeeds; the rest revert "already fulfilled". A cache on an encrypt
   endpoint therefore both serves stale data and caps on-chain ingestion to one submission per window. Leave `cache`
   unset unless that's actually what you want.
-- **Set `encoding.times` explicitly.** If you omit `encoding.times`, the requester controls the scale multiplier via the
-  `_times` parameter (and the endpoint ID records `times=*`). For an encrypt endpoint you almost always want a fixed
-  scale — set `times: '1'` if you mean "no scaling".
+- **Pin every encoding field.** The schema rejects an `encrypt` endpoint whose encoding contains a `'*'` wildcard — an
+  operator approving FHE-encrypted output is approving a specific shape, so `type`, `path`, and `times` must all be
+  concrete values. Omit `times` entirely if the upstream value is already an integer (it means "no multiplier"); set
+  `times: '1e18'` (or similar) for float-shaped upstream data.
 - **Throughput.** The Zama coprocessor currently handles a limited number of input verifications per second.
   High-frequency price feeds may hit this limit.
 - **Numeric, encoded responses only.** `encrypt` requires an `encoding` block producing a single `int256`/`uint256`

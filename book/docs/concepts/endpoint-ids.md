@@ -57,23 +57,27 @@ One upstream API usually serves many different consumers. A CoinGecko price endp
 for a lending protocol, as `uint128 × 1e8` for a DEX, or read for its `last_updated_at` timestamp by a staleness check.
 These are legitimate, simultaneous uses of the same HTTP call.
 
-Airnode supports this by letting the operator decide **per field** whether to fix a value or leave it client-controlled.
-Clients fill unfixed fields at request time via reserved parameters `_type`, `_path`, and `_times` in the request body.
-The endpoint ID commits to exactly which fields were fixed and which were left open — any field the operator did not fix
-in config is encoded as `*` in the canonical string.
+Airnode supports this by letting the operator decide **per field** whether to pin a concrete value or open it to the
+client via the literal wildcard `'*'`. Wildcard fields are filled at request time via reserved parameters `_type`,
+`_path`, and `_times` in the request body. The endpoint ID commits to the exact split — whatever the operator wrote
+flows through to the canonical string verbatim, so a `'*'` in config means `*` in the ID.
 
-Four common configurations:
+`type` and `path` are required whenever an `encoding` block is present. `times` is optional and only valid for numeric
+types (`int256` / `uint256`).
 
-| Operator config                                          | Encoding spec in ID                           | Who controls what                                     |
-| -------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
-| `encoding: { type, path, times }` — all three fields set | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
-| `encoding: { type, times }` — type and multiplier only   | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
-| `encoding: {}` — block present, no fields set            | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
-| No `encoding` block at all                               | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
+Three valid configurations:
 
-Client-supplied fields **cannot override** operator-fixed values. If the operator sets `type: int256`, the request's
-`_type` parameter is ignored for encoding (though it still counts as a request parameter). The operator's fixes are
-authoritative.
+| Operator config                                                                       | Encoding spec in ID                           | Who controls what                                     |
+| ------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| `encoding: { type: int256, path: $.price, times: '1e18' }` — fully pinned             | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
+| `encoding: { type: int256, path: '*', times: '1e18' }` — pin type & multiplier        | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
+| `encoding: { type: '*', path: '*', times: '*' }` — all wildcards (fully open)         | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
+| No `encoding` block at all                                                            | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
+
+Client-supplied fields are **silently ignored** for any field the operator pinned. If the operator sets
+`type: int256`, the request's `_type` parameter has no effect on encoding (it's still consumed by the pipeline and never
+sent to the upstream API). Wildcard fields require the matching reserved parameter: omitting `_path` on an endpoint
+with `path: '*'` returns 400.
 
 ### FHE-encrypted endpoints
 
@@ -133,12 +137,13 @@ silently alter the trust split of an existing endpoint.
 ### Endpoints with no `encoding` block
 
 An endpoint with no `encoding` block in config does not include an encoding spec in the canonical string. Its signature
-covers `keccak256(json_hash)` of the raw upstream response when called without request-side encoding parameters.
+covers `keccak256(json_hash)` of the raw upstream response. Reserved request parameters cannot synthesize an encoding
+out of nothing — `_type` / `_path` / `_times` are ignored in raw mode, so the only way to ABI-encode a response is for
+the operator to declare an `encoding` block (pinned or wildcarded).
 
-Note that the canonical string for such an endpoint carries **no commitment to encoding** at all — not even a wildcard.
-If a consumer contract wants a guarantee that the ID binds the response shape, the operator should declare at least an
-empty `encoding: {}` block, which puts `type=*,path=*,times=*` into the ID. An endpoint without any `encoding` block
-should be treated as raw-JSON-only from a consumer perspective.
+If a consumer contract wants the endpoint ID to bind some encoding shape, the operator should declare an `encoding`
+block with the appropriate pin/wildcard split. An endpoint without any `encoding` block should be treated as
+raw-JSON-only from a consumer perspective.
 
 ## What Is Included
 

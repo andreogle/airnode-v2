@@ -16,7 +16,6 @@ curl http://airnode.example.com/health
 ```json
 {
   "status": "ok",
-  "version": "2.0.0",
   "airnode": "0xd1e98F3Ac20DA5e4da874723517c914a31b0e857"
 }
 ```
@@ -147,8 +146,8 @@ examples using AirnodeVerifier.
 
 ## Choosing encoding at request time
 
-Some endpoints leave encoding unset, letting the client choose at request time. Pass reserved parameters in the request
-body:
+Some endpoints mark one or more encoding fields with the wildcard `'*'`, letting the client choose them per request.
+Supply the matching reserved parameter in the request body for each `'*'` field:
 
 ```json
 {
@@ -156,29 +155,35 @@ body:
     "ids": "ethereum",
     "vs_currencies": "usd",
     "_type": "int256",
-    "_path": "ethereum.usd",
-    "_times": "1000000000000000000"
+    "_path": "$.ethereum.usd",
+    "_times": "1e18"
   }
 }
 ```
 
-- `_type` -- the Solidity ABI type to encode as (`int256`, `uint256`, `bool`, `bytes32`, `address`, `string`, `bytes`)
-- `_path` -- dot-separated JSON path to extract from the upstream response
-- `_times` -- multiplier applied before encoding (use `1e18` for 18 decimal precision)
+- `_type` -- the Solidity ABI type to encode as (`int256`, `uint256`, `bool`, `bytes32`, `address`, `string`, `bytes`).
+  Only consumed when the operator set `encoding.type: '*'`.
+- `_path` -- JSONPath expression to extract from the upstream response. Only consumed when `encoding.path: '*'`.
+- `_times` -- multiplier applied before encoding (numeric types only). Only consumed when `encoding.times: '*'`.
 
-Both `_type` and `_path` are required together. `_times` is optional and defaults to no multiplication.
+If a wildcard field's matching reserved parameter is missing, the server returns 400. If the operator pinned a field
+(concrete value rather than `'*'`), any client-supplied reserved parameter for it is silently ignored — the operator's
+value wins. Endpoints with no `encoding` block at all return raw JSON; reserved parameters cannot synthesize encoding
+out of nothing.
 
 ## What can go wrong
 
-| Status | Error                                            | What to do                                                                      |
-| ------ | ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `400`  | `Missing required parameter(s): X`               | Add the missing parameters to your request body.                                |
-| `400`  | `Both _type and _path are required for encoding` | You sent one reserved parameter without the other. Send both or neither.        |
-| `401`  | `Missing X-Api-Key header`                       | The endpoint requires authentication. Add `X-Api-Key: your-key` to the request. |
-| `401`  | `Invalid API key`                                | The key value is wrong. Check with the airnode operator.                        |
-| `404`  | `Endpoint not found`                             | The endpoint ID is incorrect. Verify the ID with the operator.                  |
-| `413`  | `Request body too large`                         | The request body exceeds 64KB. Reduce the payload size.                         |
-| `415`  | `Content-Type must be application/json`          | Set `Content-Type: application/json`.                                           |
-| `429`  | `Too Many Requests`                              | Wait and retry. The airnode has a request rate limit configured.                |
-| `502`  | `API call failed`                                | The upstream API is unreachable or returning errors. Try again later.           |
-| `502`  | `No value found at path: $.X`                    | The upstream response shape changed or the path is wrong. Contact the operator. |
+| Status | Error                                                | What to do                                                                                |
+| ------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `400`  | `Missing required parameter(s): X`                   | Add the missing parameters to your request body.                                          |
+| `400`  | `` Endpoint requires `_type` request parameter ``    | The operator marked `type: '*'`. Supply `_type` in `parameters`.                          |
+| `400`  | `` Endpoint requires `_path` request parameter ``    | The operator marked `path: '*'`. Supply `_path` in `parameters`.                          |
+| `400`  | `` Endpoint requires `_times` request parameter ``   | The operator marked `times: '*'`. Supply `_times` in `parameters`.                        |
+| `401`  | `Missing X-Api-Key header`                           | The endpoint requires authentication. Add `X-Api-Key: your-key` to the request.           |
+| `401`  | `Invalid API key`                                    | The key value is wrong. Check with the airnode operator.                                  |
+| `404`  | `Endpoint not found`                                 | The endpoint ID is incorrect. Verify the ID with the operator.                            |
+| `413`  | `Request body too large`                             | The request body exceeds 64KB. Reduce the payload size.                                   |
+| `415`  | `Content-Type must be application/json`              | Set `Content-Type: application/json`.                                                     |
+| `429`  | `Too Many Requests`                                  | Wait and retry. The airnode has a request rate limit configured.                          |
+| `502`  | `API call failed`                                    | The upstream API is unreachable or returning errors. Try again later.                     |
+| `502`  | `No value found at path: $.X`                        | The upstream response shape changed or the path is wrong. Contact the operator.           |
