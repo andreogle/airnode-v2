@@ -179,4 +179,9 @@ bun run book:start
 
 ## License
 
-MIT
+This repository is split-licensed:
+
+- **TypeScript / server code** (everything outside `contracts/`) — [AGPL-3.0-or-later](LICENSE). Operators who modify
+  the airnode and run it as a network service must publish their modifications under the same terms.
+- **Solidity contracts** (everything under `contracts/`) — [MIT](contracts/LICENSE). Consumer contracts can integrate
+  `AirnodeVerifier` freely with no copyleft obligation.
