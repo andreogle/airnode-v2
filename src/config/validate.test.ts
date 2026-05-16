@@ -5,9 +5,11 @@ const MINIMAL_VALID = `
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -44,7 +46,6 @@ describe('validateConfig', () => {
     if (!api) return;
     expect(api.timeout).toBe(10_000);
     expect(api.endpoints[0]?.method).toBe('GET');
-    expect(result.config.server.host).toBe('0.0.0.0');
   });
 
   // ===========================================================================
@@ -65,9 +66,11 @@ describe('validateConfig', () => {
     const yaml = `
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -93,9 +96,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -135,9 +140,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -168,9 +175,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -198,9 +207,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -231,9 +242,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -265,9 +278,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -294,9 +309,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30

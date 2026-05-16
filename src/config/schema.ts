@@ -204,15 +204,19 @@ const rateLimitSchema = z.object({
   window: z.number().int().positive(),
   max: z.number().int().positive(),
   // When Airnode runs behind a reverse proxy the socket peer is the proxy, so
-  // every client shares one bucket. Set this only if a *trusted* proxy sets
-  // `X-Forwarded-For` — its first entry is then used as the rate-limit key.
-  trustForwardedFor: z.boolean().default(false),
+  // every client shares one bucket. Set this to `true` only if a *trusted*
+  // proxy sets `X-Forwarded-For` — its first entry is then used as the
+  // rate-limit key. Required so the deployment topology is explicit.
+  trustForwardedFor: z.boolean(),
   x402: x402RateLimitSchema,
 });
 
 export const serverSchema = z.object({
   port: z.number().int().positive(),
-  host: z.string().default('0.0.0.0'),
+  // `'0.0.0.0'` binds to every interface; `'127.0.0.1'` restricts to localhost.
+  // Required — the choice between "exposed" and "loopback-only" should never be
+  // a hidden default.
+  host: z.string().min(1),
   cors: corsSchema.optional(),
   // Required. Every airnode endpoint that calls an upstream API costs the
   // operator (metered API quotas, RPC quotas for x402), so a per-IP ceiling is

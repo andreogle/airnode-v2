@@ -56,7 +56,8 @@ curl -X POST http://localhost:3000/endpoints/{endpointId} \
 - **Sign any API response** with your key — turn untrusted data into a verifiable attestation
 - **Serve data to smart contracts** — ABI-encoded responses ready for on-chain submission
 - **Monetize access** — API keys or pay-per-request via x402
-- **Control encoding at request time** — clients pass `_type`, `_path`, `_times` to choose what to extract
+- **Opt-in requester-controlled encoding** — endpoints that mark fields as `'*'` let clients supply
+  `_type`/`_path`/`_times` per request
 - **Extend with plugins** — hooks at every pipeline stage for custom logic
 
 ## Routes
@@ -65,7 +66,7 @@ curl -X POST http://localhost:3000/endpoints/{endpointId} \
 | ------ | ------------------------- | -------------------------------- |
 | `POST` | `/endpoints/{endpointId}` | Call an endpoint with parameters |
 | `GET`  | `/requests/{requestId}`   | Poll an async request for status |
-| `GET`  | `/health`                 | Version and airnode address      |
+| `GET`  | `/health`                 | Status and airnode address       |
 
 ## Configuration
 
@@ -76,8 +77,15 @@ version: '1.0'
 
 server:
   port: 3000
+  rateLimit:
+    window: 60000
+    max: 100
+    x402:
+      window: 60000
+      max: 30
 
 settings:
+  maxConcurrentApiCalls: 50
   proof: none
 
 apis:

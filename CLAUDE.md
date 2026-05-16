@@ -53,8 +53,8 @@ Key conventions:
 - In config YAML, the `settings` section goes immediately after `version`, before `apis`.
 - Runtime config is `config.yaml` + `.env` in the working directory (gitignored).
 - **Explicit over implicit**: config fields should be required with no defaults, unless a default is genuinely universal
-  (e.g. `method: GET`). Only truly optional behavior (like `rateLimit`, `cors`) uses optional fields. When adding new
-  schema fields, default to required.
+  (e.g. `method: GET`). Only truly optional behavior (like `cors`, `cache`) uses optional fields. When adding new schema
+  fields, default to required.
 
 ## Architecture
 
@@ -68,7 +68,8 @@ HTTP service.
 Routes:
 
 - `POST /endpoints/{endpointId}` — call an endpoint with parameters in the request body
-- `GET /health` — health check with version and airnode address
+- `GET /requests/{requestId}` — poll an async request's status (mode: `async` endpoints)
+- `GET /health` — status and airnode address (no version exposed)
 
 ### Request processing pipeline
 
@@ -76,7 +77,7 @@ The pipeline runs per-request in `src/pipeline.ts`:
 
 1. **Resolve endpoint** → look up endpoint by ID in the endpoint map
 2. **Plugin: onHttpRequest** → plugins can reject requests early
-3. **Authenticate** → verify client credentials (free access or API key via `X-Api-Key` header)
+3. **Authenticate** → verify client credentials (`free`, `apiKey` via `X-Api-Key`, or `x402` payment proof)
 4. **Validate parameters** → check that all required parameters are present
 5. **Check cache** → return cached response if TTL has not expired
 6. **Plugin: onBeforeApiCall** → plugins can modify parameters
@@ -94,14 +95,19 @@ The pipeline runs per-request in `src/pipeline.ts`:
 
 Version `'1.0'`. Top-level sections: `version`, `server`, `settings`, `apis`.
 
-- `server` contains `port`, `host` (default `'0.0.0.0'`), `cors` (optional), `rateLimit` (optional).
-- `settings` contains `timeout` (default 10s), `proof` (`'none'` or `{ type: 'reclaim', gatewayUrl }` for TLS proofs),
-  `fhe` (`'none'` or `{ network, rpcUrl, verifier, apiKey? }` for FHE encryption), `plugins`.
+- `server` contains `port`, `host` (default `'0.0.0.0'`), `cors` (optional), `rateLimit` (**required**, with `window`,
+  `max`, and an `x402` sub-block of `{window, max}`).
+- `settings` contains `timeout` (default 10s), `maxConcurrentApiCalls` (**required**), `proof` (`'none'` or
+  `{ type: 'reclaim', gatewayUrl }` for TLS proofs), `fhe` (`'none'` or `{ network, rpcUrl, verifier, apiKey? }` for FHE
+  encryption), `plugins`.
 - `apis[].url` is the upstream API base URL. Upstream credentials go in `apis[].headers`.
 - `apis[].auth` is client-facing: `{ type: 'free' }`, `{ type: 'apiKey', keys: [...] }`, or `{ type: 'x402', ... }`.
-- Endpoints use `encoding: { type, path, times? }` instead of `reservedParameters`. Encoding is optional — endpoints
-  without it return raw JSON with a signature over the JSON hash. Endpoints can also set `encrypt: { type, contract }`
-  (requires `settings.fhe` and an integer `encoding`) to FHE-encrypt the encoded value before signing.
+- Endpoints use `encoding: { type, path, times? }`. When `encoding` is set, `type` and `path` are required — each may be
+  a concrete value or the literal `'*'` (which delegates that field to the matching reserved request param: `_type`,
+  `_path`, `_times`). `times` is optional and only valid on numeric types. Without an `encoding` block the response is
+  raw JSON with a signature over the JSON hash; reserved params can't synthesize encoding from nothing. Endpoints can
+  also set `encrypt: { type, contract }` (requires `settings.fhe` and a concretely pinned integer `encoding`) to
+  FHE-encrypt the encoded value before signing.
 - Auth and cache config inherit from API level; endpoint-level overrides take precedence.
 
 ### Plugin hooks

@@ -9,6 +9,7 @@ server:
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30

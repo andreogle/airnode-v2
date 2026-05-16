@@ -10,9 +10,11 @@ const MINIMAL_CONFIG = `
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -38,7 +40,6 @@ describe('configSchema', () => {
     const result = configSchema.parse(parseYaml(MINIMAL_CONFIG));
 
     expect(result.apis[0]?.endpoints[0]?.method).toBe('GET');
-    expect(result.server.host).toBe('0.0.0.0');
     expect(result.server.cors).toBeUndefined();
     expect(result.apis[0]?.timeout).toBe(10_000);
     expect(result.settings.timeout).toBe(10_000);
@@ -71,7 +72,7 @@ apis:
 
   test('rejects a config without server.rateLimit', () => {
     const raw = MINIMAL_CONFIG.replace(
-      '\n  rateLimit:\n    window: 60000\n    max: 100\n    x402:\n      window: 60000\n      max: 30',
+      '\n  rateLimit:\n    window: 60000\n    max: 100\n    trustForwardedFor: false\n    x402:\n      window: 60000\n      max: 30',
       ''
     );
     expect(() => configSchema.parse(parseYaml(raw))).toThrow();
@@ -446,9 +447,11 @@ const FHE_CONFIG = `
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30

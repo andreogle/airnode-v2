@@ -106,9 +106,11 @@ describe('parseConfig', () => {
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -142,9 +144,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
@@ -169,9 +173,11 @@ apis:
 version: '1.0'
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
     window: 60000
     max: 100
+    trustForwardedFor: false
     x402:
       window: 60000
       max: 30
