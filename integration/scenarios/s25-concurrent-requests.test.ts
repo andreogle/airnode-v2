@@ -31,22 +31,24 @@ describe('S25 — Concurrent request handling', () => {
 
   test('concurrent requests to cached endpoint share the cached response', async () => {
     const endpointId = findEndpointId(ctx.endpointMap, 'CoinGecko', 'coinPrice');
+    const params = { ids: 'polkadot' };
+    const headers = { 'X-Api-Key': CLIENT_API_KEY };
 
-    // Fire 5 concurrent requests with same params
-    const results = await Promise.all(
-      Array.from({ length: 5 }, () =>
-        post(ctx.baseUrl, endpointId, { ids: 'polkadot' }, { 'X-Api-Key': CLIENT_API_KEY })
-      )
-    );
+    // Warm the cache with a single request, then clear the mock's call history
+    // so the concurrent burst below can be measured in isolation. The pipeline
+    // has no in-flight request coalescing, so without a warmed cache 5
+    // simultaneous requests would all miss and all hit the upstream.
+    const warm = await post(ctx.baseUrl, endpointId, params, headers);
+    expect(warm.status).toBe(200);
+    await resetMock();
+
+    const results = await Promise.all(Array.from({ length: 5 }, () => post(ctx.baseUrl, endpointId, params, headers)));
 
     for (const r of results) {
       expect(r.status).toBe(200);
     }
 
-    // At least one request must hit the API (cache was empty), but with caching
-    // enabled, not all 5 should hit the upstream — some should be served from cache
     const calls = await getMockCalls();
-    expect(calls.length).toBeGreaterThanOrEqual(1);
-    expect(calls.length).toBeLessThan(5);
+    expect(calls.length).toBe(0);
   });
 });
