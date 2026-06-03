@@ -27,9 +27,9 @@ hash      = keccak256(encodePacked(endpointId, timestamp, data))   // EIP-191 pe
 ```
 
 For ABI-encoded endpoints `data` is the encoded bytes. For raw (no-encoding) endpoints `data` is
-`keccak256(stableStringify(json))` — the upstream JSON serialized with recursively sorted keys so the signature is stable
-regardless of upstream key order (see S36). `requestId` is a random 32-byte identifier and is **not** part of the signed
-hash.
+`keccak256(stableStringify(json))` — the upstream JSON serialized with recursively sorted keys so the signature is
+stable regardless of upstream key order (see S36). `requestId` is a random 32-byte identifier and is **not** part of the
+signed hash.
 
 ## Scenarios
 
@@ -331,8 +331,8 @@ When an endpoint's `encoding` uses the `*` wildcard for `type`/`path`/`times`, t
 
 ### S37 — Upstream error status handling
 
-- Upstream returns a non-200 (500) but with a body that still matches the expected shape → the pipeline encodes and signs
-  it (callApi does not throw on non-200; documents current behavior)
+- Upstream returns a non-200 (500) but with a body that still matches the expected shape → the pipeline encodes and
+  signs it (callApi does not throw on non-200; documents current behavior)
 - Upstream returns a 500 with a wrong-shape body (path extraction fails) → airnode returns 502 with a generic
   `Internal processing error` message
 
@@ -355,8 +355,8 @@ Exercises the off-chain x402 surface without touching an RPC node.
 - A non-JSON `X-Payment-Proof` header returns 401 (`X-Payment-Proof must be a JSON object`)
 - A structurally invalid proof (bad `txHash`) returns 401 (`Invalid txHash in payment proof`)
 
-**Status:** Implemented (`s39-x402-challenge.test.ts`). On-chain receipt/recency/replay/payer-signature checks are covered
-by `src/auth.test.ts`.
+**Status:** Implemented (`s39-x402-challenge.test.ts`). On-chain receipt/recency/replay/payer-signature checks are
+covered by `src/auth.test.ts`.
 
 ### S40 — TLS proof gateway flow
 
@@ -364,7 +364,7 @@ Uses a mock Reclaim gateway; proofs are non-fatal.
 
 - With `settings.proof` set to a reclaim gateway and an endpoint declaring `responseMatches`, a valid gateway proof is
   attached to the signed response (200 with a `proof` field echoing the attested upstream URL)
-- A gateway proof that attests a *different* request is dropped — the response still returns 200 but without `proof`
+- A gateway proof that attests a _different_ request is dropped — the response still returns 200 but without `proof`
 
 **Status:** Implemented (`s40-tls-proof.test.ts`)
 
