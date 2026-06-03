@@ -49,8 +49,8 @@ The current `mode: stream` sends one event per connection. The next iteration ho
 multiple signed events as the upstream data changes:
 
 - **Continuous signed updates**: the airnode re-queries the upstream API on an interval and pushes each new signed
-  result as an SSE event. Each event is a complete signed response that ran through the full plugin pipeline and
-  carries its own EIP-191 signature -- partial responses are never sent.
+  result as an SSE event. Each event is a complete signed response that ran through the full plugin pipeline and carries
+  its own EIP-191 signature -- partial responses are never sent.
 - **EventSource reconnection**: SSE has built-in automatic reconnection. Clients that disconnect and reconnect receive
   the next signed update without any client-side retry logic.
 - **Backpressure and flow control**: when the upstream produces data faster than the client consumes it, the server
