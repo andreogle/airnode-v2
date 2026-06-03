@@ -13,8 +13,23 @@ Each test file:
 4. Asserts on response status, body, headers, and signature validity
 
 The mock API server runs once in the sequential runner (`run-sequential.ts`). Each test file runs in its own bun
-subprocess to avoid shared cache/state. The mock provides control endpoints (`/mock/set-response`, `/mock/calls`,
-`/mock/reset`) for per-test customization.
+subprocess (with `MOCK_API_PORT` in the environment) to avoid shared cache/state. The mock provides control endpoints
+(`/mock/set-response`, `/mock/calls`, `/mock/reset`) for per-test customization, and `helpers.ts` wraps them
+(`setMockResponse`, `getMockCalls`, `resetMock`) alongside `createTestServer`, which boots the server from the
+`examples/configs/complete` config with optional `server` / `settings` / `plugins` / `apiOverrides` overrides.
+
+## Signature format
+
+All scenarios that recover a signer rely on the same format the on-chain `AirnodeVerifier` verifies:
+
+```
+hash      = keccak256(encodePacked(endpointId, timestamp, data))   // EIP-191 personal sign
+```
+
+For ABI-encoded endpoints `data` is the encoded bytes. For raw (no-encoding) endpoints `data` is
+`keccak256(stableStringify(json))` — the upstream JSON serialized with recursively sorted keys so the signature is stable
+regardless of upstream key order (see S36). `requestId` is a random 32-byte identifier and is **not** part of the signed
+hash.
 
 ## Scenarios
 
@@ -36,7 +51,7 @@ Endpoints without `encoding` return raw JSON with a signature over the JSON hash
 
 - POST to an endpoint with no encoding block
 - Response has `rawData` (not `data`) containing the full upstream JSON
-- Signature covers `keccak256(requestId || keccak256(rawJsonAsHex))`
+- Signature covers `keccak256(encodePacked(endpointId, timestamp, keccak256(stableStringify(json))))`
 - Recover airnode address from signature
 
 **Status:** Implemented (`s2-raw-response.test.ts`)
@@ -168,8 +183,9 @@ Endpoints without `encoding` return raw JSON with a signature over the JSON hash
 
 ### S18 — Multi-value encoding
 
-- Endpoint with comma-separated `encoding` correctly ABI-encodes multiple values
-- Decoded values match expected magnitudes
+- Endpoint with comma-separated `encoding` (`type: int256,uint256`, `path: $.ethereum.usd,$.ethereum.usd_24h_vol`)
+  ABI-encodes multiple values in one signed response
+- Decoded values match expected magnitudes (price and volume)
 
 **Status:** Implemented (`s18-multi-value-encoding.test.ts`)
 
@@ -215,11 +231,13 @@ Endpoints without `encoding` return raw JSON with a signature over the JSON hash
 
 ### S23 — Signature verification on-chain compatibility
 
-- The signature format `keccak256(requestId || keccak256(data))` with EIP-191 personal sign prefix produces signatures
-  that a Solidity/Vyper `ecrecover` can verify
-- Verify the `requestId` derivation matches `keccak256(encodePacked(endpointId, encodedParameters, timestamp))`
+- The signature format `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 personal sign prefix produces
+  signatures that a Solidity `ecrecover` can verify
+- `endpointId`, `timestamp`, and `data` are separate top-level fields so on-chain contracts (and future TLS proof
+  verifiers) can inspect each independently. `requestId` is a random per-request identifier, not part of the signed hash
 
-**Status:** Covered by unit tests (`src/sign.test.ts`) and integration (`s1-signed-response.test.ts`)
+**Status:** Covered by unit tests (`src/sign.test.ts`) and integration (`s1-signed-response.test.ts`,
+`s36-stable-json-signature.test.ts`)
 
 ### S24 — Graceful shutdown
 
@@ -264,37 +282,108 @@ Endpoints without `encoding` return raw JSON with a signature over the JSON hash
 
 **Status:** Covered by unit tests (`src/cache.test.ts`)
 
-### S29 — x402 payment auth
+### S29 — Multi-method auth integration
 
-- Request without `X-Payment-Proof` header returns 402 with payment details (paymentId, amount, token, network,
-  recipient, expiresAt)
-- Request with valid tx hash verifies the on-chain transfer and serves the response
-- Replay protection: same tx hash cannot be used twice
-- ETH transfers: checks `value >= amount` and `to == recipient`
-- ERC-20 transfers: parses `Transfer` event logs from the receipt
-- Multi-method: x402 + apiKey fallback — API key works when payment proof is missing
-- Payment details include correct token address and expiry timestamp
+- Endpoint requiring auth rejects an unauthenticated request with 401
+- The same endpoint accepts a valid `X-Api-Key` (API-key fallback in an any-of auth set)
+- An unknown endpoint ID returns 404
 
-**Status:** Partially implemented (`s29-x402-payment.test.ts` for multi-method fallback, `src/auth.test.ts` for x402
-logic). Full integration requires a live chain for payment verification.
-
-### S30 — Async requests
-
-- Endpoint with `async: true` returns 202 with requestId and pollUrl
-- `GET /requests/{requestId}` returns status: pending → processing → complete | failed
-- Complete response includes the full signed data
-- Failed response includes error message
-- Unknown request ID returns 404
-- Requests expire after 10 minutes (cleaned by sweep)
-
-**Status:** Implemented (`src/async.test.ts` for store logic, pipeline handles async dispatch)
+**Status:** Implemented (`s29-x402-payment.test.ts`). The x402 challenge/proof path lives in S39; on-chain payment
+verification is covered by `src/auth.test.ts`.
 
 ### S31 — SSE streaming
 
-- Endpoint with `mode: stream` returns `Content-Type: text/event-stream`
-- Response body is a valid SSE event (`data: <json>\n\n`)
-- Event includes `done: true` with the complete signed response (airnode, endpointId, data, signature, timestamp)
-- Response has `Cache-Control: no-cache` header
-- Non-stream endpoints return normal JSON regardless of Accept header
+- Endpoint with `mode: stream` returns `Content-Type: text/event-stream` and `Cache-Control: no-cache`
+- Response body is a valid SSE event (`data: <json>\n\n`) carrying `done: true` and the complete signed response
+  (`airnode`, `endpointId`, `data`, `signature`, `timestamp`)
+- The signed `data` in the event is ABI-encoded for endpoints with an `encoding` block
+- Non-stream endpoints return normal JSON even when the client sends `Accept: text/event-stream`
 
 **Status:** Implemented (`s31-sse-streaming.test.ts`)
+
+### S32 — Requester-specified encoding (operator opts in with `*`)
+
+When an endpoint's `encoding` uses the `*` wildcard for `type`/`path`/`times`, the client supplies them via reserved
+`_type`/`_path`/`_times` request params.
+
+- Client `_type`/`_path`/`_times` fill the wildcards and the response decodes to the requested type
+- A missing wildcard reserved param (e.g. no `_path`) returns 400 naming the missing param
+- An endpoint with no `encoding` block stays raw — reserved params can't synthesize encoding from nothing
+- An endpoint with a fully pinned `encoding` block silently ignores client reserved params (operator wins)
+
+**Status:** Implemented (`s32-requester-encoding.test.ts`)
+
+### S33 — Async request lifecycle
+
+- Endpoint with `mode: async` returns 202 with a `requestId` and `pollUrl`, status `pending`
+- `GET /requests/{requestId}` eventually returns status `complete` with the full signed data and signature
+- Polling an unknown request ID returns 404
+
+**Status:** Implemented (`s33-async-requests.test.ts`); async store logic covered by `src/async.test.ts`
+
+### S36 — Stable JSON signature for raw responses
+
+- For raw (no-encoding) responses, the signature is computed over the upstream JSON serialized with recursively sorted
+  keys (`stableStringify`), so it is stable regardless of upstream key order
+- Recover the airnode address using the canonical serialization and confirm it matches
+
+**Status:** Implemented (`s36-stable-json-signature.test.ts`)
+
+### S37 — Upstream error status handling
+
+- Upstream returns a non-200 (500) but with a body that still matches the expected shape → the pipeline encodes and signs
+  it (callApi does not throw on non-200; documents current behavior)
+- Upstream returns a 500 with a wrong-shape body (path extraction fails) → airnode returns 502 with a generic
+  `Internal processing error` message
+
+**Status:** Implemented (`s37-upstream-error-status.test.ts`)
+
+### S38 — Plugin mutation hooks fail closed
+
+- A throwing `onBeforeApiCall` drops the request with 403 (`Request dropped by plugin`) before the upstream call
+- A throwing `onBeforeSign` drops the request with 403 rather than signing unmodified data with the airnode's key
+- A healthy request still succeeds once the crashing plugin is gone (observation hooks never block — see S15)
+
+**Status:** Implemented (`s38-plugin-fail-closed.test.ts`)
+
+### S39 — x402 payment challenge
+
+Exercises the off-chain x402 surface without touching an RPC node.
+
+- An unpaid request to an x402 endpoint returns 402 with payment parameters (`airnode`, `endpointId`, `amount`, `token`,
+  `network`, `recipient`, `expiresAt`)
+- A non-JSON `X-Payment-Proof` header returns 401 (`X-Payment-Proof must be a JSON object`)
+- A structurally invalid proof (bad `txHash`) returns 401 (`Invalid txHash in payment proof`)
+
+**Status:** Implemented (`s39-x402-challenge.test.ts`). On-chain receipt/recency/replay/payer-signature checks are covered
+by `src/auth.test.ts`.
+
+### S40 — TLS proof gateway flow
+
+Uses a mock Reclaim gateway; proofs are non-fatal.
+
+- With `settings.proof` set to a reclaim gateway and an endpoint declaring `responseMatches`, a valid gateway proof is
+  attached to the signed response (200 with a `proof` field echoing the attested upstream URL)
+- A gateway proof that attests a *different* request is dropped — the response still returns 200 but without `proof`
+
+**Status:** Implemented (`s40-tls-proof.test.ts`)
+
+### S41 — FHE-encrypted response
+
+Uses a mocked Zama relayer SDK so the encryption step is deterministic.
+
+- An endpoint with an `encrypt` block replaces the ABI-encoded integer (before signing) with
+  `abi.encode(bytes32 handle, bytes proof)` produced via the relayer
+- The signed response carries the FHE ciphertext, not the plaintext-encoded value, and the signature covers the
+  ciphertext
+
+**Status:** Implemented (`s41-fhe-encryption.test.ts`)
+
+### S42 — X-Forwarded-For rate limiting
+
+- With `rateLimit.trustForwardedFor: true`, the limiter keys on the first `X-Forwarded-For` entry, so each forwarded
+  client gets its own bucket (and a comma-separated list uses the originating client)
+- With it off (the default), the header is ignored and all callers share the socket peer's bucket — a proxied deployment
+  that forgot to opt in can't be bypassed by spoofing the header
+
+**Status:** Implemented (`s42-forwarded-for.test.ts`)
