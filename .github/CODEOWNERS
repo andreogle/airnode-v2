@@ -1,0 +1,7 @@
+# Code owners are automatically requested for review on pull requests.
+# Dependabot respects CODEOWNERS, so every Dependabot PR (dependency
+# manifests, lockfiles, and GitHub Actions) requests review from the owner.
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @andreogle
