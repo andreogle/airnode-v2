@@ -26,7 +26,7 @@
   "dependencies": {
     "@api3/promise-utils": "^0.4.0",
     "@zama-fhe/relayer-sdk": "^0.4.3",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "viem": "^2.50.4",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
