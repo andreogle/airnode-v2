@@ -54,7 +54,7 @@ describe('S31 — SSE streaming', () => {
     expect(text).toContain('"done":true');
 
     // Parse the SSE event
-    const jsonStr = text.split('data: ')[1]?.split('\n')[0] ?? '';
+    const jsonStr = text.split('data: ', 2)[1]?.split('\n', 1)[0] ?? '';
     const event = JSON.parse(jsonStr) as { done: boolean; airnode: string; endpointId: string; signature: string };
 
     expect(event.done).toBe(true);
@@ -73,7 +73,7 @@ describe('S31 — SSE streaming', () => {
     });
 
     const text = await response.text();
-    const jsonStr = text.split('data: ')[1]?.split('\n')[0] ?? '';
+    const jsonStr = text.split('data: ', 2)[1]?.split('\n', 1)[0] ?? '';
     const event = JSON.parse(jsonStr) as { data: Hex; timestamp: number };
 
     // WeatherAPI currentTemp has encoding — data should be ABI-encoded

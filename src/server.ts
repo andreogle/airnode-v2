@@ -86,7 +86,7 @@ function parseRequestRoute(pathname: string): string | undefined {
 // entry — the originating client — instead.
 function resolveClientIp(request: Request, peerAddress: string | undefined, trustForwardedFor: boolean): string {
   if (trustForwardedFor) {
-    const forwarded = request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim();
+    const forwarded = request.headers.get('X-Forwarded-For')?.split(',', 1)[0]?.trim();
     if (forwarded) return forwarded;
   }
   return peerAddress ?? 'unknown';

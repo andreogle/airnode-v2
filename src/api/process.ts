@@ -116,7 +116,7 @@ function castToUint256(raw: JsonValue, multiply: string | undefined): bigint {
 }
 
 function castToBool(raw: JsonValue): boolean {
-  return raw === true || raw === 'true' || raw === 1 || raw === '1';
+  return ([true, 'true', 1, '1'] as JsonValue[]).includes(raw);
 }
 
 function castToBytes32(raw: JsonValue): Hex {

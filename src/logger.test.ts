@@ -91,8 +91,8 @@ describe('text format', () => {
       logger.info('short');
     });
     const output = lastCall(infoMock);
-    const afterLevel = output.split(' INFO ')[1] ?? '';
-    const beforeMeta = afterLevel.split('requestId=')[0] ?? '';
+    const afterLevel = output.split(' INFO ', 2)[1] ?? '';
+    const beforeMeta = afterLevel.split('requestId=', 1)[0] ?? '';
     expect(beforeMeta.length).toBeGreaterThanOrEqual(80);
   });
 

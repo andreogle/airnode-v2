@@ -87,7 +87,7 @@ function buildApiRequest(api: Api, endpoint: Endpoint, requestParameters: Record
     headers['Cookie'] = existing ? `${existing}; ${cookieString}` : cookieString; // eslint-disable-line functional/immutable-data
   }
 
-  const hasBody = endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH';
+  const hasBody = ['POST', 'PUT', 'PATCH'].includes(endpoint.method);
   const body = hasBody && Object.keys(bodyParameters).length > 0 ? JSON.stringify(bodyParameters) : undefined;
 
   if (body && !headers['Content-Type']) {
