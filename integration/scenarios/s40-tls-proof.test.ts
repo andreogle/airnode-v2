@@ -41,7 +41,9 @@ function startMockGateway(): Server<undefined> {
     fetch: async (request: Request): Promise<Response> => {
       const url = new URL(request.url);
       const sent = (await request.json()) as { url: string; method: string };
-      if (url.pathname !== '/good' && url.pathname !== '/bad') return new Response('not found', { status: 404 });
+      if (url.pathname !== '/good' && url.pathname !== '/bad') {
+        return new Response('not found', { status: 404 });
+      }
       const attestedUrl = url.pathname === '/bad' ? 'https://attacker.example.com/x' : sent.url;
       return Response.json(fakeReclaimProof(attestedUrl, sent.method));
     },

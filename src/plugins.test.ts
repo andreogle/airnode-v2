@@ -430,6 +430,56 @@ describe('callAfterApiCall', () => {
 
     expect(result).toEqual({ response: original, dropped: true });
   });
+
+  test('drops when budget is exhausted', async () => {
+    const plugins: AirnodePlugin[] = [
+      { name: 'starved', hooks: { onAfterApiCall: () => ({ data: { price: 999 }, status: 200 }) } },
+    ];
+    const registry = createRegistry([{ plugin: plugins[0] as AirnodePlugin, timeout: 0 }]);
+
+    const original = { data: { price: 100 }, status: 200 };
+    const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
+      endpointId: ENDPOINT_ID,
+      api: 'coingecko',
+      endpoint: 'price',
+      parameters: {},
+      response: original,
+    });
+
+    expect(result).toEqual({ response: original, dropped: true });
+    expect(String(warnMock.mock.calls[0]?.[0])).toContain('budget exhausted');
+  });
+
+  test('drops on timeout (fail-closed)', async () => {
+    const plugins: AirnodePlugin[] = [
+      {
+        name: 'slow',
+        hooks: {
+          onAfterApiCall: () =>
+            new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({ data: { price: 999 }, status: 200 });
+              }, 500);
+            }),
+        },
+      },
+    ];
+    const registry = createRegistry([{ plugin: plugins[0] as AirnodePlugin, timeout: 50 }]);
+
+    const original = { data: { price: 100 }, status: 200 };
+    const result = await registry.beginRequest().callAfterApiCall({
+      requestId: ENDPOINT_ID,
+      endpointId: ENDPOINT_ID,
+      api: 'coingecko',
+      endpoint: 'price',
+      parameters: {},
+      response: original,
+    });
+
+    expect(result).toEqual({ response: original, dropped: true });
+    expect(String(warnMock.mock.calls[0]?.[0])).toContain('timed out');
+  });
 });
 
 // =============================================================================
@@ -480,6 +530,26 @@ describe('callBeforeSign', () => {
     const registry = createRegistry(makeLoaded(plugins));
     const result = await registry.beginRequest().callBeforeSign(baseCtx);
     expect(result).toEqual({ data: '0xaabb', dropped: true });
+  });
+
+  test('drops on timeout (fail-closed) — original data is kept', async () => {
+    const plugins: AirnodePlugin[] = [
+      {
+        name: 'slow',
+        hooks: {
+          onBeforeSign: () =>
+            new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({ data: '0xccdd' });
+              }, 500);
+            }),
+        },
+      },
+    ];
+    const registry = createRegistry([{ plugin: plugins[0] as AirnodePlugin, timeout: 50 }]);
+    const result = await registry.beginRequest().callBeforeSign(baseCtx);
+    expect(result).toEqual({ data: '0xaabb', dropped: true });
+    expect(String(warnMock.mock.calls[0]?.[0])).toContain('timed out');
   });
 });
 
@@ -726,6 +796,8 @@ describe('loadPlugins — config', () => {
   const fixtureDir = path.join(tmpdir(), `airnode-plugin-fixtures-${String(process.pid)}`);
   const nameFromConfigPath = path.join(fixtureDir, 'name-from-config.ts');
   const throwingFactoryPath = path.join(fixtureDir, 'throwing-factory.ts');
+  const noDefaultPath = path.join(fixtureDir, 'no-default.ts');
+  const missingFieldsPath = path.join(fixtureDir, 'missing-fields.ts');
 
   beforeAll(async () => {
     await mkdir(fixtureDir, { recursive: true });
@@ -734,6 +806,8 @@ describe('loadPlugins — config', () => {
       'export default (config) => ({ name: `cfg-${String(config.tag)}`, hooks: {} });\n'
     );
     await Bun.write(throwingFactoryPath, 'export default () => { throw new Error("factory boom"); };\n');
+    await Bun.write(noDefaultPath, 'export const configSchema = { parse: (v) => v };\n');
+    await Bun.write(missingFieldsPath, 'export default { name: 42 };\n');
   });
 
   afterAll(async () => {
@@ -785,5 +859,17 @@ describe('loadPlugins — config', () => {
     const registry = await loadPlugins([{ source: throwingFactoryPath, timeout: 5000, config: {} }], projectRoot);
     expect(registry.plugins).toHaveLength(0);
     expect(String(errorMock.mock.calls[0]?.[0])).toContain('factory threw');
+  });
+
+  test('skips a plugin module with no default export', async () => {
+    const registry = await loadPlugins([{ source: noDefaultPath, timeout: 5000, config: {} }], projectRoot);
+    expect(registry.plugins).toHaveLength(0);
+    expect(String(errorMock.mock.calls[0]?.[0])).toContain('no default export');
+  });
+
+  test('skips a plugin missing required name or hooks fields', async () => {
+    const registry = await loadPlugins([{ source: missingFieldsPath, timeout: 5000, config: {} }], projectRoot);
+    expect(registry.plugins).toHaveLength(0);
+    expect(String(errorMock.mock.calls[0]?.[0])).toContain('missing required');
   });
 });

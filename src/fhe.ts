@@ -140,7 +140,9 @@ function buildInstanceConfig(preset: Record<string, unknown>, connection: FheCon
   // `network` is the Ethereum RPC endpoint the SDK uses to read on-chain FHE
   // contracts (ACL, KMS verifier) for the target chain.
   const base: Record<string, unknown> = { ...preset, network: connection.rpcUrl };
-  if (!connection.apiKey) return base;
+  if (!connection.apiKey) {
+    return base;
+  }
   return { ...base, auth: { __type: 'ApiKeyHeader', value: connection.apiKey } };
 }
 
@@ -155,9 +157,12 @@ async function loadInstance(connection: FheConnection): Promise<FhevmInstance> {
 function getInstance(connection: FheConnection): Promise<FhevmInstance> {
   const key = `${connection.network}|${connection.rpcUrl}`;
   if (!cachedInstance || cachedConnectionKey !== key) {
-    cachedConnectionKey = key;
+    cachedConnectionKey = key; // eslint-disable-line unicorn/no-top-level-assignment-in-function
+    // eslint-disable-next-line unicorn/no-top-level-assignment-in-function
     cachedInstance = loadInstance(connection).catch((error: unknown) => {
-      if (cachedConnectionKey === key) resetFheInstance();
+      if (cachedConnectionKey === key) {
+        resetFheInstance();
+      }
       throw error;
     });
   }
@@ -168,8 +173,8 @@ function getInstance(connection: FheConnection): Promise<FhevmInstance> {
 // request, also picking up a rotated chain key) and by tests that swap the
 // mocked SDK between cases.
 function resetFheInstance(): void {
-  cachedInstance = undefined;
-  cachedConnectionKey = undefined;
+  cachedInstance = undefined; // eslint-disable-line unicorn/no-top-level-assignment-in-function
+  cachedConnectionKey = undefined; // eslint-disable-line unicorn/no-top-level-assignment-in-function
 }
 
 // =============================================================================

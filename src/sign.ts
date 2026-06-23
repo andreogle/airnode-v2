@@ -47,7 +47,9 @@ function accountFromEnv(env: NodeJS.ProcessEnv = process.env): ResolvedAccount {
       return { success: false, error: 'AIRNODE_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string (66 characters)' };
     }
     const result = goSync(() => createAirnodeAccount(privateKey as Hex));
-    if (!result.success) return { success: false, error: `AIRNODE_PRIVATE_KEY is invalid: ${result.error.message}` };
+    if (!result.success) {
+      return { success: false, error: `AIRNODE_PRIVATE_KEY is invalid: ${result.error.message}` };
+    }
     return { success: true, account: result.data };
   }
 

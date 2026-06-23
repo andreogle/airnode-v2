@@ -8,7 +8,9 @@ import { bold, dim, reset } from '../colors';
 // =============================================================================
 function resolveAccount(): PrivateKeyAccount {
   const resolved = accountFromEnv();
-  if (resolved.success) return resolved.account;
+  if (resolved.success) {
+    return resolved.account;
+  }
 
   console.error(resolved.error);
   // eslint-disable-next-line unicorn/no-process-exit

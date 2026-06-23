@@ -9,7 +9,9 @@ export async function loadEnvFile(path: string): Promise<void> {
   // eslint-disable-next-line functional/no-loop-statements
   for (const line of lines) {
     const eqIndex = line.indexOf('=');
-    if (eqIndex === -1) continue;
+    if (eqIndex === -1) {
+      continue;
+    }
 
     const key = line.slice(0, eqIndex).trim();
     const value = line.slice(eqIndex + 1).trim();

@@ -43,7 +43,9 @@ const ENCODING_WILDCARD = '*';
 const NUMERIC_ENCODING_TYPES = new Set(['int256', 'uint256']);
 
 function isNumericEncodingType(type: string): boolean {
-  if (type === ENCODING_WILDCARD) return true;
+  if (type === ENCODING_WILDCARD) {
+    return true;
+  }
   return type
     .split(',')
     .map((t) => t.trim())
@@ -151,15 +153,21 @@ export const endpointSchema = z
   })
   .refine(
     (endpoint) => {
-      if (!endpoint.encrypt) return true;
-      if (!endpoint.encoding) return false;
+      if (!endpoint.encrypt) {
+        return true;
+      }
+      if (!endpoint.encoding) {
+        return false;
+      }
       // FHE-encrypted endpoints must concretely pin encoding — the operator
       // approved a specific encryption shape, so requester wildcards (`*`) and
       // `times` overrides are not allowed. A wildcard `path` would let any
       // client pick what gets encrypted; a wildcard `times` would let them
       // change the encrypted plaintext's magnitude.
       const { type, path, times } = endpoint.encoding;
-      if (type === '*' || path === '*' || times === '*') return false;
+      if (type === '*' || path === '*' || times === '*') {
+        return false;
+      }
       return ENCRYPTABLE_ENCODING_TYPES.has(type);
     },
     {
@@ -294,8 +302,8 @@ export const configSchema = z
   })
   .refine(
     (config) => {
-      const usesFhe = config.apis.some((api) => api.endpoints.some((endpoint) => endpoint.encrypt !== undefined));
-      return !usesFhe || config.settings.fhe !== 'none';
+      const isUsesFhe = config.apis.some((api) => api.endpoints.some((endpoint) => endpoint.encrypt !== undefined));
+      return !isUsesFhe || config.settings.fhe !== 'none';
     },
     {
       message: 'An endpoint is configured with `encrypt` but `settings.fhe` is `none` — configure the FHE relayer',

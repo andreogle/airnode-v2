@@ -27,7 +27,7 @@ interface ResponseCache {
 // =============================================================================
 function deriveCacheKey(endpointId: string, parameters: Record<string, string>): string {
   const sortedEntries = Object.keys(parameters)
-    .toSorted()
+    .toSorted((a, b) => a.localeCompare(b))
     .map((key) => [key, parameters[key] ?? ''] as const);
 
   return keccak256(toHex(JSON.stringify([endpointId, sortedEntries])));
@@ -47,7 +47,9 @@ function createCache(): ResponseCache {
     get: (endpointId, parameters) => {
       const key = deriveCacheKey(endpointId, parameters);
       const entry = store.get(key);
-      if (!entry) return;
+      if (!entry) {
+        return;
+      }
 
       if (Date.now() > entry.expiresAt) {
         store.delete(key);

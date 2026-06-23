@@ -27,7 +27,7 @@
     "@api3/promise-utils": "^0.4.0",
     "@zama-fhe/relayer-sdk": "^0.4.4",
     "commander": "^15.0.0",
-    "viem": "^2.52.2",
+    "viem": "^2.53.1",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
@@ -38,7 +38,7 @@
     "eslint-plugin-functional": "^10.0.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-promise": "^7.3.0",
-    "eslint-plugin-unicorn": "^65.0.1",
+    "eslint-plugin-unicorn": "^68.0.0",
     "prettier": "3.8.4",
     "prettier-plugin-solidity": "^2.3.1",
     "typescript-eslint": "^8.61.1"

@@ -233,7 +233,9 @@ async function callVoidHook<T>(
   index = 0
 ): Promise<void> {
   const plugin = plugins[index];
-  if (!plugin) return;
+  if (!plugin) {
+    return;
+  }
 
   const hook = getHook(plugin.hooks);
   if (hook) {
@@ -266,7 +268,9 @@ async function callHttpRequestHook(
   index = 0
 ): Promise<HttpRequestResult> {
   const plugin = plugins[index];
-  if (!plugin) return undefined;
+  if (!plugin) {
+    return undefined;
+  }
 
   const hook = plugin.hooks.onHttpRequest;
   if (hook) {
@@ -306,7 +310,9 @@ async function callBeforeApiCallHook(
   index = 0
 ): Promise<{ readonly parameters: Record<string, string>; readonly dropped: boolean }> {
   const plugin = plugins[index];
-  if (!plugin) return { parameters: context.parameters, dropped: false };
+  if (!plugin) {
+    return { parameters: context.parameters, dropped: false };
+  }
 
   const hook = plugin.hooks.onBeforeApiCall;
   if (hook) {
@@ -343,7 +349,9 @@ async function callAfterApiCallHook(
   index = 0
 ): Promise<{ readonly response: ApiCallResult; readonly dropped: boolean }> {
   const plugin = plugins[index];
-  if (!plugin) return { response: context.response, dropped: false };
+  if (!plugin) {
+    return { response: context.response, dropped: false };
+  }
 
   const hook = plugin.hooks.onAfterApiCall;
   if (hook) {
@@ -386,7 +394,9 @@ async function callBeforeSignHook(
   index = 0
 ): Promise<{ readonly data: Hex; readonly dropped: boolean }> {
   const plugin = plugins[index];
-  if (!plugin) return { data: context.data, dropped: false };
+  if (!plugin) {
+    return { data: context.data, dropped: false };
+  }
 
   const hook = plugin.hooks.onBeforeSign;
   if (hook) {
@@ -471,7 +481,7 @@ async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Pro
     logger.error(`Plugin "${entry.source}" has no default export`);
     return undefined;
   }
-  const built = typeof def === 'function' ? goSync(() => def(config)) : goSync(() => def);
+  const built = goSync(() => (typeof def === 'function' ? def(config) : def));
   if (!built.success) {
     logger.error(`Plugin "${entry.source}" factory threw while constructing: ${built.error.message}`);
     return undefined;
@@ -494,14 +504,18 @@ async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Pro
 // Load plugins from config entries
 // =============================================================================
 async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDir: string): Promise<PluginRegistry> {
-  if (configEntries.length === 0) return createRegistry([]);
+  if (configEntries.length === 0) {
+    return createRegistry([]);
+  }
 
   const loaded: LoadedPlugin[] = [];
 
   // eslint-disable-next-line functional/no-loop-statements
   for (const entry of configEntries) {
     const result = await loadPluginEntry(entry, configDir);
-    if (result) loaded.push(result); // eslint-disable-line functional/immutable-data
+    if (result) {
+      loaded.push(result); // eslint-disable-line functional/immutable-data
+    }
   }
 
   // Surface plugins that can rewrite signed payload bytes. These plugins can

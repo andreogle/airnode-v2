@@ -68,7 +68,9 @@ export default function heartbeat(config: Config): AirnodePlugin {
     name: 'heartbeat',
     hooks: {
       onResponseSent: async (context: ResponseSentContext) => {
-        if (!config.url) return;
+        if (!config.url) {
+          return;
+        }
 
         const payload: HeartbeatPayload = {
           timestamp: new Date().toISOString(),
@@ -80,7 +82,7 @@ export default function heartbeat(config: Config): AirnodePlugin {
 
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          ...(config.apiKey ? { 'x-api-key': config.apiKey } : {}),
+          ...(config.apiKey && { 'x-api-key': config.apiKey }),
         };
 
         await fetch(config.url, {

@@ -15,7 +15,9 @@ function makeRequest(headers: Record<string, string> = {}): Request {
 
 function expectError(result: AuthResult): string {
   expect(result.authenticated).toBe(false);
-  if ('error' in result) return result.error;
+  if ('error' in result) {
+    return result.error;
+  }
   return 'payment required';
 }
 
@@ -149,6 +151,8 @@ interface FakeRpcOptions {
   readonly txTo?: string | null;
   readonly txValue?: bigint;
   readonly receiptFails?: boolean;
+  readonly blockFails?: boolean;
+  readonly txFails?: boolean;
 }
 
 function fakeRpc(options: FakeRpcOptions = {}): RpcClient {
@@ -161,13 +165,18 @@ function fakeRpc(options: FakeRpcOptions = {}): RpcClient {
             blockNumber: 16n,
             logs: options.receiptLogs ?? [],
           }),
-    getBlock: () => Promise.resolve({ timestamp: options.blockTimestamp ?? BigInt(Math.floor(Date.now() / 1000)) }),
+    getBlock: () =>
+      options.blockFails
+        ? Promise.reject(new Error('rpc unavailable'))
+        : Promise.resolve({ timestamp: options.blockTimestamp ?? BigInt(Math.floor(Date.now() / 1000)) }),
     getTransaction: () =>
-      Promise.resolve({
-        from: options.txFrom ?? payerAccount.address,
-        to: options.txTo ?? RECIPIENT,
-        value: options.txValue ?? 1_000_000n,
-      }),
+      options.txFails
+        ? Promise.reject(new Error('rpc unavailable'))
+        : Promise.resolve({
+            from: options.txFrom ?? payerAccount.address,
+            to: options.txTo ?? RECIPIENT,
+            value: options.txValue ?? 1_000_000n,
+          }),
   };
 }
 
@@ -230,7 +239,9 @@ describe('x402 auth', () => {
 
     expect(result.authenticated).toBe(false);
     expect(isPaymentRequired(result)).toBe(true);
-    if (!isPaymentRequired(result)) throw new Error('expected paymentRequired');
+    if (!isPaymentRequired(result)) {
+      throw new Error('expected paymentRequired');
+    }
     expect(result.paymentDetails.airnode).toBe(CTX.airnode);
     expect(result.paymentDetails.endpointId).toBe(CTX.endpointId);
     expect(result.paymentDetails.amount).toBe('1000000');
@@ -253,6 +264,52 @@ describe('x402 auth', () => {
     });
     const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
     expect(expectError(result)).toBe('Invalid txHash in payment proof');
+  });
+
+  test('rejects a JSON literal that is not an object', async () => {
+    const result = await authenticateRequest(makeRequest(proofHeader('null')), CTX, x402Config);
+    expect(expectError(result)).toBe('X-Payment-Proof must be a JSON object');
+  });
+
+  test('rejects a JSON number that is not an object', async () => {
+    const result = await authenticateRequest(makeRequest(proofHeader('5')), CTX, x402Config);
+    expect(expectError(result)).toBe('X-Payment-Proof must be a JSON object');
+  });
+
+  test('rejects a non-numeric expiresAt in the proof', async () => {
+    const proof = JSON.stringify({
+      txHash: `0x${'ab'.repeat(32)}`,
+      expiresAt: 'soon',
+      signature: `0x${'ab'.repeat(65)}`,
+    });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Invalid expiresAt in payment proof');
+  });
+
+  test('rejects a non-finite expiresAt in the proof', async () => {
+    const proof = `{"txHash":"0x${'ab'.repeat(32)}","expiresAt":1e999,"signature":"0x${'ab'.repeat(65)}"}`;
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Invalid expiresAt in payment proof');
+  });
+
+  test('rejects a non-string signature in the proof', async () => {
+    const proof = JSON.stringify({
+      txHash: `0x${'ab'.repeat(32)}`,
+      expiresAt: Math.floor(Date.now() / 1000) + 120,
+      signature: 12_345,
+    });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Invalid signature in payment proof');
+  });
+
+  test('rejects a non-hex signature in the proof', async () => {
+    const proof = JSON.stringify({
+      txHash: `0x${'ab'.repeat(32)}`,
+      expiresAt: Math.floor(Date.now() / 1000) + 120,
+      signature: 'not-hex',
+    });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Invalid signature in payment proof');
   });
 
   test('rejects an expired payment proof', async () => {
@@ -343,6 +400,41 @@ describe('x402 auth', () => {
       fakeRpc({ receiptLogs: [transferLog(RECIPIENT, 1_000_000n, '0x000000000000000000000000000000000000FFFF')] })
     );
     const proof = await makeSignedProof({ txHash: `0x${'09'.repeat(32)}` });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, erc20Config);
+    expect(expectError(result)).toBe('Payment verification failed');
+  });
+
+  test('rejects when the block lookup fails', async () => {
+    setRpcClientFactory(() => fakeRpc({ blockFails: true }));
+    const proof = await makeSignedProof({ txHash: `0x${'10'.repeat(32)}` });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Payment verification failed');
+  });
+
+  test('rejects when the transaction lookup fails', async () => {
+    setRpcClientFactory(() => fakeRpc({ txFails: true }));
+    const proof = await makeSignedProof({ txHash: `0x${'11'.repeat(32)}` });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Payment verification failed');
+  });
+
+  test('ignores a log from the right token but a non-Transfer topic', async () => {
+    const nonTransferLog = {
+      address: USDC,
+      topics: [`0x${'ee'.repeat(32)}`, `0x${'00'.repeat(32)}`, `0x${RECIPIENT.slice(2).padStart(64, '0')}`],
+      data: `0x${1_000_000n.toString(16)}`,
+    };
+    setRpcClientFactory(() => fakeRpc({ receiptLogs: [nonTransferLog] }));
+    const proof = await makeSignedProof({ txHash: `0x${'12'.repeat(32)}` });
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, erc20Config);
+    expect(expectError(result)).toBe('Payment verification failed');
+  });
+
+  test('ignores an ERC-20 Transfer log to a different recipient', async () => {
+    setRpcClientFactory(() =>
+      fakeRpc({ receiptLogs: [transferLog('0x000000000000000000000000000000000000dEaD', 1_000_000n)] })
+    );
+    const proof = await makeSignedProof({ txHash: `0x${'13'.repeat(32)}` });
     const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, erc20Config);
     expect(expectError(result)).toBe('Payment verification failed');
   });

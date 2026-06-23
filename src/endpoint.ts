@@ -13,9 +13,10 @@ interface ResolvedEndpoint {
 // Endpoint ID derivation
 // =============================================================================
 function isSecretParameter(param: { readonly secret?: boolean; readonly fixed?: string | number | boolean }): boolean {
-  if (param.secret === true) return true;
-  if (typeof param.fixed === 'string' && param.fixed.startsWith('${')) return true;
-  return false;
+  if (param.secret === true) {
+    return true;
+  }
+  return typeof param.fixed === 'string' && param.fixed.startsWith('${');
 }
 
 function buildParameterSpec(
@@ -44,7 +45,9 @@ function buildEncodingSpec(encoding?: {
   readonly path: string;
   readonly times?: string;
 }): string {
-  if (!encoding) return '';
+  if (!encoding) {
+    return '';
+  }
   return `type=${encoding.type},path=${encoding.path},times=${encoding.times ?? ''}`;
 }
 
@@ -52,7 +55,9 @@ function buildEncodingSpec(encoding?: {
 // contract so an on-chain verifier can tell from the endpoint ID alone that the
 // signed `data` is an encrypted-input handle for a specific contract.
 function buildEncryptSpec(encrypt?: { readonly type: string; readonly contract: string }): string {
-  if (!encrypt) return '';
+  if (!encrypt) {
+    return '';
+  }
   return `fhe=${encrypt.type},contract=${encrypt.contract.toLowerCase()}`;
 }
 

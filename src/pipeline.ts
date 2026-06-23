@@ -76,9 +76,15 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 function stableStringify(value: unknown): string {
-  if (value === undefined) return 'null';
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  if (value === undefined) {
+    return 'null';
+  }
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
   const sortedEntries = Object.entries(value as Record<string, unknown>)
     .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
@@ -103,7 +109,9 @@ function validateRequiredParameters(
     .filter((p) => parameters[p.name] === undefined)
     .map((p) => p.name);
 
-  if (missing.length === 0) return undefined;
+  if (missing.length === 0) {
+    return undefined;
+  }
   return `Missing required parameter(s): ${missing.join(', ')}`;
 }
 
@@ -159,7 +167,9 @@ async function fetchProofIfEnabled(
   deps: RequestDependencies
 ): Promise<ReclaimProof | undefined> {
   const proof = deps.settings.proof;
-  if (proof === 'none') return undefined;
+  if (proof === 'none') {
+    return undefined;
+  }
 
   const responseMatches = resolved.endpoint.responseMatches;
   if (!responseMatches) {
@@ -240,8 +250,12 @@ function resolveField(
   parameters: Record<string, string>,
   reservedKey: string
 ): { readonly value: string | undefined; readonly invalid?: string } {
-  if (configValue === undefined) return { value: undefined };
-  if (configValue !== ENCODING_WILDCARD) return { value: configValue };
+  if (configValue === undefined) {
+    return { value: undefined };
+  }
+  if (configValue !== ENCODING_WILDCARD) {
+    return { value: configValue };
+  }
   const supplied = reservedString(parameters, reservedKey);
   if (supplied === undefined || supplied === '') {
     return { value: undefined, invalid: `Endpoint requires \`${reservedKey}\` request parameter` };
@@ -253,16 +267,24 @@ function resolveEncoding(
   configEncoding: Encoding | undefined,
   parameters: Record<string, string>
 ): ResolvedEncoding | InvalidEncoding | undefined {
-  if (!configEncoding) return undefined;
+  if (!configEncoding) {
+    return undefined;
+  }
 
   const type = resolveField(configEncoding.type, parameters, RESERVED_PARAM_TYPE);
-  if (type.invalid) return { invalid: true, message: type.invalid };
+  if (type.invalid) {
+    return { invalid: true, message: type.invalid };
+  }
 
   const path = resolveField(configEncoding.path, parameters, RESERVED_PARAM_PATH);
-  if (path.invalid) return { invalid: true, message: path.invalid };
+  if (path.invalid) {
+    return { invalid: true, message: path.invalid };
+  }
 
   const times = resolveField(configEncoding.times, parameters, RESERVED_PARAM_TIMES);
-  if (times.invalid) return { invalid: true, message: times.invalid };
+  if (times.invalid) {
+    return { invalid: true, message: times.invalid };
+  }
 
   if (!type.value || !path.value) {
     return { invalid: true, message: 'Endpoint encoding is incomplete' };
@@ -289,7 +311,9 @@ async function prepareSignableData(
   encodedData: Hex,
   deps: RequestDependencies
 ): Promise<Hex> {
-  if (!endpoint.encrypt) return encodedData;
+  if (!endpoint.encrypt) {
+    return encodedData;
+  }
 
   const fhe = deps.settings.fhe;
   if (fhe === 'none') {
@@ -409,7 +433,9 @@ function handleAsyncRequest(
   deps: RequestDependencies
 ): Response {
   const store = deps.asyncStore;
-  if (!store) return jsonResponse({ error: 'Async not configured' }, 500);
+  if (!store) {
+    return jsonResponse({ error: 'Async not configured' }, 500);
+  }
 
   const pending = store.create();
   if (!pending) {

@@ -86,14 +86,18 @@ describe('accountFromEnv', () => {
   test('resolves from AIRNODE_PRIVATE_KEY', () => {
     const result = accountFromEnv({ AIRNODE_PRIVATE_KEY: TEST_PRIVATE_KEY });
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     expect(result.account.address).toBe(TEST_ADDRESS);
   });
 
   test('resolves from AIRNODE_MNEMONIC', () => {
     const result = accountFromEnv({ AIRNODE_MNEMONIC: TEST_MNEMONIC });
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     expect(result.account.address).toBe(TEST_ADDRESS);
   });
 
@@ -101,14 +105,18 @@ describe('accountFromEnv', () => {
     const otherKey: Hex = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'; // a different account
     const result = accountFromEnv({ AIRNODE_MNEMONIC: TEST_MNEMONIC, AIRNODE_PRIVATE_KEY: otherKey });
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     expect(result.account.address).toBe(TEST_ADDRESS);
   });
 
   test('rejects a private key with the wrong length', () => {
     const result = accountFromEnv({ AIRNODE_PRIVATE_KEY: '0x1234' });
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.error).toBe('AIRNODE_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string (66 characters)');
   });
 
@@ -117,21 +125,27 @@ describe('accountFromEnv', () => {
       AIRNODE_PRIVATE_KEY: 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
     });
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.error).toContain('AIRNODE_PRIVATE_KEY must be');
   });
 
   test('rejects an invalid mnemonic', () => {
     const result = accountFromEnv({ AIRNODE_MNEMONIC: 'not actually a real bip39 mnemonic phrase here' });
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.error).toContain('AIRNODE_MNEMONIC is not a valid BIP-39 mnemonic');
   });
 
   test('reports a clear error when neither variable is set', () => {
     const result = accountFromEnv({});
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.error).toBe('AIRNODE_PRIVATE_KEY or AIRNODE_MNEMONIC environment variable is required');
   });
 });

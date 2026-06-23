@@ -12,23 +12,23 @@ import { encryptResponse, resetFheInstance } from './fhe';
 const SEPOLIA_PRESET = { relayerUrl: 'https://relayer.testnet.zama.cloud', aclContractAddress: '0xACLsepolia' };
 const MAINNET_PRESET = { relayerUrl: 'https://relayer.mainnet.zama.cloud', aclContractAddress: '0xACLmainnet' };
 
-let createInstanceConfigs: unknown[] = [];
+let instanceConfigs: unknown[] = [];
 
 let encryptedInputArgs: { readonly contract: string; readonly user: string }[] = [];
 
-let addCalls: { readonly method: string; readonly value: bigint }[] = [];
+let additionCalls: { readonly method: string; readonly value: bigint }[] = [];
 
 let mockHandle: Uint8Array = new Uint8Array(32).fill(0x11);
 
 let mockProof: Uint8Array = new Uint8Array([0x22, 0x22, 0x22, 0x22]);
 
-let mockEmptyHandles = false;
-let createInstanceShouldFail = false;
-let encryptShouldFail = false;
+let isMockEmptyHandles = false;
+let isCreateInstanceShouldFail = false;
+let isEncryptShouldFail = false;
 
 function makeBuilder(): Record<string, unknown> {
   const record = (method: string) => (value: bigint) => {
-    addCalls.push({ method, value });
+    additionCalls.push({ method, value });
     return builder;
   };
   const builder: Record<string, unknown> = {
@@ -39,9 +39,9 @@ function makeBuilder(): Record<string, unknown> {
     add128: record('add128'),
     add256: record('add256'),
     encrypt: () =>
-      encryptShouldFail
+      isEncryptShouldFail
         ? Promise.reject(new Error('relayer encrypt failed'))
-        : Promise.resolve({ handles: mockEmptyHandles ? [] : [mockHandle], inputProof: mockProof }),
+        : Promise.resolve({ handles: isMockEmptyHandles ? [] : [mockHandle], inputProof: mockProof }),
   };
   return builder;
 }
@@ -50,8 +50,10 @@ void mock.module('@zama-fhe/relayer-sdk/node', () => ({
   SepoliaConfig: SEPOLIA_PRESET,
   MainnetConfig: MAINNET_PRESET,
   createInstance: (config: unknown) => {
-    createInstanceConfigs.push(config);
-    if (createInstanceShouldFail) return Promise.reject(new Error('relayer unavailable'));
+    instanceConfigs.push(config);
+    if (isCreateInstanceShouldFail) {
+      return Promise.reject(new Error('relayer unavailable'));
+    }
     return Promise.resolve({
       createEncryptedInput: (contract: string, user: string) => {
         encryptedInputArgs.push({ contract, user });
@@ -81,14 +83,14 @@ const EXPECTED_PACKED: `0x${string}` =
 
 describe('encryptResponse', () => {
   beforeEach(() => {
-    createInstanceConfigs = [];
+    instanceConfigs = [];
     encryptedInputArgs = [];
-    addCalls = [];
+    additionCalls = [];
     mockHandle = new Uint8Array(32).fill(0x11);
     mockProof = new Uint8Array([0x22, 0x22, 0x22, 0x22]);
-    mockEmptyHandles = false;
-    createInstanceShouldFail = false;
-    encryptShouldFail = false;
+    isMockEmptyHandles = false;
+    isCreateInstanceShouldFail = false;
+    isEncryptShouldFail = false;
     resetFheInstance();
   });
 
@@ -120,7 +122,7 @@ describe('encryptResponse', () => {
     ['euint256', 'add256'],
   ] as const)('encrypt.type %s packs the value via %s', async (type, method) => {
     await encryptResponse(SEPOLIA, { type, contract: CONTRACT }, encodedInt256(42n), 'int256');
-    expect(addCalls).toEqual([{ method, value: 42n }]);
+    expect(additionCalls).toEqual([{ method, value: 42n }]);
   });
 
   test('throws if the encoding type does not decode to an integer', () => {
@@ -134,7 +136,7 @@ describe('encryptResponse', () => {
     const big = 2n ** 255n + 7n;
     const encoded = encodeAbiParameters([{ type: 'uint256' }], [big]);
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encoded, 'uint256');
-    expect(addCalls).toEqual([{ method: 'add256', value: big }]);
+    expect(additionCalls).toEqual([{ method: 'add256', value: big }]);
   });
 
   test('rejects a negative encoded value', () => {
@@ -150,7 +152,7 @@ describe('encryptResponse', () => {
   });
 
   test('rejects when the relayer returns no handles', () => {
-    mockEmptyHandles = true;
+    isMockEmptyHandles = true;
     expect(
       encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256')
     ).rejects.toThrow('no handles');
@@ -165,7 +167,7 @@ describe('encryptResponse', () => {
 
   test('builds the relayer config from the sepolia preset plus the rpc url', async () => {
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
-    expect(createInstanceConfigs).toEqual([{ ...SEPOLIA_PRESET, network: RPC_URL }]);
+    expect(instanceConfigs).toEqual([{ ...SEPOLIA_PRESET, network: RPC_URL }]);
   });
 
   test('uses the mainnet preset when network is mainnet', async () => {
@@ -175,7 +177,7 @@ describe('encryptResponse', () => {
       encodedInt256(1n),
       'int256'
     );
-    expect(createInstanceConfigs).toEqual([{ ...MAINNET_PRESET, network: RPC_URL }]);
+    expect(instanceConfigs).toEqual([{ ...MAINNET_PRESET, network: RPC_URL }]);
   });
 
   test('attaches ApiKeyHeader auth when apiKey is set', async () => {
@@ -185,7 +187,7 @@ describe('encryptResponse', () => {
       encodedInt256(1n),
       'int256'
     );
-    expect(createInstanceConfigs).toEqual([
+    expect(instanceConfigs).toEqual([
       { ...SEPOLIA_PRESET, network: RPC_URL, auth: { __type: 'ApiKeyHeader', value: 'secret-key' } },
     ]);
   });
@@ -193,14 +195,14 @@ describe('encryptResponse', () => {
   test('reuses the cached instance across calls with the same connection', async () => {
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(2n), 'int256');
-    expect(createInstanceConfigs).toHaveLength(1);
+    expect(instanceConfigs).toHaveLength(1);
   });
 
   test('re-creates the instance after resetFheInstance', async () => {
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
     resetFheInstance();
     await encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(2n), 'int256');
-    expect(createInstanceConfigs).toHaveLength(2);
+    expect(instanceConfigs).toHaveLength(2);
   });
 
   test('shares a single createInstance call across concurrent first requests', async () => {
@@ -210,17 +212,17 @@ describe('encryptResponse', () => {
     ]);
     expect(a).toBe(EXPECTED_PACKED);
     expect(b).toBe(EXPECTED_PACKED);
-    expect(createInstanceConfigs).toHaveLength(1);
+    expect(instanceConfigs).toHaveLength(1);
   });
 
   test('drops the cached instance when createInstance fails so the next request retries', async () => {
-    createInstanceShouldFail = true;
+    isCreateInstanceShouldFail = true;
     const failed = encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
     expect(failed).rejects.toThrow('relayer unavailable');
     await failed.catch(() => {});
-    expect(createInstanceConfigs).toHaveLength(1);
+    expect(instanceConfigs).toHaveLength(1);
 
-    createInstanceShouldFail = false;
+    isCreateInstanceShouldFail = false;
     const result = await encryptResponse(
       SEPOLIA,
       { type: 'euint256', contract: CONTRACT },
@@ -228,16 +230,16 @@ describe('encryptResponse', () => {
       'int256'
     );
     expect(result).toBe(EXPECTED_PACKED);
-    expect(createInstanceConfigs).toHaveLength(2);
+    expect(instanceConfigs).toHaveLength(2);
   });
 
   test('drops the cached instance when an encrypt call fails so the next request rebuilds it', async () => {
-    encryptShouldFail = true;
+    isEncryptShouldFail = true;
     const failed = encryptResponse(SEPOLIA, { type: 'euint256', contract: CONTRACT }, encodedInt256(1n), 'int256');
     expect(failed).rejects.toThrow('relayer encrypt failed');
     await failed.catch(() => {});
 
-    encryptShouldFail = false;
+    isEncryptShouldFail = false;
     const result = await encryptResponse(
       SEPOLIA,
       { type: 'euint256', contract: CONTRACT },
@@ -245,6 +247,6 @@ describe('encryptResponse', () => {
       'int256'
     );
     expect(result).toBe(EXPECTED_PACKED);
-    expect(createInstanceConfigs).toHaveLength(2);
+    expect(instanceConfigs).toHaveLength(2);
   });
 });

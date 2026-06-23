@@ -35,6 +35,20 @@ function asArray(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function markParamsSecret(rawParams: readonly unknown[], params: readonly unknown[]): void {
+  // eslint-disable-next-line functional/no-loop-statements
+  for (const [paramIndex, rawParam] of rawParams.entries()) {
+    const fixed = asRecord(rawParam)?.['fixed'];
+    if (typeof fixed !== 'string' || !fixed.startsWith('${')) {
+      continue;
+    }
+    const target = asRecord(params[paramIndex]);
+    if (target) {
+      target['secret'] = true; // eslint-disable-line functional/immutable-data
+    }
+  }
+}
+
 function markEnvBackedFixedParamsSecret(raw: unknown, interpolated: unknown): void {
   const rawApis = asArray(asRecord(raw)?.['apis']);
   const apis = asArray(asRecord(interpolated)?.['apis']);
@@ -46,13 +60,7 @@ function markEnvBackedFixedParamsSecret(raw: unknown, interpolated: unknown): vo
     for (const [endpointIndex, rawEndpoint] of rawEndpoints.entries()) {
       const rawParams = asArray(asRecord(rawEndpoint)?.['parameters']);
       const params = asArray(asRecord(endpoints[endpointIndex])?.['parameters']);
-      // eslint-disable-next-line functional/no-loop-statements
-      for (const [paramIndex, rawParam] of rawParams.entries()) {
-        const fixed = asRecord(rawParam)?.['fixed'];
-        if (typeof fixed !== 'string' || !fixed.startsWith('${')) continue;
-        const target = asRecord(params[paramIndex]);
-        if (target) target['secret'] = true; // eslint-disable-line functional/immutable-data
-      }
+      markParamsSecret(rawParams, params);
     }
   }
 }

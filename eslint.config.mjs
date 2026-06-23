@@ -56,7 +56,7 @@ export default defineConfig([
       'no-else-return': ['error', { allowElseIf: false }],
 
       // --- General strict rules ---
-      curly: ['error', 'multi-line'],
+      curly: ['error', 'all'],
       eqeqeq: ['error', 'always'],
       'no-console': ['warn', { allow: ['info', 'warn', 'error'] }],
       'no-eval': 'error',
@@ -74,6 +74,14 @@ export default defineConfig([
 
       // --- Unicorn overrides ---
       'unicorn/prevent-abbreviations': 'off',
+      'unicorn/name-replacements': 'off',
+      // Conflicts with functional/no-loop-statements (recursion replaces loops).
+      'unicorn/no-useless-recursion': 'off',
+      // Conflicts with the no-else / early-return style (wants `else if`).
+      'unicorn/prefer-else-if': 'off',
+      // Conflicts with the no-try/catch convention and deliberate promise
+      // combinators used to cache and race promises.
+      'unicorn/prefer-await': 'off',
 
       // --- Import ordering (alphabetical) ---
       'import-x/order': [
@@ -93,6 +101,19 @@ export default defineConfig([
 
   {
     files: ['**/*.test.ts', '**/*.test.tsx'],
-    rules: Object.fromEntries(Object.keys(functionalPlugin.rules).map((rule) => [`functional/${rule}`, 'off'])),
+    rules: {
+      ...Object.fromEntries(Object.keys(functionalPlugin.rules).map((rule) => [`functional/${rule}`, 'off'])),
+      // Standard async fixture pattern: `let ctx; beforeAll(() => { ctx = ... })`.
+      'unicorn/no-top-level-assignment-in-function': 'off',
+      // Tests mock process globals (e.g. fetch) and nest calls in assertions.
+      'unicorn/no-global-object-property-assignment': 'off',
+      'unicorn/max-nested-calls': 'off',
+    },
+  },
+
+  {
+    // CLI command modules build commander.js commands at module load.
+    files: ['src/cli/**/*.ts'],
+    rules: { 'unicorn/no-top-level-side-effects': 'off' },
   },
 ]);

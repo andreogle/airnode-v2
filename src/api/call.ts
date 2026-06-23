@@ -20,7 +20,7 @@ function buildUrl(url: string, path: string, pathParameters: Record<string, stri
   let resolvedPath = path;
   // eslint-disable-next-line functional/no-loop-statements
   for (const [name, value] of Object.entries(pathParameters)) {
-    resolvedPath = resolvedPath.replaceAll(`{${name}}`, encodeURIComponent(value));
+    resolvedPath = resolvedPath.replaceAll(`{${name}}`, () => encodeURIComponent(value));
   }
 
   return `${url}${resolvedPath}`;
@@ -94,7 +94,7 @@ function buildApiRequest(api: Api, endpoint: Endpoint, requestParameters: Record
     headers['Content-Type'] = 'application/json'; // eslint-disable-line functional/immutable-data
   }
 
-  return { url: url.toString(), method: endpoint.method, headers, body };
+  return { url: url.href, method: endpoint.method, headers, body };
 }
 
 async function callApi(

@@ -27,7 +27,9 @@ async function queryTxtRecords(host: string): Promise<readonly string[]> {
   const response = await fetch(url);
   const data = (await response.json()) as DohResponse;
 
-  if (data.Status !== 0 || !data.Answer) return [];
+  if (data.Status !== 0 || !data.Answer) {
+    return [];
+  }
 
   // TXT records (type 16) — strip surrounding quotes added by DNS
   return data.Answer.filter((a) => a.type === 16).map((a) => a.data.replaceAll(/^"|"$/g, ''));
@@ -36,7 +38,7 @@ async function queryTxtRecords(host: string): Promise<readonly string[]> {
 // =============================================================================
 // Address matching
 // =============================================================================
-function findAddressInRecords(records: readonly string[], address: string): boolean {
+function hasAddressInRecords(records: readonly string[], address: string): boolean {
   const normalized = address.toLowerCase();
 
   return records.some((record) => record.split(',').some((entry) => entry.trim().toLowerCase() === normalized));
@@ -60,9 +62,9 @@ async function verifyIdentity(
 
   return addresses.map((address) => ({
     address,
-    verified: findAddressInRecords(records, address),
+    verified: hasAddressInRecords(records, address),
   }));
 }
 
-export { buildTxtRecordHost, findAddressInRecords, queryTxtRecords, verifyIdentity };
+export { buildTxtRecordHost, hasAddressInRecords, queryTxtRecords, verifyIdentity };
 export type { VerifyResult };

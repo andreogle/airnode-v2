@@ -201,7 +201,9 @@ export default function encryptedChannel(config: Config): AirnodePlugin {
       // =======================================================================
       onBeforeApiCall: (ctx: BeforeApiCallContext): BeforeApiCallResult => {
         const encrypted = ctx.parameters['_encrypted'];
-        if (!encrypted) return;
+        if (!encrypted) {
+          return;
+        }
 
         const ciphertext = hexToBytes(encrypted);
         if (ciphertext.length < PUBKEY_LENGTH + NONCE_LENGTH + TAG_LENGTH) {
@@ -241,7 +243,9 @@ export default function encryptedChannel(config: Config): AirnodePlugin {
       // =======================================================================
       onBeforeSign: (ctx: BeforeSignContext): BeforeSignResult => {
         const responsePubKey = responseKeys.get(ctx.requestId);
-        if (!responsePubKey) return;
+        if (!responsePubKey) {
+          return;
+        }
 
         // Clean up stored key
         responseKeys.delete(ctx.requestId); // eslint-disable-line functional/immutable-data

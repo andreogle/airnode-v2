@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { go, goSync } from '@api3/promise-utils';
 import { type Hex, createPublicClient, encodePacked, http, keccak256, recoverMessageAddress, toHex } from 'viem';
 import { createBoundedMap } from './bounded-map';
-import { checkRateLimit } from './rate-limit';
+import { isWithinRateLimit } from './rate-limit';
 import type { TokenBucket } from './rate-limit';
 import type { ClientAuth, ClientAuthMethod } from './types';
 
@@ -82,7 +82,9 @@ let rpcClientFactory: (rpc: string) => RpcClient = defaultRpcClientFactory;
 
 function getPublicClient(rpc: string): RpcClient {
   const existing = rpcClients.get(rpc);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
   const client = rpcClientFactory(rpc);
   rpcClients.set(rpc, client); // eslint-disable-line functional/immutable-data
   return client;
@@ -91,7 +93,7 @@ function getPublicClient(rpc: string): RpcClient {
 // Swap the RPC client factory and clear the pool. Pass nothing to restore the
 // real (viem http) factory. Intended for tests — production never calls this.
 function setRpcClientFactory(factory?: (rpc: string) => RpcClient): void {
-  rpcClientFactory = factory ?? defaultRpcClientFactory;
+  rpcClientFactory = factory ?? defaultRpcClientFactory; // eslint-disable-line unicorn/no-top-level-assignment-in-function
   rpcClients.clear(); // eslint-disable-line functional/immutable-data
 }
 
@@ -106,7 +108,7 @@ const RPC_RETRY_OPTIONS = { retries: 2, delay: { type: 'static' as const, delayM
 // =============================================================================
 // API key auth
 // =============================================================================
-function constantTimeEquals(a: string, b: string): boolean {
+function isConstantTimeEqual(a: string, b: string): boolean {
   const ha = createHash('sha256').update(a).digest();
   const hb = createHash('sha256').update(b).digest();
   return timingSafeEqual(ha, hb);
@@ -114,10 +116,14 @@ function constantTimeEquals(a: string, b: string): boolean {
 
 function checkApiKey(request: Request, keys: readonly string[]): AuthResult {
   const apiKey = request.headers.get('X-Api-Key');
-  if (!apiKey) return { authenticated: false, error: 'Missing X-Api-Key header' };
+  if (!apiKey) {
+    return { authenticated: false, error: 'Missing X-Api-Key header' };
+  }
 
-  const valid = keys.some((key) => constantTimeEquals(apiKey, key));
-  if (!valid) return { authenticated: false, error: 'Invalid API key' };
+  const isValid = keys.some((key) => isConstantTimeEqual(apiKey, key));
+  if (!isValid) {
+    return { authenticated: false, error: 'Invalid API key' };
+  }
 
   return { authenticated: true };
 }
@@ -191,13 +197,21 @@ function buildPaymentAuthHash(airnode: Hex, endpointId: Hex, expiresAt: number):
 
 function parsePaymentProof(raw: string): PaymentProofHeader | string {
   const parsed = goSync(() => JSON.parse(raw) as unknown);
-  if (!parsed.success) return 'X-Payment-Proof must be a JSON object';
+  if (!parsed.success) {
+    return 'X-Payment-Proof must be a JSON object';
+  }
 
   const p = parsed.data as Partial<PaymentProofHeader> | null;
-  if (!p || typeof p !== 'object') return 'X-Payment-Proof must be a JSON object';
+  if (!p || typeof p !== 'object') {
+    return 'X-Payment-Proof must be a JSON object';
+  }
 
-  if (typeof p.txHash !== 'string' || !TX_HASH_REGEX.test(p.txHash)) return 'Invalid txHash in payment proof';
-  if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) return 'Invalid expiresAt in payment proof';
+  if (typeof p.txHash !== 'string' || !TX_HASH_REGEX.test(p.txHash)) {
+    return 'Invalid txHash in payment proof';
+  }
+  if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) {
+    return 'Invalid expiresAt in payment proof';
+  }
   if (typeof p.signature !== 'string' || !HEX_SIGNATURE_REGEX.test(p.signature)) {
     return 'Invalid signature in payment proof';
   }
@@ -220,18 +234,28 @@ async function verifyPayment(
   const client = getPublicClient(rpc);
 
   const receipt = await go(() => client.getTransactionReceipt({ hash: txHash }), RPC_RETRY_OPTIONS);
-  if (!receipt.success || receipt.data.status !== 'success') return false;
+  if (!receipt.success || receipt.data.status !== 'success') {
+    return false;
+  }
 
   // Check transaction recency
   const block = await go(() => client.getBlock({ blockNumber: receipt.data.blockNumber }), RPC_RETRY_OPTIONS);
-  if (!block.success) return false;
-  if (Math.floor(Date.now() / 1000) - Number(block.data.timestamp) > MAX_TX_AGE_SECONDS) return false;
+  if (!block.success) {
+    return false;
+  }
+  if (Math.floor(Date.now() / 1000) - Number(block.data.timestamp) > MAX_TX_AGE_SECONDS) {
+    return false;
+  }
 
   // The transaction sender must match the signer of the payment-auth message —
   // this binds the on-chain payment to the off-chain request authorisation.
   const tx = await go(() => client.getTransaction({ hash: txHash }), RPC_RETRY_OPTIONS);
-  if (!tx.success) return false;
-  if (tx.data.from.toLowerCase() !== expectedPayer.toLowerCase()) return false;
+  if (!tx.success) {
+    return false;
+  }
+  if (tx.data.from.toLowerCase() !== expectedPayer.toLowerCase()) {
+    return false;
+  }
 
   const requiredAmount = BigInt(amount);
 
@@ -243,10 +267,16 @@ async function verifyPayment(
   // ERC-20 transfer — check Transfer event logs
   const transferTopic = keccak256(toHex('Transfer(address,address,uint256)'));
   return receipt.data.logs.some((log) => {
-    if (log.address.toLowerCase() !== token.toLowerCase()) return false;
-    if (log.topics[0] !== transferTopic) return false;
+    if (log.address.toLowerCase() !== token.toLowerCase()) {
+      return false;
+    }
+    if (log.topics[0] !== transferTopic) {
+      return false;
+    }
     const to = `0x${log.topics[2]?.slice(26) ?? ''}`.toLowerCase();
-    if (to !== recipient.toLowerCase()) return false;
+    if (to !== recipient.toLowerCase()) {
+      return false;
+    }
     const value = log.data === '0x' ? 0n : BigInt(log.data);
     return value >= requiredAmount;
   });
@@ -289,12 +319,14 @@ async function checkX402(
   // limit; missing client IPs (programmatic callers) share an 'unknown' bucket.
   const verifierIp = context.clientIp ?? 'unknown';
   const limit = context.x402RateLimit ?? DEFAULT_X402_RATE_LIMIT;
-  if (!checkRateLimit(verifierIp, x402AttemptBuckets, limit.window, limit.max)) {
+  if (!isWithinRateLimit(verifierIp, x402AttemptBuckets, limit.window, limit.max)) {
     return { authenticated: false, error: 'Too many x402 verification attempts — slow down' };
   }
 
   const parsed = parsePaymentProof(proofHeader);
-  if (typeof parsed === 'string') return { authenticated: false, error: parsed };
+  if (typeof parsed === 'string') {
+    return { authenticated: false, error: parsed };
+  }
 
   // expiresAt is a unix-seconds timestamp from the client. Reject proofs that
   // have already expired or are valid for longer than MAX_PROOF_LIFETIME_MS —
@@ -302,30 +334,38 @@ async function checkX402(
   // only dangerous for a short window.
   const nowMs = Date.now();
   const expiresAtMs = parsed.expiresAt * 1000;
-  if (expiresAtMs <= nowMs) return { authenticated: false, error: 'Payment proof expired' };
+  if (expiresAtMs <= nowMs) {
+    return { authenticated: false, error: 'Payment proof expired' };
+  }
   if (expiresAtMs > nowMs + MAX_PROOF_LIFETIME_MS) {
     return { authenticated: false, error: 'Payment proof lifetime exceeds server limit' };
   }
 
   const authHash = buildPaymentAuthHash(context.airnode, context.endpointId, parsed.expiresAt);
   const recovered = await go(() => recoverMessageAddress({ message: { raw: authHash }, signature: parsed.signature }));
-  if (!recovered.success) return { authenticated: false, error: 'Invalid payment proof signature' };
-  if (!ADDRESS_REGEX.test(recovered.data)) return { authenticated: false, error: 'Unrecognised signer address' };
+  if (!recovered.success) {
+    return { authenticated: false, error: 'Invalid payment proof signature' };
+  }
+  if (!ADDRESS_REGEX.test(recovered.data)) {
+    return { authenticated: false, error: 'Unrecognised signer address' };
+  }
   const payer = recovered.data;
 
   const normalizedHash = parsed.txHash.toLowerCase();
-  if (usedPaymentProofs.has(normalizedHash)) return { authenticated: false, error: 'Payment proof already used' };
+  if (usedPaymentProofs.has(normalizedHash)) {
+    return { authenticated: false, error: 'Payment proof already used' };
+  }
 
   // Reserve immediately to prevent race conditions. If the store is full of
   // still-live entries the reservation is refused rather than evicting a
   // legitimate proof — fail closed rather than opening a replay window.
-  const reserved = usedPaymentProofs.set(normalizedHash, { usedAt: Date.now() });
-  if (!reserved) {
+  const isReserved = usedPaymentProofs.set(normalizedHash, { usedAt: Date.now() });
+  if (!isReserved) {
     return { authenticated: false, error: 'Replay cache full — retry shortly' };
   }
 
-  const valid = await verifyPayment(config.rpc, parsed.txHash, config.token, config.amount, config.recipient, payer);
-  if (!valid) {
+  const isValid = await verifyPayment(config.rpc, parsed.txHash, config.token, config.amount, config.recipient, payer);
+  if (!isValid) {
     usedPaymentProofs.delete(normalizedHash);
     return { authenticated: false, error: 'Payment verification failed' };
   }
@@ -337,14 +377,22 @@ async function checkX402(
 // Multi-method dispatch
 // =============================================================================
 function normalizeAuth(auth: ClientAuth | undefined): readonly ClientAuthMethod[] {
-  if (!auth) return [{ type: 'free' }];
-  if (Array.isArray(auth)) return auth;
+  if (!auth) {
+    return [{ type: 'free' }];
+  }
+  if (Array.isArray(auth)) {
+    return auth;
+  }
   return [auth];
 }
 
 async function checkMethod(request: Request, context: AuthContext, method: ClientAuthMethod): Promise<AuthResult> {
-  if (method.type === 'free') return { authenticated: true };
-  if (method.type === 'apiKey') return checkApiKey(request, method.keys);
+  if (method.type === 'free') {
+    return { authenticated: true };
+  }
+  if (method.type === 'apiKey') {
+    return checkApiKey(request, method.keys);
+  }
   return checkX402(request, context, method);
 }
 
@@ -357,7 +405,9 @@ async function authenticateRequest(request: Request, context: AuthContext, auth?
   // eslint-disable-next-line functional/no-loop-statements
   for (const method of methods) {
     const result = await checkMethod(request, context, method);
-    if (result.authenticated) return result;
+    if (result.authenticated) {
+      return result;
+    }
     lastResult = result;
   }
 

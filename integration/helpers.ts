@@ -111,10 +111,12 @@ async function createTestServer(options: TestServerOptions = {}): Promise<TestCo
 }
 
 function findEndpointId(endpointMap: ReadonlyMap<Hex, ResolvedEndpoint>, apiName: string, endpointName: string): Hex {
-  const entry = [...endpointMap.entries()].find(
+  const entry = [...endpointMap].find(
     ([, resolved]) => resolved.api.name === apiName && resolved.endpoint.name === endpointName
   );
-  if (!entry) throw new Error(`Endpoint ${apiName}/${endpointName} not found`);
+  if (!entry) {
+    throw new Error(`Endpoint ${apiName}/${endpointName} not found`);
+  }
   return entry[0];
 }
 
@@ -137,7 +139,9 @@ async function setMockResponse(path: string, response: unknown, status = 200): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, response, status }),
   });
-  if (!result.ok) throw new Error(`Failed to set mock response: ${String(result.status)}`);
+  if (!result.ok) {
+    throw new Error(`Failed to set mock response: ${String(result.status)}`);
+  }
 }
 
 interface RecordedCall {
@@ -149,13 +153,17 @@ interface RecordedCall {
 
 async function getMockCalls(): Promise<readonly RecordedCall[]> {
   const response = await fetch(`${MOCK_API_URL}/mock/calls`);
-  if (!response.ok) throw new Error(`Failed to get mock calls: ${String(response.status)}`);
+  if (!response.ok) {
+    throw new Error(`Failed to get mock calls: ${String(response.status)}`);
+  }
   return (await response.json()) as RecordedCall[];
 }
 
 async function resetMock(): Promise<void> {
   const result = await fetch(`${MOCK_API_URL}/mock/reset`, { method: 'POST' });
-  if (!result.ok) throw new Error(`Failed to reset mock: ${String(result.status)}`);
+  if (!result.ok) {
+    throw new Error(`Failed to reset mock: ${String(result.status)}`);
+  }
 }
 
 export {

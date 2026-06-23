@@ -32,7 +32,9 @@ const DEFAULT_RESPONSES: Record<string, unknown> = {
 function findDefaultResponse(pathname: string): unknown {
   // eslint-disable-next-line functional/no-loop-statements
   for (const [prefix, response] of Object.entries(DEFAULT_RESPONSES)) {
-    if (pathname.startsWith(prefix)) return response;
+    if (pathname.startsWith(prefix)) {
+      return response;
+    }
   }
   return { mock: true };
 }

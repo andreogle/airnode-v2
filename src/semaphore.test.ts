@@ -13,16 +13,18 @@ describe('createSemaphore', () => {
   test('a request over the limit waits until a slot is released', async () => {
     const sem = createSemaphore(1);
     const first = await sem.acquire(1000);
-    if (!first) throw new Error('expected a slot');
+    if (!first) {
+      throw new Error('expected a slot');
+    }
 
-    let secondGotSlot = false;
+    let isSecondGotSlot = false;
     const secondPromise = sem.acquire(1000).then((r) => {
-      secondGotSlot = r !== undefined;
+      isSecondGotSlot = r !== undefined;
       return r;
     });
 
     await Bun.sleep(20);
-    expect(secondGotSlot).toBe(false); // still waiting
+    expect(isSecondGotSlot).toBe(false); // still waiting
 
     first(); // release the only slot
     const second = await secondPromise;
@@ -43,7 +45,9 @@ describe('createSemaphore', () => {
   test('serves waiters FIFO', async () => {
     const sem = createSemaphore(1);
     const slot = await sem.acquire(1000);
-    if (!slot) throw new Error('expected a slot');
+    if (!slot) {
+      throw new Error('expected a slot');
+    }
 
     const order: number[] = [];
     const p1 = sem.acquire(1000).then((r) => {
@@ -63,10 +67,32 @@ describe('createSemaphore', () => {
     expect(order).toEqual([1, 2]);
   });
 
+  test('a slot handed to an already-timed-out waiter is given back', async () => {
+    const sem = createSemaphore(1);
+    const held = await sem.acquire(1000);
+    if (!held) {
+      throw new Error('expected a slot');
+    }
+
+    // This waiter times out before the slot is ever released.
+    const timedOut = await sem.acquire(20);
+    expect(timedOut).toBeUndefined();
+
+    // Releasing now hands the freed slot to the (already-settled) waiter, which
+    // must give it straight back rather than leak it.
+    held();
+
+    // A fresh acquire should still succeed immediately — the slot wasn't lost.
+    const reacquired = await sem.acquire(1000);
+    expect(reacquired).toBeDefined();
+  });
+
   test('release is idempotent', async () => {
     const sem = createSemaphore(1);
     const slot = await sem.acquire(1000);
-    if (!slot) throw new Error('expected a slot');
+    if (!slot) {
+      throw new Error('expected a slot');
+    }
     slot();
     slot(); // second release must not free an extra slot
 

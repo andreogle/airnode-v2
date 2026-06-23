@@ -211,6 +211,69 @@ describe('processResponse', () => {
     });
   });
 
+  describe('numeric conversion edge cases', () => {
+    test('converts boolean true to numeric 1 for int256', () => {
+      const result = processResponse({ value: true }, { type: 'int256', path: '$.value' });
+
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000000000000000000001');
+    });
+
+    test('converts boolean false to numeric 0 for int256', () => {
+      const result = processResponse({ value: false }, { type: 'int256', path: '$.value' });
+
+      expect(result).toBe('0x0000000000000000000000000000000000000000000000000000000000000000');
+    });
+
+    test('throws when a non-finite number is converted to numeric', () => {
+      expect(() => processResponse({ value: Infinity }, { type: 'int256', path: '$.value' })).toThrow(
+        'Cannot convert Infinity to numeric'
+      );
+    });
+
+    test('throws when an object is converted to numeric', () => {
+      expect(() => processResponse({ value: {} }, { type: 'uint256', path: '$.value' })).toThrow(
+        'Cannot convert object to numeric'
+      );
+    });
+
+    test('throws when an object is stringified for a string type', () => {
+      expect(() => processResponse({ value: {} }, { type: 'string', path: '$.value' })).toThrow(
+        'Cannot stringify non-primitive value: {}'
+      );
+    });
+
+    test('throws when an array is stringified for a bytes type', () => {
+      expect(() => processResponse({ value: [1, 2] }, { type: 'bytes', path: '$.value' })).toThrow(
+        'Cannot stringify non-primitive value: [1,2]'
+      );
+    });
+  });
+
+  describe('additional cast error cases', () => {
+    test('rejects uint256 overflow', () => {
+      // 2^256 = UINT256_MAX + 1
+      const tooBig = '115792089237316195423570985008687907853269984665640564039457584007913129639936';
+      expect(() => processResponse({ value: tooBig }, { type: 'uint256', path: '$.value' })).toThrow(
+        'does not fit in uint256'
+      );
+    });
+
+    test('rejects malformed hex in bytes32', () => {
+      expect(() => processResponse({ id: '0xabc' }, { type: 'bytes32', path: '$.id' })).toThrow(
+        'Invalid hex bytes32: 0xabc'
+      );
+    });
+
+    test('encodes a non-hex plain string as bytes via UTF-8', () => {
+      const result = processResponse({ payload: 'hello' }, { type: 'bytes', path: '$.payload' });
+
+      expect(result).toBe(
+        ('0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000005' +
+          '68656c6c6f000000000000000000000000000000000000000000000000000000') as `0x${string}`
+      );
+    });
+  });
+
   describe('precision', () => {
     test('multiplies 18-decimal string value losslessly (exceeds JS safe integer range)', () => {
       // 3000.123456789012345678 * 1e18 = 3000123456789012345678 — losslessly

@@ -13,7 +13,7 @@ const logStore = new AsyncLocalStorage<LogContext>();
 let logFormat: LogFormat = 'text';
 
 export function configureLogger(format: LogFormat): void {
-  logFormat = format;
+  logFormat = format; // eslint-disable-line unicorn/no-top-level-assignment-in-function
 }
 
 export function runWithContext<T>(context: LogContext, function_: () => T): T {
@@ -48,16 +48,14 @@ function formatJson(level: LogLevel, message: string, context: LogContext | unde
     timestamp: new Date().toISOString(),
     level,
     message,
-    ...(context ? { requestId: context.requestId } : {}),
-    ...(error
-      ? {
-          error: {
-            name: error.name,
-            message: redactSecrets(error.message),
-            stack: error.stack ? redactSecrets(error.stack) : undefined,
-          },
-        }
-      : {}),
+    ...(context && { requestId: context.requestId }),
+    ...(error && {
+      error: {
+        name: error.name,
+        message: redactSecrets(error.message),
+        stack: error.stack ? redactSecrets(error.stack) : undefined,
+      },
+    }),
   };
 
   return JSON.stringify(entry);

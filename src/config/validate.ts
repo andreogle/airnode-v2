@@ -71,8 +71,8 @@ function formatZodError(error: z.core.$ZodError): readonly string[] {
 // =============================================================================
 // Main validation
 // =============================================================================
-export function validateConfig(raw: string, interpolate = false): ValidationResult {
-  const input = interpolate ? goSync(() => interpolateEnvironment(raw)) : { success: true as const, data: raw };
+export function validateConfig(raw: string, shouldInterpolate = false): ValidationResult {
+  const input = shouldInterpolate ? goSync(() => interpolateEnvironment(raw)) : { success: true as const, data: raw };
   if (!input.success) {
     return { success: false, errors: [input.error.message] };
   }

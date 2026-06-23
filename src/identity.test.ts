@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { buildTxtRecordHost, findAddressInRecords, queryTxtRecords, verifyIdentity } from './identity';
+import { buildTxtRecordHost, hasAddressInRecords, queryTxtRecords, verifyIdentity } from './identity';
 
 // =============================================================================
 // buildTxtRecordHost
@@ -15,31 +15,31 @@ describe('buildTxtRecordHost', () => {
 });
 
 // =============================================================================
-// findAddressInRecords
+// hasAddressInRecords
 // =============================================================================
-describe('findAddressInRecords', () => {
+describe('hasAddressInRecords', () => {
   const address = '0xC04575f78C599D91cA42C1fBf0Ef5f21cc277f6e';
 
   test('finds address in single-value record', () => {
-    expect(findAddressInRecords([address], address)).toBe(true);
+    expect(hasAddressInRecords([address], address)).toBe(true);
   });
 
   test('finds address in comma-separated record', () => {
     const record = `0xaaa0000000000000000000000000000000000001, ${address}, 0xbbb0000000000000000000000000000000000002`;
-    expect(findAddressInRecords([record], address)).toBe(true);
+    expect(hasAddressInRecords([record], address)).toBe(true);
   });
 
   test('matches case-insensitively', () => {
-    expect(findAddressInRecords([address.toLowerCase()], address)).toBe(true);
-    expect(findAddressInRecords([address.toUpperCase()], address)).toBe(true);
+    expect(hasAddressInRecords([address.toLowerCase()], address)).toBe(true);
+    expect(hasAddressInRecords([address.toUpperCase()], address)).toBe(true);
   });
 
   test('returns false when address not in records', () => {
-    expect(findAddressInRecords(['0x0000000000000000000000000000000000000001'], address)).toBe(false);
+    expect(hasAddressInRecords(['0x0000000000000000000000000000000000000001'], address)).toBe(false);
   });
 
   test('returns false for empty records', () => {
-    expect(findAddressInRecords([], address)).toBe(false);
+    expect(hasAddressInRecords([], address)).toBe(false);
   });
 });
 
@@ -51,7 +51,7 @@ describe('queryTxtRecords', () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    originalFetch = globalThis.fetch;
+    originalFetch = fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockReset();
   });
@@ -94,7 +94,7 @@ describe('verifyIdentity', () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
-    originalFetch = globalThis.fetch;
+    originalFetch = fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockReset();
   });

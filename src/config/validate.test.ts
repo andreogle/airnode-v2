@@ -32,7 +32,9 @@ describe('validateConfig', () => {
     const result = validateConfig(MINIMAL_VALID);
 
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     expect(result.config.version).toBe('1.0');
     expect(result.config.apis).toHaveLength(1);
   });
@@ -41,9 +43,13 @@ describe('validateConfig', () => {
     const result = validateConfig(MINIMAL_VALID);
 
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     const api = result.config.apis[0];
-    if (!api) return;
+    if (!api) {
+      return;
+    }
     expect(api.timeout).toBe(10_000);
     expect(api.endpoints[0]?.method).toBe('GET');
   });
@@ -55,7 +61,9 @@ describe('validateConfig', () => {
     const result = validateConfig('{ invalid yaml: [}');
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors[0]).toContain('YAML parse error');
   });
 
@@ -87,7 +95,9 @@ apis:
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors.some((e) => e.includes('version'))).toBe(true);
   });
 
@@ -166,7 +176,9 @@ apis:
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors[0]).toContain('Duplicate API name');
   });
 
@@ -198,7 +210,9 @@ apis:
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors.some((e) => e.includes('Duplicate endpoint name(s) in API "Weather": forecast'))).toBe(true);
   });
 
@@ -233,7 +247,9 @@ apis:
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors.some((e) => e.includes('Duplicate plugin source(s): ./heartbeat.js'))).toBe(true);
   });
 
@@ -265,7 +281,9 @@ apis:
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors.some((e) => e.includes('identical specifications'))).toBe(true);
   });
 
@@ -300,7 +318,9 @@ apis:
     delete process.env['TEST_VALIDATE_API_URL'];
 
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success) {
+      return;
+    }
     expect(result.config.apis[0]?.url).toBe('https://from-env.example.com');
   });
 
@@ -330,7 +350,9 @@ apis:
     const result = validateConfig(yaml, true);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toContain('DEFINITELY_NOT_SET_ENV_VAR_XYZ');
   });
@@ -351,7 +373,9 @@ apis: []
     const result = validateConfig(yaml);
 
     expect(result.success).toBe(false);
-    if (result.success) return;
+    if (result.success) {
+      return;
+    }
     expect(result.errors.length).toBeGreaterThanOrEqual(1);
   });
 });

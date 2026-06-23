@@ -15,7 +15,7 @@ console.info(`Mock API server at http://127.0.0.1:${String(mock.port)}`);
 // Run each test file in its own process
 // =============================================================================
 const glob = new Glob('integration/scenarios/s*.test.ts');
-const files = [...glob.scanSync('.')].toSorted();
+const files = [...glob.scanSync('.')].toSorted((a, b) => a.localeCompare(b));
 
 // eslint-disable-next-line functional/no-let
 let failed = 0;

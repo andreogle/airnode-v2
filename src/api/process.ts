@@ -37,21 +37,23 @@ function parseDecimal(input: string): { readonly mantissa: bigint; readonly exp:
     throw new Error(`Cannot parse numeric value: ${input}`);
   }
 
-  const negative = input.startsWith('-');
-  const unsigned = negative ? input.slice(1) : input;
+  const isNegative = input.startsWith('-');
+  const unsigned = isNegative ? input.slice(1) : input;
 
   const [baseRaw = '', expRaw] = unsigned.split(/[eE]/);
   const scientificExp = expRaw ? Number(expRaw) : 0;
 
   const [intPart = '0', fracPart = ''] = baseRaw.split('.');
   const mantissaDigits = `${intPart}${fracPart}`.replace(/^0+(?=\d)/, '') || '0';
-  const mantissa = (negative ? -1n : 1n) * BigInt(mantissaDigits);
+  const mantissa = (isNegative ? -1n : 1n) * BigInt(mantissaDigits);
 
   return { mantissa, exp: scientificExp - fracPart.length };
 }
 
 function scaleToBigInt(mantissa: bigint, exp: number): bigint {
-  if (exp >= 0) return mantissa * 10n ** BigInt(exp);
+  if (exp >= 0) {
+    return mantissa * 10n ** BigInt(exp);
+  }
   return mantissa / 10n ** BigInt(-exp); // truncates toward zero
 }
 
@@ -73,14 +75,18 @@ function applyMultiplier(value: string, multiply: string | undefined): bigint {
 // through JSON.parse and into parseDecimal.
 // =============================================================================
 function numericToString(raw: JsonValue): string {
-  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'string') {
+    return raw;
+  }
   if (typeof raw === 'number') {
     if (!Number.isFinite(raw)) {
       throw new TypeError(`Cannot convert ${String(raw)} to numeric`);
     }
     return raw.toString();
   }
-  if (typeof raw === 'boolean') return raw ? '1' : '0';
+  if (typeof raw === 'boolean') {
+    return raw ? '1' : '0';
+  }
   throw new TypeError(`Cannot convert ${typeof raw} to numeric`);
 }
 
@@ -115,14 +121,18 @@ function castToUint256(raw: JsonValue, multiply: string | undefined): bigint {
   return value;
 }
 
-function castToBool(raw: JsonValue): boolean {
+function isTruthy(raw: JsonValue): boolean {
   return ([true, 'true', 1, '1'] as JsonValue[]).includes(raw);
 }
 
 function castToBytes32(raw: JsonValue): Hex {
   if (typeof raw === 'string' && raw.startsWith('0x')) {
-    if (!HEX_BYTES_REGEX.test(raw)) throw new Error(`Invalid hex bytes32: ${raw}`);
-    if ((raw.length - 2) / 2 > 32) throw new RangeError(`Value exceeds 32 bytes: ${raw}`);
+    if (!HEX_BYTES_REGEX.test(raw)) {
+      throw new Error(`Invalid hex bytes32: ${raw}`);
+    }
+    if ((raw.length - 2) / 2 > 32) {
+      throw new RangeError(`Value exceeds 32 bytes: ${raw}`);
+    }
     return raw as Hex;
   }
   return toHex(primitiveToString(raw), { size: 32 });
@@ -137,7 +147,9 @@ function castToAddress(raw: JsonValue): Hex {
 
 function castToBytes(raw: JsonValue): Hex {
   if (typeof raw === 'string' && raw.startsWith('0x')) {
-    if (!HEX_BYTES_REGEX.test(raw)) throw new Error(`Invalid hex bytes: ${raw}`);
+    if (!HEX_BYTES_REGEX.test(raw)) {
+      throw new Error(`Invalid hex bytes: ${raw}`);
+    }
     return raw as Hex;
   }
   return toHex(primitiveToString(raw));
@@ -148,7 +160,9 @@ function castToSolidityValue(
   solidityType: SolidityType,
   multiply: string | undefined
 ): bigint | boolean | string {
-  if (isNil(raw)) throw new Error('Cannot encode nil value');
+  if (isNil(raw)) {
+    throw new Error('Cannot encode nil value');
+  }
 
   switch (solidityType) {
     case 'int256': {
@@ -158,7 +172,7 @@ function castToSolidityValue(
       return castToUint256(raw, multiply);
     }
     case 'bool': {
-      return castToBool(raw);
+      return isTruthy(raw);
     }
     case 'bytes32': {
       return castToBytes32(raw);
@@ -185,11 +199,12 @@ function validateSolidityType(solidityType: string): SolidityType {
 function processResponse(data: unknown, encoding: ProcessEncoding): Hex {
   const types = encoding.type.split(',');
   const paths = encoding.path.split(',');
-  const times = encoding.times?.split(',') ?? [];
 
   if (types.length !== paths.length) {
     throw new Error(`type has ${String(types.length)} entries but path has ${String(paths.length)}`);
   }
+
+  const times = encoding.times?.split(',') ?? [];
 
   const extractions = types.map((typeString, index) => {
     const solidityType = validateSolidityType(typeString.trim());

@@ -220,7 +220,9 @@ describe('createServer', () => {
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
     const pending = asyncStore.create();
-    if (!pending) throw new Error('expected a pending entry');
+    if (!pending) {
+      throw new Error('expected a pending entry');
+    }
 
     const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
     expect(response.status).toBe(200);
@@ -239,7 +241,9 @@ describe('createServer', () => {
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
     const pending = asyncStore.create();
-    if (!pending) throw new Error('expected a pending entry');
+    if (!pending) {
+      throw new Error('expected a pending entry');
+    }
     asyncStore.setComplete(pending.requestId, { airnode: TEST_AIRNODE, data: '0xabcd', signature: '0x01' });
 
     const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
@@ -260,7 +264,9 @@ describe('createServer', () => {
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
     const pending = asyncStore.create();
-    if (!pending) throw new Error('expected a pending entry');
+    if (!pending) {
+      throw new Error('expected a pending entry');
+    }
     asyncStore.setFailed(pending.requestId, 'API call returned an error');
 
     const response = await fetch(`${baseUrl}/requests/${pending.requestId}`);
@@ -392,6 +398,128 @@ describe('createServer', () => {
     expect(first.status).toBe(200);
     const second = await get('203.0.113.2');
     expect(second.status).toBe(429);
+  });
+
+  test('trusts the first X-Forwarded-For entry for rate-limit bucketing', async () => {
+    const deps = makeDeps({
+      config: makeConfig({ rateLimit: { max: 1, trustForwardedFor: true } }),
+    });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // First request from the forwarded client succeeds; the second is limited,
+    // proving the forwarded IP (line 96) is the bucket key.
+    const first = await fetch(`${baseUrl}/health`, { headers: { 'X-Forwarded-For': '198.51.100.7, 10.0.0.1' } });
+    expect(first.status).toBe(200);
+    const second = await fetch(`${baseUrl}/health`, { headers: { 'X-Forwarded-For': '198.51.100.7, 10.0.0.9' } });
+    expect(second.status).toBe(429);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe('Too Many Requests');
+  });
+
+  test('treats a body-less POST as empty parameters', async () => {
+    const handleRequest = mock((_req: Request, _id: string, params: Record<string, unknown>) =>
+      Promise.resolve(Response.json({ params }, { status: 200 }))
+    );
+    const deps = makeDeps({ handleRequest: handleRequest as unknown as ServerDependencies['handleRequest'] });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // Empty body: `request.text()` returns '' and the guard returns `{}` (line 143).
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(handleRequest).toHaveBeenCalledTimes(1);
+    const body = (await response.json()) as { params: Record<string, unknown> };
+    expect(body.params).toEqual({});
+  });
+
+  test('treats whitespace-only request body as empty parameters', async () => {
+    const handleRequest = mock((_req: Request, _id: string, params: Record<string, unknown>) =>
+      Promise.resolve(Response.json({ params }, { status: 200 }))
+    );
+    const deps = makeDeps({ handleRequest: handleRequest as unknown as ServerDependencies['handleRequest'] });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // Whitespace body fails JSON.parse → goSync failure → returns `{}` (line 151).
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: ' '.repeat(3),
+    });
+    expect(response.status).toBe(200);
+    expect(handleRequest).toHaveBeenCalledTimes(1);
+    const body = (await response.json()) as { params: Record<string, unknown> };
+    expect(body.params).toEqual({});
+  });
+
+  test('treats an explicitly null JSON body as empty parameters', async () => {
+    const handleRequest = mock((_req: Request, _id: string, params: Record<string, unknown>) =>
+      Promise.resolve(Response.json({ params }, { status: 200 }))
+    );
+    const deps = makeDeps({ handleRequest: handleRequest as unknown as ServerDependencies['handleRequest'] });
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // `null` parses successfully, so extractRequestParameters returns `{}` (line 114).
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'null',
+    });
+    expect(response.status).toBe(200);
+    expect(handleRequest).toHaveBeenCalledTimes(1);
+    const body = (await response.json()) as { params: Record<string, unknown> };
+    expect(body.params).toEqual({});
+  });
+
+  test('rejects an oversized chunked body (no Content-Length) with 413', async () => {
+    const deps = makeDeps();
+    server = createServer(deps);
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    // Send a raw chunked HTTP request: no Content-Length header, so the header
+    // check on line 137 is skipped and `request.text()` reads the whole body.
+    // The post-read byte-length guard (line 146) is what rejects it.
+    const path = `/endpoints/${TEST_ENDPOINT_ID}`;
+    const big = `{"parameters":{"x":"${'a'.repeat(64 * 1024)}"}}`;
+    const chunkSize = Buffer.byteLength(big).toString(16);
+    const raw =
+      `POST ${path} HTTP/1.1\r\n` +
+      `Host: 127.0.0.1:${String(server.port)}\r\n` +
+      'Content-Type: application/json\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Connection: close\r\n' +
+      `\r\n${chunkSize}\r\n${big}\r\n0\r\n\r\n`;
+
+    const status = await new Promise<number>((resolve, reject) => {
+      let received = '';
+      Bun.connect({
+        hostname: '127.0.0.1',
+        port: server?.port ?? 0,
+        socket: {
+          open: (socket) => {
+            socket.write(raw);
+          },
+          data: (_socket, data) => {
+            received += data.toString();
+          },
+          close: () => {
+            const match = /HTTP\/1\.1 (\d{3})/.exec(received);
+            if (!match) {
+              reject(new Error('no status line'));
+              return;
+            }
+            resolve(Number(match[1]));
+          },
+          error: (_socket, error) => {
+            reject(error);
+          },
+        },
+      }).catch(reject);
+    });
+
+    expect(status).toBe(413);
   });
 
   test('OPTIONS preflight returns correct headers', async () => {

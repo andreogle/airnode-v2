@@ -20,7 +20,9 @@ describe('generate-mnemonic CLI', () => {
       .map((line) => line.trim())
       .find((line) => /^([a-z]+ ){11}[a-z]+$/.test(line));
     expect(mnemonic).toBeDefined();
-    if (!mnemonic) return;
+    if (!mnemonic) {
+      return;
+    }
     expect(validateMnemonic(mnemonic, wordlist)).toBe(true);
 
     // The derived address must also appear in the output.

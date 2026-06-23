@@ -332,4 +332,114 @@ describe('query', () => {
   test('deep scan at end of longer path throws', () => {
     expect(() => query({ store: { a: 1 } }, '$.store..')).toThrow('Deep scan (..) must be followed by');
   });
+
+  // ===========================================================================
+  // Filter predicate branches
+  // ===========================================================================
+  test('filter predicate skips non-object array elements', () => {
+    const result = queryAll({ arr: [{ v: 1 }, 5, null, [9]] }, '$.arr[?(@.v==1)].v'); // eslint-disable-line unicorn/no-null
+    expect(result).toEqual([1]);
+  });
+
+  test('filter predicate skips elements missing the field', () => {
+    const result = queryAll({ arr: [{ v: 1 }, { other: 2 }] }, '$.arr[?(@.v==1)].v');
+    expect(result).toEqual([1]);
+  });
+
+  test('filter with strict greater than', () => {
+    const items = [{ v: 19 }, { v: 20 }, { v: 21 }];
+    const result = queryAll({ items }, '$.items[?(@.v>20)].v');
+    expect(result).toEqual([21]);
+  });
+
+  test('filter with strict less than', () => {
+    const items = [{ v: 19 }, { v: 20 }, { v: 21 }];
+    const result = queryAll({ items }, '$.items[?(@.v<20)].v');
+    expect(result).toEqual([19]);
+  });
+
+  test('filter numeric comparison ignores non-numeric field values', () => {
+    const items = [{ v: 'ten' }, { v: 25 }];
+    const result = queryAll({ items }, '$.items[?(@.v>20)].v');
+    expect(result).toEqual([25]);
+  });
+
+  test('filter null equality', () => {
+    const items = [{ v: null }, { v: 1 }]; // eslint-disable-line unicorn/no-null
+    const result = queryAll({ items }, '$.items[?(@.v==null)]');
+    expect(result).toEqual([{ v: null }]); // eslint-disable-line unicorn/no-null
+  });
+
+  test('filter false equality', () => {
+    const items = [{ active: false }, { active: true }];
+    const result = queryAll({ items }, '$.items[?(@.active==false)]');
+    expect(result).toEqual([{ active: false }]);
+  });
+
+  // ===========================================================================
+  // Filter on non-array target
+  // ===========================================================================
+  test('filter on non-array target returns empty', () => {
+    expect(query({ obj: { v: 1 } }, '$.obj[?(@.v==1)]')).toBeUndefined();
+  });
+
+  // ===========================================================================
+  // Union branches
+  // ===========================================================================
+  test('union on non-object target returns empty', () => {
+    expect(query({ a: 5 }, '$.a[0,1]')).toBeUndefined();
+  });
+
+  test('union of array index out of bounds is skipped', () => {
+    const result = queryAll({ arr: [10, 20] }, '$.arr[0,5]');
+    expect(result).toEqual([10]);
+  });
+
+  test('union of object property keys', () => {
+    const object = { obj: { a: 1, b: 2, c: 3 } };
+    const result = queryAll(object, "$.obj['a','c']");
+    expect(result).toEqual([1, 3]);
+  });
+
+  test('union of object keys skips missing keys', () => {
+    const object = { obj: { a: 1, b: 2 } };
+    const result = queryAll(object, "$.obj['a','z']");
+    expect(result).toEqual([1]);
+  });
+
+  // ===========================================================================
+  // Slice on non-array target
+  // ===========================================================================
+  test('slice on non-array target returns empty', () => {
+    expect(query({ a: 'hello' }, '$.a[0:2]')).toBeUndefined();
+  });
+
+  // ===========================================================================
+  // Quoted property on non-object target
+  // ===========================================================================
+  test('quoted bracket property on array target returns empty', () => {
+    expect(query([1, 2], "$['name']")).toBeUndefined();
+  });
+
+  test('quoted bracket property on scalar target returns empty', () => {
+    expect(query({ a: 5 }, "$.a['name']")).toBeUndefined();
+  });
+
+  // ===========================================================================
+  // queryAll deep scan terminal throw
+  // ===========================================================================
+  test('queryAll deep scan ending with .. throws', () => {
+    expect(() => queryAll({ a: 1 }, '$..')).toThrow('Deep scan (..) must be followed by');
+  });
+
+  // ===========================================================================
+  // query (single-value) deep scan
+  // ===========================================================================
+  test('query deep scan returns single matching value', () => {
+    expect(query(data, '$..city')).toBe('NYC');
+  });
+
+  test('query deep scan returns array of multiple matches', () => {
+    expect(query(data, '$..title')).toEqual(['A', 'B', 'C', 'D']);
+  });
 });

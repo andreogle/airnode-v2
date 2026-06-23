@@ -55,7 +55,7 @@ describe('createBoundedMap', () => {
     map.set('b', { value: 2, createdAt: Date.now() });
     const values = map.values();
     expect(values).toHaveLength(2);
-    expect(values.map((v) => v.value).toSorted()).toEqual([1, 2]);
+    expect(values.map((v) => v.value).toSorted((a, b) => a - b)).toEqual([1, 2]);
   });
 
   test('evicts oldest entries when exceeding maxEntries', () => {

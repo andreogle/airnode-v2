@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { requestProof } from './proof';
 import type { ReclaimProof } from './proof';
 
-const originalFetch = globalThis.fetch;
+const originalFetch = fetch;
 const fetchMock = mock();
 
 const GATEWAY_URL = 'https://prove.example.com/v1/prove';
@@ -113,6 +113,36 @@ describe('requestProof', () => {
 
     const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
     expect(request).rejects.toThrow('not valid JSON');
+    await request.catch(() => {});
+  });
+
+  test('rejects a proof missing claim.parameters', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          claim: {},
+          signatures: { claimSignature: '0xabc', attestorAddress: '0xdef' },
+        }),
+    });
+
+    const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
+    expect(request).rejects.toThrow('missing claim.parameters');
+    await request.catch(() => {});
+  });
+
+  test('rejects a proof missing the attestor address', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          claim: { parameters: '{"url":"https://api.example.com/price","method":"GET"}' },
+          signatures: { claimSignature: '0xabc' },
+        }),
+    });
+
+    const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
+    expect(request).rejects.toThrow('missing attestor address');
     await request.catch(() => {});
   });
 

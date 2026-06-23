@@ -24,10 +24,12 @@ function createSemaphore(maxConcurrent: number): Semaphore {
 
   function makeRelease(): Release {
     // eslint-disable-next-line functional/no-let
-    let released = false;
+    let isReleased = false;
     return () => {
-      if (released) return; // idempotent — safe to call more than once
-      released = true;
+      if (isReleased) {
+        return;
+      } // idempotent — safe to call more than once
+      isReleased = true;
       const next = waiters.shift(); // eslint-disable-line functional/immutable-data
       if (next) {
         next(makeRelease()); // hand the freed slot straight to the next waiter
@@ -46,15 +48,15 @@ function createSemaphore(maxConcurrent: number): Semaphore {
 
       return new Promise<Release | undefined>((resolve) => {
         // eslint-disable-next-line functional/no-let
-        let settled = false;
+        let isSettled = false;
 
         const onSlot: Waiter = (release) => {
-          if (settled) {
+          if (isSettled) {
             // Timed out already but still got handed a slot — give it back.
             release();
             return;
           }
-          settled = true;
+          isSettled = true;
           resolve(release);
         };
 
@@ -64,11 +66,15 @@ function createSemaphore(maxConcurrent: number): Semaphore {
         // no-op once `settled`, and avoiding a mutual `clearTimeout` reference
         // keeps this readable. A timer is only created on the contended path.
         setTimeout(() => {
-          if (settled) return;
-          settled = true;
+          if (isSettled) {
+            return;
+          }
+          isSettled = true;
           const index = waiters.indexOf(onSlot);
-          if (index !== -1) waiters.splice(index, 1); // eslint-disable-line functional/immutable-data
-          // eslint-disable-next-line unicorn/no-useless-undefined
+          if (index !== -1) {
+            waiters.splice(index, 1); // eslint-disable-line functional/immutable-data
+          }
+
           resolve(undefined);
         }, timeoutMs);
       });

@@ -47,9 +47,13 @@ function createBoundedMap<K, V>(options: BoundedMapOptions<V>): BoundedMap<K, V>
     set: (key, value) => {
       if (store.size >= options.maxEntries) {
         const firstEntry = store.entries().next().value;
-        if (firstEntry === undefined) return false;
+        if (firstEntry === undefined) {
+          return false;
+        }
         const [firstKey, firstValue] = firstEntry;
-        if (options.refuseEvictionIf?.(firstValue)) return false;
+        if (options.refuseEvictionIf?.(firstValue)) {
+          return false;
+        }
         store.delete(firstKey); // eslint-disable-line functional/immutable-data
       }
       store.set(key, value); // eslint-disable-line functional/immutable-data
@@ -66,7 +70,7 @@ function createBoundedMap<K, V>(options: BoundedMapOptions<V>): BoundedMap<K, V>
       store.clear(); // eslint-disable-line functional/immutable-data
     },
 
-    values: () => [...store.values()],
+    values: () => store.values().toArray(),
 
     size: () => store.size,
 

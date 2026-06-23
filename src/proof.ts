@@ -45,14 +45,20 @@ function validateProof(raw: unknown, request: ProofRequest): ReclaimProof {
     readonly claim?: { readonly parameters?: unknown };
     readonly signatures?: { readonly claimSignature?: unknown; readonly attestorAddress?: unknown };
   };
-  if (typeof proof.claim?.parameters !== 'string') throw new Error('proof response missing claim.parameters');
+  if (typeof proof.claim?.parameters !== 'string') {
+    throw new TypeError('proof response missing claim.parameters');
+  }
   if (typeof proof.signatures?.claimSignature !== 'string') {
     throw new TypeError('proof response missing attestor signature');
   }
-  if (typeof proof.signatures.attestorAddress !== 'string') throw new Error('proof response missing attestor address');
+  if (typeof proof.signatures.attestorAddress !== 'string') {
+    throw new TypeError('proof response missing attestor address');
+  }
 
   const params = goSync(() => JSON.parse(proof.claim?.parameters as string) as { url?: unknown; method?: unknown });
-  if (!params.success) throw new Error('proof claim.parameters is not valid JSON');
+  if (!params.success) {
+    throw new Error('proof claim.parameters is not valid JSON');
+  }
   if (params.data.url !== request.url) {
     throw new Error(`proof attests URL ${String(params.data.url)}, expected ${request.url}`);
   }

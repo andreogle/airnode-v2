@@ -227,7 +227,9 @@ describe('buildEndpointMap', () => {
     expect(map.size).toBe(3);
 
     const firstEndpoint = api1.endpoints[0];
-    if (!firstEndpoint) throw new Error('Expected endpoint');
+    if (!firstEndpoint) {
+      throw new Error('Expected endpoint');
+    }
     const id1 = deriveEndpointId(api1, firstEndpoint);
     const resolved = map.get(id1);
     expect(resolved?.api.name).toBe('API1');

@@ -35,7 +35,9 @@ const FINISHED_TTL_MS = 60 * 1000; // how long a finished result is retained for
 const MAX_PENDING = 100;
 
 function isExpired(req: PendingRequest): boolean {
-  if (req.finishedAt !== undefined) return Date.now() > req.finishedAt + FINISHED_TTL_MS;
+  if (req.finishedAt !== undefined) {
+    return Date.now() > req.finishedAt + FINISHED_TTL_MS;
+  }
   return Date.now() > req.createdAt + REQUEST_TTL_MS;
 }
 
@@ -61,12 +63,16 @@ function createAsyncRequestStore(): AsyncRequestStore {
 
     setProcessing: (requestId) => {
       const entry = store.get(requestId);
-      if (entry) entry.status = 'processing'; // eslint-disable-line functional/immutable-data
+      if (entry) {
+        entry.status = 'processing'; // eslint-disable-line functional/immutable-data
+      }
     },
 
     setComplete: (requestId, result) => {
       const entry = store.get(requestId);
-      if (!entry) return;
+      if (!entry) {
+        return;
+      }
       entry.status = 'complete'; // eslint-disable-line functional/immutable-data
       entry.result = result; // eslint-disable-line functional/immutable-data
       entry.finishedAt = Date.now(); // eslint-disable-line functional/immutable-data
@@ -74,7 +80,9 @@ function createAsyncRequestStore(): AsyncRequestStore {
 
     setFailed: (requestId, error) => {
       const entry = store.get(requestId);
-      if (!entry) return;
+      if (!entry) {
+        return;
+      }
       entry.status = 'failed'; // eslint-disable-line functional/immutable-data
       entry.error = error; // eslint-disable-line functional/immutable-data
       entry.finishedAt = Date.now(); // eslint-disable-line functional/immutable-data

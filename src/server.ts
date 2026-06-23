@@ -2,7 +2,7 @@ import { goSync } from '@api3/promise-utils';
 import type { Hex } from 'viem';
 import { logger } from './logger';
 import type { PipelineDependencies } from './pipeline';
-import { checkRateLimit } from './rate-limit';
+import { isWithinRateLimit } from './rate-limit';
 import type { TokenBucket } from './rate-limit';
 import type { Config } from './types';
 
@@ -71,23 +71,29 @@ function errorResponse(message: string, status: number, cors: CorsHeaders = DEFA
 
 function parseEndpointRoute(pathname: string): Hex | undefined {
   const match = /^\/endpoints\/(0x[\da-fA-F]{64})$/.exec(pathname);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
   return match[1] as Hex;
 }
 
 function parseRequestRoute(pathname: string): string | undefined {
   const match = /^\/requests\/(0x[\da-fA-F]{64})$/.exec(pathname);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
   return match[1];
 }
 
 // Rate-limit key. By default the socket peer's address; when `trustForwardedFor`
 // is set (Airnode behind a trusted reverse proxy), the first `X-Forwarded-For`
 // entry — the originating client — instead.
-function resolveClientIp(request: Request, peerAddress: string | undefined, trustForwardedFor: boolean): string {
-  if (trustForwardedFor) {
+function resolveClientIp(request: Request, peerAddress: string | undefined, shouldTrustForwardedFor: boolean): string {
+  if (shouldTrustForwardedFor) {
     const forwarded = request.headers.get('X-Forwarded-For')?.split(',', 1)[0]?.trim();
-    if (forwarded) return forwarded;
+    if (forwarded) {
+      return forwarded;
+    }
   }
   return peerAddress ?? 'unknown';
 }
@@ -104,11 +110,19 @@ type ParsedBody = Record<string, string> | 'too_large' | 'bad_content_type' | 'b
 // cookie parameters are coerced to strings further down in `buildApiRequest`.
 // See the limitation note in book/docs/config/apis.md ("Parameter values").
 function extractRequestParameters(body: unknown): Record<string, string> | 'bad_parameters' {
-  if (body === null || body === undefined) return {};
-  if (typeof body !== 'object' || Array.isArray(body)) return 'bad_parameters';
+  if (body === null || body === undefined) {
+    return {};
+  }
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    return 'bad_parameters';
+  }
   const raw = (body as { parameters?: unknown }).parameters;
-  if (raw === null || raw === undefined) return {};
-  if (typeof raw !== 'object' || Array.isArray(raw)) return 'bad_parameters';
+  if (raw === null || raw === undefined) {
+    return {};
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return 'bad_parameters';
+  }
   // Values stay untyped; the pipeline handles each parameter by its `in` kind.
   return raw as Record<string, string>;
 }
@@ -125,11 +139,17 @@ async function parseRequestBody(request: Request): Promise<ParsedBody> {
   }
 
   const text = await request.text();
-  if (!text) return {};
-  if (Buffer.byteLength(text) > MAX_BODY_BYTES) return 'too_large';
+  if (!text) {
+    return {};
+  }
+  if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
+    return 'too_large';
+  }
 
   const result = goSync(() => JSON.parse(text) as unknown);
-  if (!result.success) return {};
+  if (!result.success) {
+    return {};
+  }
   return extractRequestParameters(result.data);
 }
 
@@ -137,7 +157,9 @@ function withCorsHeaders(response: Response, cors: CorsHeaders): Response {
   const headers = new Headers(response.headers);
   // eslint-disable-next-line functional/no-loop-statements
   for (const [key, value] of Object.entries(cors)) {
-    if (typeof value === 'string') headers.set(key, value);
+    if (typeof value === 'string') {
+      headers.set(key, value);
+    }
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
@@ -174,7 +196,7 @@ function createServer(deps: ServerDependencies): ServerHandle {
     }
 
     const ip = resolveClientIp(request, peerAddress, rateLimitConfig.trustForwardedFor);
-    if (!checkRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max)) {
+    if (!isWithinRateLimit(ip, rateBuckets, rateLimitConfig.window, rateLimitConfig.max)) {
       return errorResponse('Too Many Requests', 429, cors);
     }
 

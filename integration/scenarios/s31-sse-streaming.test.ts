@@ -10,7 +10,9 @@ beforeAll(async () => {
   ctx = await createTestServer({
     apiOverrides: (apis) =>
       apis.map((api) => {
-        if (api.name !== 'WeatherAPI') return api;
+        if (api.name !== 'WeatherAPI') {
+          return api;
+        }
         return {
           ...api,
           endpoints: api.endpoints.map((ep) => (ep.name === 'currentTemp' ? { ...ep, mode: 'stream' as const } : ep)),

@@ -61,8 +61,12 @@ function tokenize(path: string): readonly string[] {
 }
 
 function getValues(object: JsonValue): readonly JsonValue[] {
-  if (Array.isArray(object)) return object;
-  if (object !== null && typeof object === 'object') return Object.values(object);
+  if (Array.isArray(object)) {
+    return object;
+  }
+  if (object !== null && typeof object === 'object') {
+    return Object.values(object);
+  }
   return [];
 }
 
@@ -74,7 +78,9 @@ function deepScan(object: JsonValue, key: string): readonly JsonValue[] {
   while (head < queue.length) {
     const current = queue[head]!;
     head += 1;
-    if (current === null || typeof current !== 'object') continue;
+    if (current === null || typeof current !== 'object') {
+      continue;
+    }
 
     if (Array.isArray(current)) {
       queue.push(...current);
@@ -82,8 +88,12 @@ function deepScan(object: JsonValue, key: string): readonly JsonValue[] {
       const record = current as { readonly [k: string]: JsonValue };
       if (key === '*') {
         results.push(...Object.values(record));
-      } else if (key in record) {
-        results.push(record[key]!);
+      }
+      if (key !== '*') {
+        const value = record[key];
+        if (value !== undefined) {
+          results.push(value);
+        }
       }
       queue.push(...Object.values(record));
     }
@@ -115,10 +125,14 @@ function parseFilter(expr: string): (item: JsonValue) => boolean {
             : Number(rawValue);
 
   return (item: JsonValue): boolean => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) return false;
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      return false;
+    }
     const record = item as { readonly [k: string]: JsonValue };
     const fieldValue = record[field];
-    if (fieldValue === undefined) return false;
+    if (fieldValue === undefined) {
+      return false;
+    }
 
     switch (op) {
       case '==': {
@@ -164,7 +178,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
     if (inner.startsWith('?')) {
       const predicate = parseFilter(inner.slice(1));
       return current.flatMap((c) => {
-        if (!Array.isArray(c)) return [];
+        if (!Array.isArray(c)) {
+          return [];
+        }
         return c.filter(predicate);
       });
     }
@@ -174,8 +190,10 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
       const parts = inner.split(',').map((p) => p.trim());
       return current.flatMap((c) =>
         parts.flatMap((part) => {
+          if (c === null || typeof c !== 'object') {
+            return [];
+          }
           const unquoted = part.replaceAll(/^['"]|['"]$/g, '');
-          if (c === null || typeof c !== 'object') return [];
           if (Array.isArray(c)) {
             const index = Number(unquoted);
             const value_ = c[index < 0 ? c.length + index : index];
@@ -192,7 +210,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
     if (inner.includes(':')) {
       const [startString, endString] = inner.split(':');
       return current.flatMap((c) => {
-        if (!Array.isArray(c)) return [];
+        if (!Array.isArray(c)) {
+          return [];
+        }
         const start = startString === '' || startString === undefined ? 0 : Number(startString);
         const end = endString === '' || endString === undefined ? c.length : Number(endString);
         return c.slice(start < 0 ? c.length + start : start, end < 0 ? c.length + end : end);
@@ -203,7 +223,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
     const unquoted = inner.replaceAll(/^['"]|['"]$/g, '');
     if (inner.startsWith("'") || inner.startsWith('"')) {
       return current.flatMap((c) => {
-        if (c === null || typeof c !== 'object' || Array.isArray(c)) return [];
+        if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+          return [];
+        }
         const record = c as { readonly [k: string]: JsonValue };
         const value = record[unquoted];
         return value === undefined ? [] : [value];
@@ -214,7 +236,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
     const index = Number(unquoted);
     if (!Number.isNaN(index)) {
       return current.flatMap((c) => {
-        if (!Array.isArray(c)) return [];
+        if (!Array.isArray(c)) {
+          return [];
+        }
         const value = c[index < 0 ? c.length + index : index];
         return value === undefined ? [] : [value];
       });
@@ -222,7 +246,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
 
     // Fallback: treat as property name
     return current.flatMap((c) => {
-      if (c === null || typeof c !== 'object' || Array.isArray(c)) return [];
+      if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+        return [];
+      }
       const record = c as { readonly [k: string]: JsonValue };
       const value = record[unquoted];
       return value === undefined ? [] : [value];
@@ -231,7 +257,9 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
 
   // Dot notation property
   return current.flatMap((c) => {
-    if (c === null || typeof c !== 'object' || Array.isArray(c)) return [];
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+      return [];
+    }
     const record = c as { readonly [k: string]: JsonValue };
     const value = record[token];
     return value === undefined ? [] : [value];
@@ -258,8 +286,12 @@ export function query(data: JsonValue, path: string): JsonValue | undefined {
     index += 1;
   }
 
-  if (current.length === 0) return undefined;
-  if (current.length === 1) return current[0];
+  if (current.length === 0) {
+    return undefined;
+  }
+  if (current.length === 1) {
+    return current[0];
+  }
   return current;
 }
 

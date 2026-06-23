@@ -116,16 +116,14 @@ const verify = new Command('verify')
     }
 
     const results = goVerify.data;
-    const allVerified = results.every((r) => r.verified);
+    const isAllVerified = results.every((r) => r.verified);
 
     console.info(separator);
 
-    if (allVerified) {
-      console.info(`  ${green}${bold}Identity verified${reset}`);
-    }
-    if (!allVerified) {
-      console.info(`  ${red}${bold}Identity NOT verified${reset}`);
-    }
+    const verdict = isAllVerified
+      ? `${green}${bold}Identity verified${reset}`
+      : `${red}${bold}Identity NOT verified${reset}`;
+    console.info(`  ${verdict}`);
 
     // eslint-disable-next-line functional/no-loop-statements
     for (const result of results) {
@@ -136,7 +134,7 @@ const verify = new Command('verify')
     console.info(`  ${dim}Domain${reset}   ${options.domain}`);
     console.info(separator);
 
-    if (!allVerified) {
+    if (!isAllVerified) {
       // eslint-disable-next-line unicorn/no-process-exit
       process.exit(1);
     }

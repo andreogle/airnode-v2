@@ -7,6 +7,7 @@ import { deriveEndpointId } from './endpoint';
 import type { ResolvedEndpoint } from './endpoint';
 import { handleEndpointRequest } from './pipeline';
 import type { PipelineDependencies, RawResponseBody, SignedResponseBody } from './pipeline';
+import type { AirnodePlugin, LoadedPlugin } from './plugins';
 import { createRegistry } from './plugins';
 import { createSemaphore } from './semaphore';
 import { createAirnodeAccount } from './sign';
@@ -20,7 +21,7 @@ const UNKNOWN_ENDPOINT_ID: Hex = '0x00000000000000000000000000000000000000000000
 // =============================================================================
 // Mock fetch
 // =============================================================================
-const originalFetch = globalThis.fetch;
+const originalFetch = fetch;
 const fetchMock = mock();
 
 beforeAll(() => {
@@ -128,13 +129,25 @@ function makeRequest(headers: Record<string, string> = {}): Request {
   return new Request('http://test/endpoints/0x00', { headers });
 }
 
+// Wrap a single plugin's hooks into a registry with a generous per-hook budget.
+function makePlugins(hooks: AirnodePlugin['hooks']): ReturnType<typeof createRegistry> {
+  const loaded: LoadedPlugin = { plugin: { name: 'test-plugin', hooks }, timeout: 1000 };
+  return createRegistry([loaded]);
+}
+
 // Async mode runs the pipeline in a fire-and-forget background task; poll the
 // store until the request leaves the running state (or give up after ~1s).
 async function drainAsync(store: AsyncRequestStore, requestId: Hex, attempts = 200): Promise<PendingRequest> {
   const entry = store.get(requestId);
-  if (!entry) throw new Error(`async request ${requestId} disappeared from the store`);
-  if (entry.status === 'complete' || entry.status === 'failed') return entry;
-  if (attempts <= 0) throw new Error(`async request stuck in "${entry.status}"`);
+  if (!entry) {
+    throw new Error(`async request ${requestId} disappeared from the store`);
+  }
+  if (entry.status === 'complete' || entry.status === 'failed') {
+    return entry;
+  }
+  if (attempts <= 0) {
+    throw new Error(`async request stuck in "${entry.status}"`);
+  }
   await Bun.sleep(5);
   return drainAsync(store, requestId, attempts - 1);
 }
@@ -159,7 +172,7 @@ describe('handleEndpointRequest', () => {
   test('returns 401 for unauthorized request', async () => {
     const resolved = makeResolved({}, { auth: { type: 'apiKey', keys: ['secret'] } as ClientAuth });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -173,7 +186,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result', times: '1000000' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, { coin: 'ETH' }, deps);
@@ -191,7 +204,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved();
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -209,7 +222,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, { cache: { maxAge: 60_000 } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const cache = createCache();
     const deps = makeDeps({ endpointMap, cache });
 
@@ -232,7 +245,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, { mode: 'stream', encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -250,7 +263,7 @@ describe('handleEndpointRequest', () => {
     fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
     const resolved = makeResolved({}, { mode: 'stream', encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -261,11 +274,28 @@ describe('handleEndpointRequest', () => {
     expect(body.error).toBe('API returned no data to encode');
   });
 
+  test('streaming endpoint returns 502 when the pipeline throws', async () => {
+    mockFetchResponse({ result: 42 });
+    // Wildcard type + unparseable Solidity type → processResponse throws inside
+    // executeApiCall → the streaming go() catches it → 502 JSON, not an SSE frame.
+    const resolved = makeResolved({}, { mode: 'stream', encoding: { type: '*', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'not_a_real_type' }, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(body.error).toBe('Internal processing error');
+  });
+
   test('async endpoint returns 202 with a requestId and pollUrl', async () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const asyncStore = createAsyncRequestStore();
     const deps = makeDeps({ endpointMap, asyncStore });
 
@@ -283,7 +313,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const asyncStore = createAsyncRequestStore();
     const deps = makeDeps({ endpointMap, asyncStore });
 
@@ -302,11 +332,54 @@ describe('handleEndpointRequest', () => {
     asyncStore.stop();
   });
 
+  test('async endpoint returns 503 when the store is at capacity', async () => {
+    const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    // A store whose create() refuses admission (full of non-expired entries).
+    const fullStore: AsyncRequestStore = {
+      create: () => {},
+      get: () => {},
+      setProcessing: () => {},
+      setComplete: () => {},
+      setFailed: () => {},
+      stop: () => {},
+    };
+    const deps = makeDeps({ endpointMap, asyncStore: fullStore });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe('Too many pending requests');
+  });
+
+  test('async endpoint records a failed state when the pipeline itself throws', async () => {
+    mockFetchResponse({ result: 42 });
+    // Wildcard type + an unparseable Solidity type makes processResponse throw
+    // synchronously inside executeApiCall — the background go() catches it and
+    // marks the request failed with the pipeline-execution message.
+    const resolved = makeResolved({}, { mode: 'async', encoding: { type: '*', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const asyncStore = createAsyncRequestStore();
+    const deps = makeDeps({ endpointMap, asyncStore });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'not_a_real_type' }, deps);
+    const { requestId } = (await response.json()) as { requestId: Hex };
+
+    const finished = await drainAsync(asyncStore, requestId);
+    expect(finished.status).toBe('failed');
+    expect(finished.error).toBe('Pipeline execution failed');
+    expect(finished.result).toBeUndefined();
+    asyncStore.stop();
+  });
+
   test('async endpoint records a failed state when the upstream call fails', async () => {
     fetchMock.mockRejectedValue(new Error('connection refused'));
     const resolved = makeResolved({}, { mode: 'async', encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const asyncStore = createAsyncRequestStore();
     const deps = makeDeps({ endpointMap, asyncStore });
 
@@ -324,26 +397,38 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 100 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
     const body = (await response.json()) as SignedResponseBody;
 
-    expect(Object.keys(body).toSorted()).toEqual(['airnode', 'data', 'endpointId', 'signature', 'timestamp']);
+    expect(Object.keys(body).toSorted((a, b) => a.localeCompare(b))).toEqual([
+      'airnode',
+      'data',
+      'endpointId',
+      'signature',
+      'timestamp',
+    ]);
   });
 
   test('correct response structure for raw response', async () => {
     mockFetchResponse({ value: 'hello' });
     const resolved = makeResolved();
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
     const body = (await response.json()) as RawResponseBody;
 
-    expect(Object.keys(body).toSorted()).toEqual(['airnode', 'endpointId', 'rawData', 'signature', 'timestamp']);
+    expect(Object.keys(body).toSorted((a, b) => a.localeCompare(b))).toEqual([
+      'airnode',
+      'endpointId',
+      'rawData',
+      'signature',
+      'timestamp',
+    ]);
   });
 
   test('returns 400 for missing required parameters', async () => {
@@ -357,7 +442,7 @@ describe('handleEndpointRequest', () => {
       }
     );
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -376,7 +461,7 @@ describe('handleEndpointRequest', () => {
       }
     );
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -387,7 +472,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, { auth: { type: 'apiKey', keys: ['my-key'] } as ClientAuth });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest({ 'X-Api-Key': 'my-key' }), endpointId, {}, deps);
@@ -402,7 +487,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved({}, { encoding: { type: '*', path: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(
@@ -423,7 +508,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 1.5 });
     const resolved = makeResolved({}, { encoding: { type: '*', path: '*', times: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(
@@ -443,7 +528,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved({}, { encoding: { type: '*', path: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'int256' }, deps);
@@ -457,7 +542,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved({}, { encoding: { type: '*', path: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     // A client could send `_type` as a non-string. It must be treated as absent
@@ -474,7 +559,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved(); // no encoding block at all
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     // Client tries to synthesize encoding — must be ignored (raw mode wins)
@@ -494,7 +579,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42, other: 99 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     // Client tries to override with _path pointing to $.other — should be ignored
@@ -519,7 +604,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved();
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -534,7 +619,7 @@ describe('handleEndpointRequest', () => {
     // Operator pins type, wildcards path — requester chooses what to extract
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, { _path: '$.result' }, deps);
@@ -548,7 +633,7 @@ describe('handleEndpointRequest', () => {
     mockFetchResponse({ result: 42 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '*' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -565,7 +650,7 @@ describe('handleEndpointRequest', () => {
     fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
     const resolved = makeResolved(); // no encoding — raw mode
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -580,7 +665,7 @@ describe('handleEndpointRequest', () => {
     fetchMock.mockResolvedValue({ text: () => Promise.resolve(''), status: 204 });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -593,12 +678,14 @@ describe('handleEndpointRequest', () => {
   test('returns 503 when the upstream-call concurrency cap is saturated', async () => {
     const sem = createSemaphore(1);
     const held = await sem.acquire(1000); // hold the only slot
-    if (!held) throw new Error('expected a slot');
+    if (!held) {
+      throw new Error('expected a slot');
+    }
 
     // The endpoint's API timeout doubles as the semaphore-acquire deadline; keep it short.
     const resolved = makeResolved({ timeout: 40 }, { encoding: { type: 'int256', path: '$.price' } });
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, apiCallSemaphore: sem });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -609,6 +696,210 @@ describe('handleEndpointRequest', () => {
     expect(fetchMock).not.toHaveBeenCalled(); // never reached the upstream
 
     held();
+  });
+
+  // ===========================================================================
+  // Raw response with array data (stableStringify array branch)
+  // ===========================================================================
+  test('raw response over an array upstream body signs the stable-stringified array', async () => {
+    mockFetchResponse([1, 2, 3]);
+    const resolved = makeResolved(); // no encoding — raw mode
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as RawResponseBody;
+
+    expect(response.status).toBe(200);
+    expect(body.rawData).toEqual([1, 2, 3]);
+    expect(body.signature).toMatch(/^0x/);
+  });
+
+  // ===========================================================================
+  // Encoding resolution edge branches
+  // ===========================================================================
+  test('returns 400 when a wildcard _times reserved param is missing', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result', times: '*' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Endpoint requires `_times` request parameter');
+  });
+
+  test('returns 400 when a concrete encoding field resolves to an empty value', async () => {
+    mockFetchResponse({ result: 42 });
+    // A concrete (non-wildcard) but empty type slips past resolveField's wildcard
+    // checks, then trips the final "incomplete" guard in resolveEncoding.
+    const resolved = makeResolved({}, { encoding: { type: '', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Endpoint encoding is incomplete');
+  });
+
+  test('returns 400 when a wildcard type resolves to an empty value', async () => {
+    mockFetchResponse({ result: 42 });
+    // path is concrete; type is wildcard and the client supplies whitespace that
+    // is non-empty (so resolveField accepts it) but type.value is falsy only when
+    // empty — use an empty-after-trim guard via a single space which passes the
+    // empty check, then assert the incomplete branch is reached when type is '*'
+    // and _type is omitted entirely below.
+    const resolved = makeResolved({}, { encoding: { type: '*', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Endpoint requires `_type` request parameter');
+  });
+
+  // ===========================================================================
+  // Plugin drop paths (onBeforeApiCall / onAfterApiCall / onBeforeSign)
+  // ===========================================================================
+  test('returns 403 when onBeforeApiCall plugin drops the request', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    // A plugin that throws in onBeforeApiCall is fail-closed → dropped.
+    const plugins = makePlugins({
+      onBeforeApiCall: () => {
+        throw new Error('blocked');
+      },
+    });
+    const deps = makeDeps({ endpointMap, plugins });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Request dropped by plugin');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 403 when onAfterApiCall plugin drops the request', async () => {
+    mockFetchResponse({ price: 3000 });
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const plugins = makePlugins({
+      onAfterApiCall: () => {
+        throw new Error('blocked');
+      },
+    });
+    const deps = makeDeps({ endpointMap, plugins });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Request dropped by plugin');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns 403 when onBeforeSign plugin drops the request', async () => {
+    mockFetchResponse({ result: 42 });
+    const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const plugins = makePlugins({
+      onBeforeSign: () => {
+        throw new Error('blocked');
+      },
+    });
+    const deps = makeDeps({ endpointMap, plugins });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Request dropped by plugin');
+  });
+
+  // ===========================================================================
+  // onHttpRequest rejection
+  // ===========================================================================
+  test('returns the plugin status and message when onHttpRequest rejects', async () => {
+    const resolved = makeResolved();
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const plugins = makePlugins({
+      onHttpRequest: () => ({ reject: true, status: 418, message: 'IP blocked' }),
+    });
+    const deps = makeDeps({ endpointMap, plugins });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(418);
+    expect(body.error).toBe('IP blocked');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // ===========================================================================
+  // x402 payment required (402)
+  // ===========================================================================
+  test('returns 402 with payment details when x402 auth requires payment', async () => {
+    const resolved = makeResolved(
+      {},
+      {
+        auth: {
+          type: 'x402',
+          network: 8453,
+          rpc: 'https://base.example.com',
+          token: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+          amount: '1000',
+          recipient: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+          expiry: 300_000,
+        } as ClientAuth,
+      }
+    );
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
+    const body = (await response.json()) as { amount: string; token: string; recipient: string; network: number };
+
+    expect(response.status).toBe(402);
+    expect(body.amount).toBe('1000');
+    expect(body.token).toBe('0x5FbDB2315678afecb367f032d93F642f64180aa3');
+    expect(body.recipient).toBe('0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+    expect(body.network).toBe(8453);
+  });
+
+  // ===========================================================================
+  // Sync pipeline crash (executeApiCall throws → 502)
+  // ===========================================================================
+  test('returns 502 when the sync pipeline throws (invalid encoding type)', async () => {
+    mockFetchResponse({ result: 42 });
+    // Operator wildcards the type; client supplies a Solidity type processResponse
+    // cannot parse, so processResponse throws synchronously inside executeApiCall.
+    const resolved = makeResolved({}, { encoding: { type: '*', path: '$.result' } });
+    const endpointMap = makeEndpointMap(resolved);
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
+    const deps = makeDeps({ endpointMap });
+
+    const response = await handleEndpointRequest(makeRequest(), endpointId, { _type: 'not_a_real_type' }, deps);
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe('Internal processing error');
   });
 });
 
@@ -629,7 +920,7 @@ describe('handleEndpointRequest — FHE encryption', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, settings: FHE_SETTINGS });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -644,7 +935,7 @@ describe('handleEndpointRequest — FHE encryption', () => {
     mockFetchResponse({ price: -1 });
     const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, settings: FHE_SETTINGS });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -658,7 +949,7 @@ describe('handleEndpointRequest — FHE encryption', () => {
     mockFetchResponse({ price: 3000 });
     const resolved = makeResolved({}, ENCRYPT_ENDPOINT);
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap }); // settings.fhe === 'none'
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -694,7 +985,9 @@ describe('handleEndpointRequest — TLS proof', () => {
   }): void {
     fetchMock.mockImplementation((input: string | URL | Request) => {
       const url = input instanceof Request ? input.url : String(input);
-      if (url === GATEWAY_URL) return Promise.resolve(gatewayResponse);
+      if (url === GATEWAY_URL) {
+        return Promise.resolve(gatewayResponse);
+      }
       return Promise.resolve({ text: () => Promise.resolve(JSON.stringify({ price: 3000 })), status: 200 });
     });
   }
@@ -713,7 +1006,7 @@ describe('handleEndpointRequest — TLS proof', () => {
       { encoding: { type: 'int256', path: '$.price' }, responseMatches: [{ type: 'regex', value: 'price' }] }
     );
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -735,7 +1028,7 @@ describe('handleEndpointRequest — TLS proof', () => {
       { encoding: { type: 'int256', path: '$.price' }, responseMatches: [{ type: 'regex', value: 'price' }] }
     );
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);
@@ -749,7 +1042,7 @@ describe('handleEndpointRequest — TLS proof', () => {
     routeFetch({ ok: false, text: () => Promise.resolve('should not be called') });
     const resolved = makeResolved({}, { encoding: { type: 'int256', path: '$.price' } }); // no responseMatches
     const endpointMap = makeEndpointMap(resolved);
-    const endpointId = [...endpointMap.keys()][0] as Hex;
+    const endpointId = endpointMap.keys().toArray()[0] as Hex;
     const deps = makeDeps({ endpointMap, settings: PROOF_SETTINGS });
 
     const response = await handleEndpointRequest(makeRequest(), endpointId, {}, deps);

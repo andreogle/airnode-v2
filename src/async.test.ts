@@ -4,7 +4,9 @@ import type { AsyncRequestStore, PendingRequest } from './async';
 
 function mustCreate(store: AsyncRequestStore): PendingRequest {
   const req = store.create();
-  if (!req) throw new Error('async store unexpectedly full');
+  if (!req) {
+    throw new Error('async store unexpectedly full');
+  }
   return req;
 }
 
@@ -66,6 +68,18 @@ describe('createAsyncRequestStore', () => {
     store.stop();
   });
 
+  test('mutators on an unknown request are no-ops', () => {
+    const store = createAsyncRequestStore();
+    const unknown = '0xdeadbeef';
+
+    store.setProcessing(unknown);
+    store.setComplete(unknown, { data: '0x1' });
+    store.setFailed(unknown, 'boom');
+
+    expect(store.get(unknown)).toBeUndefined();
+    store.stop();
+  });
+
   test('generates unique request IDs', () => {
     const store = createAsyncRequestStore();
     const r1 = mustCreate(store);
@@ -87,7 +101,9 @@ describe('createAsyncRequestStore', () => {
     const store = createAsyncRequestStore();
     const created = Array.from({ length: 100 }, () => {
       const req = store.create();
-      if (req) store.setComplete(req.requestId, { ok: true });
+      if (req) {
+        store.setComplete(req.requestId, { ok: true });
+      }
       return req;
     });
     // The slots are still occupied (results retained), so a new request is refused...
