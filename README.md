@@ -143,15 +143,15 @@ mise install                 # install the Bun and Foundry versions pinned in mi
 
 #### Using mise
 
-| Command                   | Description                                                |
-| ------------------------- | ---------------------------------------------------------- |
-| `mise trust`              | Trust `mise.toml` (run once, and after it changes)         |
-| `mise install`            | Install the toolchain versions pinned in `mise.toml`       |
-| `mise ls`                 | List installed tools and the active versions               |
-| `mise use bun@latest`     | Upgrade Bun to the latest release and update `mise.toml`   |
-| `mise use bun@1.3.14`     | Pin Bun to a specific version in `mise.toml`               |
+| Command                   | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| `mise trust`              | Trust `mise.toml` (run once, and after it changes)           |
+| `mise install`            | Install the toolchain versions pinned in `mise.toml`         |
+| `mise ls`                 | List installed tools and the active versions                 |
+| `mise use bun@latest`     | Upgrade Bun to the latest release and update `mise.toml`     |
+| `mise use bun@1.3.14`     | Pin Bun to a specific version in `mise.toml`                 |
 | `mise use foundry@latest` | Upgrade Foundry to the latest release and update `mise.toml` |
-| `mise exec -- bun <cmd>`  | Run a one-off command with the pinned toolchain            |
+| `mise exec -- bun <cmd>`  | Run a one-off command with the pinned toolchain              |
 
 To bump a tool, run `mise use <tool>@latest` (or pin an explicit version), then commit the updated `mise.toml`.
 
