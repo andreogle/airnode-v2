@@ -25,6 +25,7 @@ Client ──POST──▶ Airnode ──HTTP──▶ Upstream API
 ## Quick start
 
 ```bash
+mise trust && mise install              # provision the pinned toolchain (see Development)
 bun install
 bun airnode generate-mnemonic           # prints mnemonic phrase + address
 cp examples/configs/minimal/config.yaml config.yaml
@@ -129,10 +130,30 @@ Verifies `keccak256(encodePacked(endpointId, timestamp, data))` with EIP-191 per
 
 ### Prerequisites
 
-| Tool                                  | Install                                                     |
-| ------------------------------------- | ----------------------------------------------------------- |
-| [Bun](https://bun.sh)                 | `curl -fsSL https://bun.sh/install \| bash`                 |
-| [Foundry](https://book.getfoundry.sh) | `curl -L https://foundry.paradigm.xyz \| bash && foundryup` |
+[Bun](https://bun.sh) and [Foundry](https://book.getfoundry.sh) are pinned in [`mise.toml`](mise.toml) and managed with
+[`mise`](https://mise.jdx.dev). Install `mise`, then let it provision the toolchain:
+
+```bash
+curl https://mise.run | sh   # install mise (see mise.jdx.dev for other methods)
+mise trust                   # trust this repo's mise.toml (required once per config)
+mise install                 # install the Bun and Foundry versions pinned in mise.toml
+```
+
+`mise` shims activate automatically in the project directory, so `bun` and `forge` resolve to the pinned versions.
+
+#### Using mise
+
+| Command                   | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `mise trust`              | Trust `mise.toml` (run once, and after it changes)         |
+| `mise install`            | Install the toolchain versions pinned in `mise.toml`       |
+| `mise ls`                 | List installed tools and the active versions               |
+| `mise use bun@latest`     | Upgrade Bun to the latest release and update `mise.toml`   |
+| `mise use bun@1.3.14`     | Pin Bun to a specific version in `mise.toml`               |
+| `mise use foundry@latest` | Upgrade Foundry to the latest release and update `mise.toml` |
+| `mise exec -- bun <cmd>`  | Run a one-off command with the pinned toolchain            |
+
+To bump a tool, run `mise use <tool>@latest` (or pin an explicit version), then commit the updated `mise.toml`.
 
 ### Scripts
 
