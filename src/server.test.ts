@@ -173,7 +173,7 @@ describe('createServer', () => {
     server = createServer(deps);
     baseUrl = `http://127.0.0.1:${String(server.port)}`;
 
-    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, { method: 'GET' });
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`);
     const body = (await response.json()) as { error: string };
 
     expect(response.status).toBe(405);

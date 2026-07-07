@@ -12,8 +12,7 @@ interface SignedResponse {
 }
 
 type ResolvedAccount =
-  | { readonly success: true; readonly account: PrivateKeyAccount }
-  | { readonly success: false; readonly error: string };
+  { readonly success: true; readonly account: PrivateKeyAccount } | { readonly success: false; readonly error: string };
 
 // =============================================================================
 // Account creation (call once at startup, not per-request)

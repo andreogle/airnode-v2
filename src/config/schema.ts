@@ -20,7 +20,7 @@ export const parameterSchema = z
     secret: z.boolean().default(false),
     description: z.string().optional(),
   })
-  .refine((p) => !(p.required && p.default !== undefined), {
+  .refine((p) => !p.required || p.default === undefined, {
     message: 'A parameter cannot be both required and have a default value',
   });
 
