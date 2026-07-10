@@ -3,6 +3,7 @@ import type { Config } from '../types';
 import { configSchema } from './schema';
 
 const ENV_VAR_PATTERN = /\$\{(\w+)\}/g;
+const ENV_VAR_REFERENCE_PATTERN = /\$\{\w+\}/;
 
 export function interpolateEnvironment(raw: string): string {
   return raw.replaceAll(ENV_VAR_PATTERN, (match, name: string) => {
@@ -39,7 +40,7 @@ function markParamsSecret(rawParams: readonly unknown[], params: readonly unknow
   // eslint-disable-next-line functional/no-loop-statements
   for (const [paramIndex, rawParam] of rawParams.entries()) {
     const fixed = asRecord(rawParam)?.['fixed'];
-    if (typeof fixed !== 'string' || !fixed.startsWith('${')) {
+    if (typeof fixed !== 'string' || !ENV_VAR_REFERENCE_PATTERN.test(fixed)) {
       continue;
     }
     const target = asRecord(params[paramIndex]);

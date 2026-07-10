@@ -126,14 +126,14 @@ apis:
         parameters:
           - name: apikey
             in: query
-            fixed: \${SECRET_PARAM_VALUE}
+            fixed: Bearer \${SECRET_PARAM_VALUE}
           - name: coin
             in: query
             required: true
 `;
     const params = parseConfig(raw).apis[0]?.endpoints[0]?.parameters;
     const apikey = params?.find((p) => p.name === 'apikey');
-    expect(apikey?.fixed).toBe('super-secret-key'); // resolved from the environment
+    expect(apikey?.fixed).toBe('Bearer super-secret-key'); // resolved from the environment
     expect(apikey?.secret).toBe(true); // and marked secret so it stays out of the endpoint ID
     expect(params?.find((p) => p.name === 'coin')?.secret).toBe(false);
   });
@@ -164,7 +164,7 @@ apis:
         parameters:
           - name: apikey
             in: query
-            fixed: \${SECRET_PARAM_VALUE}
+            fixed: Bearer \${SECRET_PARAM_VALUE}
           - name: coin
             in: query
             required: true
