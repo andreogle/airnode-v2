@@ -12,10 +12,11 @@ interpreted.
 
 ## Derivation
 
-The endpoint ID is the keccak256 hash of a pipe-delimited canonical string:
+The endpoint ID is the keccak256 hash of a pipe-delimited canonical string. Parameters are represented as canonical JSON
+objects so their location and semantics cannot collapse into the same ID:
 
 ```
-endpointId = keccak256(url | path | method | sorted parameters | encoding spec | encrypt spec)
+endpointId = keccak256(url | path | method | sorted parameter JSON | encoding spec | encrypt spec)
 ```
 
 (The `encoding spec` and `encrypt spec` segments are only present when the endpoint configures them.)
@@ -46,7 +47,7 @@ apis:
 The canonical string is:
 
 ```
-https://api.coingecko.com/api/v3|/simple/price|GET|ids,vs_currencies=usd|type=int256,path=$.ethereum.usd,times=1e18
+https://api.coingecko.com/api/v3|/simple/price|GET|[{"name":"ids","in":"query","required":true,"secret":false},{"name":"vs_currencies","in":"query","required":false,"secret":false,"fixed":"usd"}]|type=int256,path=$.ethereum.usd,times=1e18
 ```
 
 And the endpoint ID is `keccak256` of that string encoded as hex bytes.
@@ -149,28 +150,23 @@ raw-JSON-only from a consumer perspective.
 
 These fields are part of the hash:
 
-| Field                 | Example                            | Why                                                            |
-| --------------------- | ---------------------------------- | -------------------------------------------------------------- |
-| `api.url`             | `https://api.coingecko.com/api/v3` | Different APIs produce different endpoint IDs                  |
-| `endpoint.path`       | `/simple/price`                    | Different paths on the same API are different endpoints        |
-| `endpoint.method`     | `GET`                              | A GET and POST to the same path are different operations       |
-| Non-secret parameters | `ids,vs_currencies=usd`            | Parameters define what data is being requested                 |
-| `encoding.type`       | `int256` or `*`                    | Different encodings of the same data produce different outputs |
-| `encoding.path`       | `$.ethereum.usd` or `*`            | Extracting different fields produces different data            |
-| `encoding.times`      | `1e18` or `*`                      | Different multipliers produce different values                 |
-| `encrypt.type`        | `euint256` (if `encrypt` is set)   | The FHE ciphertext type changes the response shape             |
-| `encrypt.contract`    | `0x5fbdb2…` (if `encrypt` is set)  | The encrypted input is bound to this consumer contract         |
+| Field               | Example                                                  | Why                                                            |
+| ------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| `api.url`           | `https://api.coingecko.com/api/v3`                       | Different APIs produce different endpoint IDs                  |
+| `endpoint.path`     | `/simple/price`                                          | Different paths on the same API are different endpoints        |
+| `endpoint.method`   | `GET`                                                    | A GET and POST to the same path are different operations       |
+| Parameter semantics | name, location, required/default/fixed and secret marker | Parameters define the generated request                        |
+| `encoding.type`     | `int256` or `*`                                          | Different encodings of the same data produce different outputs |
+| `encoding.path`     | `$.ethereum.usd` or `*`                                  | Extracting different fields produces different data            |
+| `encoding.times`    | `1e18` or `*`                                            | Different multipliers produce different values                 |
+| `encrypt.type`      | `euint256` (if `encrypt` is set)                         | The FHE ciphertext type changes the response shape             |
+| `encrypt.contract`  | `0x5fbdb2…` (if `encrypt` is set)                        | The encrypted input is bound to this consumer contract         |
 
 ### Parameter rules
 
-Parameters are sorted alphabetically by name and formatted as:
-
-- **Client-provided** (no `fixed` value): just the name, e.g. `ids`
-- **Fixed value**: name=value, e.g. `vs_currencies=usd`
-- **Secret parameters** (`secret: true` or `fixed` value starting with `${`): excluded entirely
-
-This means adding a secret API key header to the config does not change the endpoint ID. Two operators using the same
-API -- one with a free key, one with a paid key -- get the same endpoint ID as long as the public specification matches.
+Parameters are sorted by name and location. Each entry commits to `name`, `in`, `required`, whether it is secret, and
+any non-secret `default` or `fixed` value. Secret parameter values are omitted, but the parameter itself remains
+represented. Rotating a secret therefore preserves the ID, while adding or removing a secret header changes it.
 
 ## What Is Excluded
 
@@ -185,8 +181,7 @@ These fields do not affect the endpoint ID:
 | `api.cache` / `endpoint.cache` | Caching is an optimization, not a data property                    |
 | `endpoint.mode`                | `sync` / `async` / `stream` is a delivery choice, not a data spec  |
 | `endpoint.auth`                | Endpoint-level client auth override, like `api.auth`               |
-| Secret parameters              | Parameters marked `secret: true` or with `${ENV_VAR}` fixed values |
-| Default values                 | Defaults are convenience for clients, not part of the spec         |
+| Secret parameter values        | Credentials rotate without changing the public endpoint contract   |
 
 ## Why This Design
 

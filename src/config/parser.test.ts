@@ -138,7 +138,7 @@ apis:
     expect(params?.find((p) => p.name === 'coin')?.secret).toBe(false);
   });
 
-  test('env-backed fixed params do not change the endpoint ID', () => {
+  test('env-backed fixed parameter values do not change the endpoint ID', () => {
     process.env['SECRET_PARAM_VALUE'] = 'super-secret-key';
     const withSecretParam = `
 version: '1.0'
@@ -202,7 +202,16 @@ apis:
     if (!apiWith || !endpointWith || !apiWithout || !endpointWithout) {
       throw new Error('config did not parse as expected');
     }
-    expect(deriveEndpointId(apiWith, endpointWith)).toBe(deriveEndpointId(apiWithout, endpointWithout));
+    const idWithSecret = deriveEndpointId(apiWith, endpointWith);
+    expect(idWithSecret).not.toBe(deriveEndpointId(apiWithout, endpointWithout));
+
+    process.env['SECRET_PARAM_VALUE'] = 'rotated-secret-key';
+    const rotatedApi = parseConfig(withSecretParam).apis[0];
+    const rotatedEndpoint = rotatedApi?.endpoints[0];
+    if (!rotatedApi || !rotatedEndpoint) {
+      throw new Error('rotated config did not parse as expected');
+    }
+    expect(deriveEndpointId(rotatedApi, rotatedEndpoint)).toBe(idWithSecret);
   });
 
   test('interpolates header values from environment variables', async () => {

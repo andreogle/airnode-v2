@@ -12,67 +12,37 @@ interface ResolvedEndpoint {
 // =============================================================================
 // Endpoint ID derivation
 // =============================================================================
-function isSecretParameter(param: { readonly secret?: boolean; readonly fixed?: string | number | boolean }): boolean {
-  if (param.secret === true) {
-    return true;
-  }
-  return typeof param.fixed === 'string' && param.fixed.startsWith('${');
+function buildParameterSpec(parameters: Endpoint['parameters']): readonly Record<string, unknown>[] {
+  return [...parameters]
+    .toSorted((a, b) => `${a.name}:${a.in}`.localeCompare(`${b.name}:${b.in}`))
+    .map((parameter) => {
+      const isSecret =
+        parameter.secret || (typeof parameter.fixed === 'string' && /\$\{[A-Z_][A-Z0-9_]*\}/i.test(parameter.fixed));
+      return {
+        name: parameter.name,
+        in: parameter.in,
+        required: parameter.required,
+        secret: isSecret,
+        ...(!isSecret && parameter.default !== undefined && { default: parameter.default }),
+        ...(!isSecret && parameter.fixed !== undefined && { fixed: parameter.fixed }),
+      };
+    });
 }
 
-function buildParameterSpec(
-  parameters: readonly {
-    readonly name: string;
-    readonly fixed?: string | number | boolean;
-    readonly secret?: boolean;
-  }[]
-): string {
-  const specs = [...parameters]
-    .toSorted((a, b) => a.name.localeCompare(b.name))
-    .filter((param) => !isSecretParameter(param))
-    .map((param) => (param.fixed === undefined ? param.name : `${param.name}=${String(param.fixed)}`));
-  return specs.join(',');
-}
-
-// Encoding fields are flattened into the endpoint ID so two endpoints that
-// differ only in encoding (e.g. one pins `path`, the other wildcards it) get
-// distinct IDs. `type` and `path` are required by the schema; `times` is
-// optional and absent is rendered as the empty string. The literal `*` is
-// what an operator writes to delegate the field to a request reserved param,
-// and it flows through unchanged so a consumer reading the canonical spec
-// (off-chain) can tell which fields are wildcarded.
-function buildEncodingSpec(encoding?: {
-  readonly type: string;
-  readonly path: string;
-  readonly times?: string;
-}): string {
-  if (!encoding) {
-    return '';
-  }
-  return `type=${encoding.type},path=${encoding.path},times=${encoding.times ?? ''}`;
-}
-
-// FHE-encrypted endpoints commit to the ciphertext type and the bound consumer
-// contract so an on-chain verifier can tell from the endpoint ID alone that the
-// signed `data` is an encrypted-input handle for a specific contract.
-function buildEncryptSpec(encrypt?: { readonly type: string; readonly contract: string }): string {
-  if (!encrypt) {
-    return '';
-  }
-  return `fhe=${encrypt.type},contract=${encrypt.contract.toLowerCase()}`;
-}
-
-// Canonical string: `url|path|method|paramSpec[|encodingSpec[|encryptSpec]]`,
-// joined by `|`, where paramSpec/encodingSpec/encryptSpec use `,` and `=` as
-// internal delimiters. This is not a length-prefixed encoding, so in principle
-// a config containing those characters in a path or parameter value could be
-// crafted to collide with a different config — but the operator controls every
-// segment and has no incentive to collide with themselves, so we accept the
-// simpler form. (`buildEndpointMap` still catches accidental collisions.)
+// Canonical string: `url|path|method|parameterSpec[|encodingSpec[|encryptSpec]]`.
+// Parameter entries use JSON so location/default/required/secret markers cannot
+// collapse into the same specification. Other segments retain the v2 format.
 function deriveEndpointId(api: Api, endpoint: Endpoint): Hex {
-  const paramSpec = buildParameterSpec(endpoint.parameters);
-  const tail = [buildEncodingSpec(endpoint.encoding), buildEncryptSpec(endpoint.encrypt)].filter((spec) => spec !== '');
-  const parts = [api.url, endpoint.path, endpoint.method, paramSpec, ...tail];
-  const canonical = parts.join('|');
+  const parameterEntries = buildParameterSpec(endpoint.parameters);
+  const parameterSpec = parameterEntries.length === 0 ? '' : JSON.stringify(parameterEntries);
+  const encodingSpec = endpoint.encoding
+    ? `type=${endpoint.encoding.type},path=${endpoint.encoding.path},times=${endpoint.encoding.times ?? ''}`
+    : '';
+  const encryptSpec = endpoint.encrypt
+    ? `fhe=${endpoint.encrypt.type},contract=${endpoint.encrypt.contract.toLowerCase()}`
+    : '';
+  const tail = [encodingSpec, encryptSpec].filter((spec) => spec !== '');
+  const canonical = [api.url, endpoint.path, endpoint.method, parameterSpec, ...tail].join('|');
   return keccak256(toHex(canonical));
 }
 
