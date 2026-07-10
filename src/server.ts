@@ -263,7 +263,8 @@ function createServer(deps: ServerDependencies): ServerHandle {
   // proof isn't killed mid-flight, while still bounding connections that just
   // sit there. Worst-case wait ≈ upstream timeout + proof timeout + overhead.
   const proofTimeoutMs = deps.settings.proof === 'none' ? 0 : deps.settings.proof.timeout;
-  const idleTimeout = Math.min(255, Math.ceil((deps.settings.timeout + proofTimeoutMs) / 1000) + 20);
+  const maxApiTimeoutMs = Math.max(...deps.config.apis.map((api) => api.timeout));
+  const idleTimeout = Math.min(255, Math.ceil((maxApiTimeoutMs + proofTimeoutMs) / 1000) + 20);
 
   const server = Bun.serve({
     port: deps.config.server.port,
