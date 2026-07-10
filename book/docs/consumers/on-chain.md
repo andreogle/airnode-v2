@@ -38,7 +38,7 @@ function fulfill(
 ) external {
   require(msg.sender == verifier, 'Not the verifier'); // 1. only AirnodeVerifier checked the signature
   require(attestedAirnode == airnode, 'Untrusted airnode'); // 2. the Airnode you trust
-  require(attestedEndpointId == endpointId, 'Wrong endpoint'); // 3. the feed you trust (this also pins the encoding)
+  require(attestedEndpointId == endpointId, 'Wrong endpoint'); // 3. the endpoint specification you trust
   require(attestedAt <= block.timestamp, 'Future timestamp'); // 4a. not from the future
   require(block.timestamp - attestedAt <= maxStaleness, 'Stale'); // 4b. fresh enough
 
@@ -60,9 +60,14 @@ The single most likely place a consumer loses money is forgetting one of these. 
 - **`airnode == trustedAirnode`** — AirnodeVerifier confirms the signature recovers to the supplied `airnode`, but that
   address is chosen by the submitter. Pin the specific Airnode you trust. (Check this even though you also check the
   endpoint ID — a rogue Airnode that knows the public endpoint-ID formula can sign under any endpoint ID.)
-- **`endpointId == trustedEndpointId`** — one Airnode signs many endpoints. Without this, an attacker feeds you a
-  different endpoint's data (a different asset, a feed with different encoding). The endpoint ID also commits to the
-  endpoint's encoding spec, so pinning it pins the `abi.decode` shape you use.
+- **`endpointId == trustedEndpointId`** — one Airnode signs many endpoint specifications. Without this, an attacker can
+  feed you a different endpoint's data. The endpoint ID commits to the endpoint's configured encoding and parameter
+  schema, but **not to the actual requester-supplied parameter values used for one invocation**.
+- **Fixed request context** — the signed tuple is `(endpointId, timestamp, data)`. It does not include the resolved URL,
+  request body, or requester-supplied parameter values. Until a future signed-payload format binds that context, an
+  on-chain consumer should use only endpoints where every economically meaningful input (asset, market, chain, quote
+  currency) is fixed by operator configuration. Pinning an endpoint ID alone cannot distinguish `asset=ETH` from
+  `asset=BTC` when both are accepted by the same endpoint specification.
 - **Freshness** — `attestedAt <= block.timestamp` (reject future-dated, clock-skewed/manipulated timestamps) and
   `block.timestamp - attestedAt <= maxStaleness` (a signed payload never expires on its own — anyone can replay an old
   one forever).
