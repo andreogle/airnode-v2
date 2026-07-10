@@ -6,7 +6,8 @@ sidebar_position: 2
 # Request-Response
 
 Airnode serves data on demand. A client sends a request, Airnode calls the upstream API, signs the response, and returns
-it.
+it. Upstream response bodies are limited to 1 MiB; larger bodies are rejected before parsing or signing, including
+chunked responses without a `Content-Length` header.
 
 ## Request
 

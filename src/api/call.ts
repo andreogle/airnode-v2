@@ -15,6 +15,40 @@ interface BuiltRequest {
   readonly body?: string;
 }
 
+const MAX_API_RESPONSE_BYTES = 1024 * 1024;
+
+async function readResponseText(response: Response): Promise<string> {
+  if (!response.body) {
+    return response.text();
+  }
+
+  const contentLength = Number(response.headers.get('Content-Length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_API_RESPONSE_BYTES) {
+    throw new Error('API response exceeds 1 MiB limit');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  const readNext = async (totalBytes: number, text: string): Promise<string> => {
+    const chunk = await reader.read();
+    if (chunk.done) {
+      return text + decoder.decode();
+    }
+
+    const value = chunk.value as Uint8Array;
+    const nextTotal = totalBytes + value.byteLength;
+    if (nextTotal > MAX_API_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error('API response exceeds 1 MiB limit');
+    }
+
+    return readNext(nextTotal, text + decoder.decode(value, { stream: true }));
+  };
+
+  return readNext(0, '');
+}
+
 function buildUrl(url: string, path: string, pathParameters: Record<string, string>): string {
   // eslint-disable-next-line functional/no-let
   let resolvedPath = path;
@@ -114,7 +148,7 @@ async function callApi(
     signal: AbortSignal.timeout(api.timeout),
   });
 
-  const text = await response.text();
+  const text = await readResponseText(response);
 
   // Empty body (e.g. 204 No Content) — return undefined data, let the pipeline decide
   if (text.trim() === '') {
