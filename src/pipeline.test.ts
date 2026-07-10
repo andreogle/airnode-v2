@@ -997,7 +997,14 @@ describe('handleEndpointRequest — TLS proof', () => {
       ok: true,
       json: () =>
         Promise.resolve({
-          claim: { parameters: JSON.stringify({ url: 'https://api.example.com/data', method: 'GET' }) },
+          claim: {
+            parameters: JSON.stringify({
+              url: 'https://api.example.com/data',
+              method: 'GET',
+              headers: {},
+              responseMatches: [{ type: 'regex', value: 'price' }],
+            }),
+          },
           signatures: { attestorAddress: ATTESTOR, claimSignature: `0x${'ab'.repeat(65)}` },
         }),
     });

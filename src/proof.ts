@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { go, goSync } from '@api3/promise-utils';
 import { logger } from './logger';
 
@@ -55,7 +56,16 @@ function validateProof(raw: unknown, request: ProofRequest): ReclaimProof {
     throw new TypeError('proof response missing attestor address');
   }
 
-  const params = goSync(() => JSON.parse(proof.claim?.parameters as string) as { url?: unknown; method?: unknown });
+  const params = goSync(
+    () =>
+      JSON.parse(proof.claim?.parameters as string) as {
+        url?: unknown;
+        method?: unknown;
+        headers?: unknown;
+        body?: unknown;
+        responseMatches?: unknown;
+      }
+  );
   if (!params.success) {
     throw new Error('proof claim.parameters is not valid JSON');
   }
@@ -64,6 +74,13 @@ function validateProof(raw: unknown, request: ProofRequest): ReclaimProof {
   }
   if (params.data.method !== request.method) {
     throw new Error(`proof attests method ${String(params.data.method)}, expected ${request.method}`);
+  }
+  const comparedFields = ['headers', 'body', 'responseMatches'] as const;
+  const mismatch = comparedFields.find(
+    (field) => request[field] !== undefined && !isDeepStrictEqual(params.data[field], request[field])
+  );
+  if (mismatch) {
+    throw new Error(`proof attests different ${mismatch}`);
   }
   return raw as ReclaimProof;
 }
@@ -84,8 +101,9 @@ async function requestProof(
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Proof gateway returned ${String(response.status)}: ${text}`);
+      // The gateway receives upstream credentials. Do not include its response
+      // body in errors or logs because a misconfigured gateway may echo them.
+      throw new Error(`Proof gateway returned ${String(response.status)}`);
     }
 
     return response.json();
