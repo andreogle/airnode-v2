@@ -47,8 +47,9 @@ function fulfill(
 }
 ```
 
-(`requestHash` is `keccak256(endpointId, timestamp, data)` and is AirnodeVerifier's replay key — each unique payload can
-only be fulfilled once, globally.)
+(`requestHash` is `keccak256(endpointId, timestamp, data)`. Replay protection is scoped by signer, request hash,
+callback address, and selector. The public `fulfilled(airnode, requestHash)` getter indicates that the payload has been
+delivered at least once; `fulfilledDelivery(deliveryHash)` tracks the precise tuple.)
 
 ### Security checklist
 
@@ -76,7 +77,8 @@ The single most likely place a consumer loses money is forgetting one of these. 
   shape the requester picked.
 
 If a check fails, **revert** (or ignore) — and note that a revert inside `fulfill` does not revert AirnodeVerifier's
-`verifyAndFulfill`: the request is still marked fulfilled (anti-griefing), your state just stays put.
+`verifyAndFulfill`: that precise signer/payload/callback/selector delivery remains recorded, while another callback or
+selector can still receive the same signed payload.
 
 ### When to use
 

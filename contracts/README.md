@@ -94,9 +94,9 @@ function fulfill(
 
 ### Replay protection
 
-The `requestHash` (which is the `messageHash` from the signature) serves as the replay key. Each unique combination of
-`(endpointId, timestamp, data)` can only be fulfilled once. The `fulfilled` mapping is public — anyone can check whether
-a particular hash has been submitted.
+The `requestHash` is the `messageHash` from the signature. Replay protection is scoped by signer: each unique
+`(airnode, endpointId, timestamp, data)` combination can only be fulfilled once. The nested `fulfilled` mapping is
+public, so callers can query `fulfilled(airnode, requestHash)`.
 
 ### Trust model
 

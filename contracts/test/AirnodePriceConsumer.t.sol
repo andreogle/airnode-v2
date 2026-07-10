@@ -153,7 +153,7 @@ contract AirnodePriceConsumerTest is Test {
 
     verifier.verifyAndFulfill(airnode, wrongEndpoint, TIMESTAMP, data, sig, address(consumer), SELECTOR);
 
-    assertTrue(verifier.fulfilled(keccak256(abi.encodePacked(wrongEndpoint, TIMESTAMP, data))));
+    assertTrue(verifier.fulfilled(airnode, keccak256(abi.encodePacked(wrongEndpoint, TIMESTAMP, data))));
     assertEq(consumer.latestTimestamp(), 0); // consumer rejected it (WrongEndpoint)
   }
 }
