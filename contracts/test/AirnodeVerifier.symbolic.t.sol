@@ -30,7 +30,7 @@ contract AirnodeVerifierSymbolicTest is Test {
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
 
     // Pre-condition: not already fulfilled
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     bytes32 messageHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
     bytes32 ethSignedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', messageHash));
@@ -47,7 +47,7 @@ contract AirnodeVerifierSymbolicTest is Test {
       MockCallback.fulfill.selector
     );
 
-    assert(verifier.fulfilled(requestHash));
+    assert(verifier.fulfilled(airnodeAddress, requestHash));
   }
 
   /// @notice Replay always reverts — for any hash, fulfilling twice fails
@@ -62,7 +62,7 @@ contract AirnodeVerifierSymbolicTest is Test {
     bytes memory sig = abi.encodePacked(r, s, v);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     // First call succeeds
     verifier.verifyAndFulfill(

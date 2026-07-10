@@ -68,7 +68,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes memory data = abi.encode(handleRef, inputProof);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     _fulfillViaVerifier(endpointId, timestamp, data);
 
@@ -97,7 +97,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes memory data = abi.encode(handleRef, inputProof);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     _fulfillViaVerifier(endpointId, timestamp, data);
 
@@ -128,7 +128,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes memory data = abi.encode(handleRef, inputProof);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     _fulfillViaVerifier(endpointId, timestamp, data);
 
@@ -160,7 +160,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes memory data = abi.encode(handleRef, inputProof);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
 
     _fulfillViaVerifier(endpointId, timestamp, data);
 
@@ -188,7 +188,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes32 freshRef = bytes32(uint256(0xfeed));
     bytes memory freshData = abi.encode(freshRef, hex'aa');
     bytes32 freshHash = keccak256(abi.encodePacked(endpointId, freshTs, freshData));
-    vm.assume(!verifier.fulfilled(freshHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, freshHash));
 
     _fulfillViaVerifier(endpointId, freshTs, freshData);
 
@@ -199,7 +199,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes32 staleRef = bytes32(uint256(0xdead));
     bytes memory staleData = abi.encode(staleRef, hex'bb');
     bytes32 staleHash = keccak256(abi.encodePacked(endpointId, staleTs, staleData));
-    vm.assume(!verifier.fulfilled(staleHash));
+    vm.assume(!verifier.fulfilled(airnodeAddress, staleHash));
 
     _fulfillViaVerifier(endpointId, staleTs, staleData);
 
@@ -232,7 +232,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     bytes memory sig = abi.encodePacked(r, s, v);
 
     bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(requestHash));
+    vm.assume(!verifier.fulfilled(untrustedAirnode, requestHash));
 
     // This will revert at the verifier level ("Signature mismatch") since we
     // pass airnodeAddress but signed with a different key. If we passed

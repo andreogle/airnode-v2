@@ -23,12 +23,12 @@ pragma solidity ^0.8.24;
 ///   - The contract only verifies the signature. It does NOT check whether the
 ///     airnode is "legitimate" — that is the callback contract's responsibility.
 ///     The callback contract should maintain its own trust set of airnode addresses.
-///   - Replay protection: each (endpointId, timestamp, data) combination can only
-///     be fulfilled once.
+///   - Replay protection: each (airnode, endpointId, timestamp, data, callback,
+///     selector) combination can only be fulfilled once. Independent airnodes
+///     and consumers can deliver the same payload without blocking each other.
 ///   - The callback receives (requestHash, airnode, endpointId, timestamp, data)
 ///     so it has all the context it needs to validate and process the data.
-///   - If the callback reverts, the fulfillment is still recorded. This prevents
-///     griefing where a callback intentionally reverts to block fulfillment.
+///   - If the callback reverts, that precise delivery tuple is still recorded.
 contract AirnodeVerifier {
   // ===========================================================================
   // Events
@@ -44,9 +44,11 @@ contract AirnodeVerifier {
   // ===========================================================================
   // Storage
   // ===========================================================================
-  /// @notice Tracks fulfilled requests to prevent replay. The key is the hash of the
-  ///         signed message, which is unique per (endpointId, timestamp, data) combination.
-  mapping(bytes32 => bool) public fulfilled;
+  /// @notice Indicates whether a signer/payload pair has been delivered at least once.
+  mapping(address => mapping(bytes32 => bool)) public fulfilled;
+
+  /// @notice Tracks the precise signer/payload/callback/selector delivery tuple.
+  mapping(bytes32 => bool) public fulfilledDelivery;
 
   // ===========================================================================
   // External functions
@@ -79,9 +81,13 @@ contract AirnodeVerifier {
     address recovered = _recover(ethSignedHash, signature);
     require(recovered == airnode, 'Signature mismatch');
 
-    // Prevent replay — each unique message can only be fulfilled once
-    require(!fulfilled[messageHash], 'Already fulfilled');
-    fulfilled[messageHash] = true;
+    // Replay protection is scoped to the signer and callback target. Two
+    // independent consumers may legitimately deliver the same attestation, and
+    // a caller cannot burn it by supplying an unrelated callback or selector.
+    bytes32 deliveryHash = keccak256(abi.encode(airnode, messageHash, callbackAddress, callbackSelector));
+    require(!fulfilledDelivery[deliveryHash], 'Already fulfilled');
+    fulfilledDelivery[deliveryHash] = true;
+    fulfilled[airnode][messageHash] = true;
 
     // Emit before external interaction (checks-effects-interactions pattern)
     emit Fulfilled(messageHash, airnode, endpointId, timestamp, callbackAddress);

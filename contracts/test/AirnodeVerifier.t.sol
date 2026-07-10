@@ -11,6 +11,7 @@ contract AirnodeVerifierTest is Test {
   RevertingCallback revertingCallback;
 
   uint256 constant AIRNODE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+  uint256 constant SECOND_AIRNODE_KEY = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
   address airnodeAddress;
 
   bytes32 constant ENDPOINT_ID = bytes32(uint256(1));
@@ -33,9 +34,18 @@ contract AirnodeVerifierTest is Test {
   // ===========================================================================
 
   function _sign(bytes32 endpointId, uint256 timestamp, bytes memory data) internal pure returns (bytes memory) {
+    return _signWithKey(AIRNODE_KEY, endpointId, timestamp, data);
+  }
+
+  function _signWithKey(
+    uint256 key,
+    bytes32 endpointId,
+    uint256 timestamp,
+    bytes memory data
+  ) internal pure returns (bytes memory) {
     bytes32 messageHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
     bytes32 ethSignedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', messageHash));
-    (uint8 v, bytes32 r, bytes32 s) = vm.sign(AIRNODE_KEY, ethSignedHash);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, ethSignedHash);
     return abi.encodePacked(r, s, v);
   }
 
@@ -59,11 +69,11 @@ contract AirnodeVerifierTest is Test {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
     bytes32 requestHash = keccak256(abi.encodePacked(ENDPOINT_ID, TIMESTAMP, DATA));
 
-    assertFalse(verifier.fulfilled(requestHash));
+    assertFalse(verifier.fulfilled(airnodeAddress, requestHash));
 
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
 
-    assertTrue(verifier.fulfilled(requestHash));
+    assertTrue(verifier.fulfilled(airnodeAddress, requestHash));
   }
 
   function test_reverts_on_replay() public {
@@ -73,6 +83,36 @@ contract AirnodeVerifierTest is Test {
 
     vm.expectRevert('Already fulfilled');
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
+  }
+
+  function test_allows_independent_airnodes_to_submit_the_same_payload() public {
+    address secondAirnode = vm.addr(SECOND_AIRNODE_KEY);
+    bytes memory firstSignature = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
+    bytes memory secondSignature = _signWithKey(SECOND_AIRNODE_KEY, ENDPOINT_ID, TIMESTAMP, DATA);
+
+    verifier.verifyAndFulfill(
+      airnodeAddress,
+      ENDPOINT_ID,
+      TIMESTAMP,
+      DATA,
+      firstSignature,
+      address(callback),
+      CALLBACK_SELECTOR
+    );
+    verifier.verifyAndFulfill(
+      secondAirnode,
+      ENDPOINT_ID,
+      TIMESTAMP,
+      DATA,
+      secondSignature,
+      address(callback),
+      CALLBACK_SELECTOR
+    );
+
+    bytes32 requestHash = keccak256(abi.encodePacked(ENDPOINT_ID, TIMESTAMP, DATA));
+    assertTrue(verifier.fulfilled(airnodeAddress, requestHash));
+    assertTrue(verifier.fulfilled(secondAirnode, requestHash));
+    assertEq(callback.callCount(), 2);
   }
 
   function test_reverts_on_wrong_airnode() public {
@@ -103,7 +143,7 @@ contract AirnodeVerifierTest is Test {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
     bytes32 requestHash = keccak256(abi.encodePacked(ENDPOINT_ID, TIMESTAMP, DATA));
 
-    // Should not revert — the callback reverts but the fulfillment is recorded
+    // Should not revert — the callback reverts but that precise delivery is recorded.
     verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
@@ -114,7 +154,34 @@ contract AirnodeVerifierTest is Test {
       RevertingCallback.fulfill.selector
     );
 
-    assertTrue(verifier.fulfilled(requestHash));
+    assertTrue(verifier.fulfilled(airnodeAddress, requestHash));
+  }
+
+  function test_wrong_callback_cannot_burn_intended_delivery() public {
+    bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
+
+    verifier.verifyAndFulfill(
+      airnodeAddress,
+      ENDPOINT_ID,
+      TIMESTAMP,
+      DATA,
+      sig,
+      address(revertingCallback),
+      RevertingCallback.fulfill.selector
+    );
+
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
+
+    assertEq(callback.callCount(), 1);
+  }
+
+  function test_wrong_selector_cannot_burn_intended_delivery() public {
+    bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
+
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), bytes4(0xdeadbeef));
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
+
+    assertEq(callback.callCount(), 1);
   }
 
   function test_different_data_produces_different_request_hash() public {

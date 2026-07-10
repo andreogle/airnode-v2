@@ -56,7 +56,7 @@ contract ConfidentialFeedHandler is Test {
     bytes32 messageHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
 
     // Skip if already fulfilled in verifier (would revert)
-    if (verifier.fulfilled(messageHash)) return;
+    if (verifier.fulfilled(airnodeAddress, messageHash)) return;
 
     bytes32 ethSignedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', messageHash));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(AIRNODE_KEY, ethSignedHash);
