@@ -134,6 +134,16 @@ contract AirnodePriceConsumerTest is Test {
     assertEq(consumer.latestTimestamp(), TIMESTAMP);
   }
 
+  function test_ignores_a_different_observation_with_the_same_timestamp() public {
+    _submit(ENDPOINT_ID, TIMESTAMP, abi.encode(int256(3000e18)));
+
+    vm.prank(address(verifier));
+    consumer.fulfill(bytes32(uint256(2)), airnode, ENDPOINT_ID, TIMESTAMP, abi.encode(int256(1e18)));
+
+    assertEq(consumer.latestPrice(), int256(3000e18));
+    assertEq(consumer.latestTimestamp(), TIMESTAMP);
+  }
+
   // A consumer revert inside the callback does not revert verifyAndFulfill — the request
   // is still marked fulfilled (anti-griefing). The consumer's state simply stays put.
   function test_consumer_revert_does_not_break_verifyAndFulfill() public {

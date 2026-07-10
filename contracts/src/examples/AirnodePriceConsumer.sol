@@ -96,7 +96,7 @@ contract AirnodePriceConsumer {
     // Optional, but typical for a feed: ignore out-of-order delivery. (No revert — the
     // submitter shouldn't lose their tx just because a newer update already landed; and
     // AirnodeVerifier has already burned this payload's requestHash, so it can't recur.)
-    if (attestedAt < latestTimestamp) return;
+    if (attestedAt <= latestTimestamp) return;
 
     int256 price = abi.decode(data, (int256));
     latestPrice = price;
