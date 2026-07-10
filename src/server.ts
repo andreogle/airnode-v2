@@ -101,7 +101,7 @@ function resolveClientIp(request: Request, peerAddress: string | undefined, shou
 // =============================================================================
 // Request body parsing
 // =============================================================================
-type ParsedBody = Record<string, string> | 'too_large' | 'bad_content_type' | 'bad_parameters';
+type ParsedBody = Record<string, string> | 'too_large' | 'bad_content_type' | 'bad_json' | 'bad_parameters';
 
 // The request body must be `{ parameters: { ... } }` — `parameters`, when
 // present, must be a plain object. We do NOT validate or coerce the individual
@@ -129,7 +129,8 @@ function extractRequestParameters(body: unknown): Record<string, string> | 'bad_
 
 async function parseRequestBody(request: Request): Promise<ParsedBody> {
   const contentType = request.headers.get('Content-Type');
-  if (contentType && !contentType.includes('application/json')) {
+  const mediaType = contentType?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mediaType && mediaType !== 'application/json' && !mediaType.endsWith('+json')) {
     return 'bad_content_type';
   }
 
@@ -139,7 +140,7 @@ async function parseRequestBody(request: Request): Promise<ParsedBody> {
   }
 
   const text = await request.text();
-  if (!text) {
+  if (!text.trim()) {
     return {};
   }
   if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
@@ -148,7 +149,7 @@ async function parseRequestBody(request: Request): Promise<ParsedBody> {
 
   const result = goSync(() => JSON.parse(text) as unknown);
   if (!result.success) {
-    return {};
+    return 'bad_json';
   }
   return extractRequestParameters(result.data);
 }
@@ -243,6 +244,9 @@ function createServer(deps: ServerDependencies): ServerHandle {
       }
       if (body === 'bad_content_type') {
         return errorResponse('Content-Type must be application/json', 415, cors);
+      }
+      if (body === 'bad_json') {
+        return errorResponse('Request body must be valid JSON', 400, cors);
       }
       if (body === 'bad_parameters') {
         return errorResponse('Request "parameters" must be an object', 400, cors);
