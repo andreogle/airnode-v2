@@ -121,8 +121,14 @@ function castToUint256(raw: JsonValue, multiply: string | undefined): bigint {
   return value;
 }
 
-function isTruthy(raw: JsonValue): boolean {
-  return ([true, 'true', 1, '1'] as JsonValue[]).includes(raw);
+function isExplicitBool(raw: JsonValue): boolean {
+  if (([true, 'true', 1, '1'] as JsonValue[]).includes(raw)) {
+    return true;
+  }
+  if (([false, 'false', 0, '0'] as JsonValue[]).includes(raw)) {
+    return false;
+  }
+  throw new TypeError(`Cannot convert ${JSON.stringify(raw)} to bool`);
 }
 
 function castToBytes32(raw: JsonValue): Hex {
@@ -172,7 +178,7 @@ function castToSolidityValue(
       return castToUint256(raw, multiply);
     }
     case 'bool': {
-      return isTruthy(raw);
+      return isExplicitBool(raw);
     }
     case 'bytes32': {
       return castToBytes32(raw);
