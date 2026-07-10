@@ -406,6 +406,30 @@ describe('callApi', () => {
     expect(call).rejects.toThrow('API returned non-JSON response (status 502)');
     await call.catch(() => {});
   });
+
+  test('rejects an oversized response from its Content-Length before reading the body', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('{}', { status: 200, headers: { 'Content-Length': String(1024 * 1024 + 1) } })
+    );
+
+    const call = callApi(makeApi(), makeEndpoint(), {});
+    expect(call).rejects.toThrow('API response exceeds 1 MiB limit');
+    await call.catch(() => {});
+  });
+
+  test('stops reading an oversized chunked response without Content-Length', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValue(new Response(body, { status: 200 }));
+
+    const call = callApi(makeApi(), makeEndpoint(), {});
+    expect(call).rejects.toThrow('API response exceeds 1 MiB limit');
+    await call.catch(() => {});
+  });
 });
 
 // =============================================================================
