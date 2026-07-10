@@ -1,5 +1,6 @@
 import type { Server } from 'bun';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { ProofRequest } from '../../src/proof';
 import type { Api } from '../../src/types';
 import { createTestServer, findEndpointId, post } from '../helpers';
 import type { TestContext } from '../helpers';
@@ -16,11 +17,11 @@ import type { TestContext } from '../helpers';
 
 // Mock Reclaim gateway. POST /good echoes the url/method the airnode sent back
 // in claim.parameters (a well-formed proof); POST /bad attests an attacker URL.
-function fakeReclaimProof(url: string, method: string): unknown {
+function fakeReclaimProof(parameters: ProofRequest): unknown {
   return {
     claim: {
       provider: 'http',
-      parameters: JSON.stringify({ url, method }),
+      parameters: JSON.stringify(parameters),
       context: '{}',
       owner: '0x0000000000000000000000000000000000000001',
       timestampS: Math.floor(Date.now() / 1000),
@@ -40,12 +41,12 @@ function startMockGateway(): Server<undefined> {
     hostname: '127.0.0.1',
     fetch: async (request: Request): Promise<Response> => {
       const url = new URL(request.url);
-      const sent = (await request.json()) as { url: string; method: string };
+      const sent = (await request.json()) as ProofRequest;
       if (url.pathname !== '/good' && url.pathname !== '/bad') {
         return new Response('not found', { status: 404 });
       }
       const attestedUrl = url.pathname === '/bad' ? 'https://attacker.example.com/x' : sent.url;
-      return Response.json(fakeReclaimProof(attestedUrl, sent.method));
+      return Response.json(fakeReclaimProof({ ...sent, url: attestedUrl }));
     },
   });
 }

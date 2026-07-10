@@ -63,6 +63,14 @@ apis:
 The `gatewayUrl` must be the **full URL** to the proof endpoint. Airnode sends the request directly to this URL without
 appending any path.
 
+:::warning Protect upstream credentials
+
+The proof gateway receives the same headers and body as the upstream request, including configured API credentials. Use
+a gateway you trust, protect it with TLS, and avoid shared gateways for credentialed APIs unless their handling policy
+is acceptable.
+
+:::
+
 ## `responseMatches`
 
 Each entry defines a regex pattern the attestor checks against the API response. The attestor only signs a claim if all

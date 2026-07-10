@@ -10,7 +10,8 @@ const GATEWAY_URL = 'https://prove.example.com/v1/prove';
 const MOCK_PROOF: ReclaimProof = {
   claim: {
     provider: 'http',
-    parameters: '{"url":"https://api.example.com/price","method":"GET","responseMatches":[]}',
+    parameters:
+      '{"url":"https://api.example.com/price","method":"GET","headers":{"x-api-key":"secret"},"responseMatches":[]}',
     context: '{"extractedParameters":{"price":"2064.01"}}',
     owner: '0x1234567890abcdef1234567890abcdef12345678',
     timestampS: 1_700_000_000,
@@ -75,16 +76,18 @@ describe('requestProof', () => {
     expect(parsed.headers).toEqual({ 'x-api-key': 'secret' });
   });
 
-  test('throws on non-ok gateway response', async () => {
+  test('does not expose a non-ok gateway response body', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 502,
-      text: () => Promise.resolve('Bad Gateway'),
+      text: () => Promise.resolve('echoed x-api-key: super-secret'),
     });
 
     const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/price', method: 'GET' });
     expect(request).rejects.toThrow('Proof gateway returned 502');
-    await request.catch(() => {});
+    const error = await request.catch((error_: unknown) => error_);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('super-secret');
   });
 
   test('throws on network error', async () => {
@@ -98,6 +101,17 @@ describe('requestProof', () => {
   test('rejects a proof that attests a different URL than the request', async () => {
     const request = requestProof(GATEWAY_URL, { url: 'https://api.example.com/other', method: 'GET' });
     expect(request).rejects.toThrow('proof attests URL');
+    await request.catch(() => {});
+  });
+
+  test('rejects a proof that attests different upstream headers', async () => {
+    const request = requestProof(GATEWAY_URL, {
+      url: 'https://api.example.com/price',
+      method: 'GET',
+      headers: { 'x-api-key': 'other-secret' },
+    });
+
+    expect(request).rejects.toThrow('proof attests different headers');
     await request.catch(() => {});
   });
 
