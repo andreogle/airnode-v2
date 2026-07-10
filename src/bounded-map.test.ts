@@ -71,6 +71,17 @@ describe('createBoundedMap', () => {
     expect(map.has('d')).toBe(true);
   });
 
+  test('updates an existing key without evicting another entry when full', () => {
+    const map = create(2);
+    map.set('a', { value: 1, createdAt: Date.now() });
+    map.set('b', { value: 2, createdAt: Date.now() });
+
+    expect(map.set('b', { value: 3, createdAt: Date.now() })).toBe(true);
+    expect(map.size()).toBe(2);
+    expect(map.get('a')?.value).toBe(1);
+    expect(map.get('b')?.value).toBe(3);
+  });
+
   test('periodic sweep removes entries matching predicate', async () => {
     const cutoff = Date.now();
     const map = create(100, (entry) => entry.createdAt < cutoff);

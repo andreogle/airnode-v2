@@ -9,11 +9,11 @@ interface TokenBucket {
 const MAX_RATE_LIMIT_ENTRIES = 10_000;
 
 function evictOldestBuckets(buckets: Map<string, TokenBucket>): void {
-  if (buckets.size <= MAX_RATE_LIMIT_ENTRIES) {
+  if (buckets.size < MAX_RATE_LIMIT_ENTRIES) {
     return;
   }
 
-  const toEvict = buckets.size - MAX_RATE_LIMIT_ENTRIES;
+  const toEvict = buckets.size - MAX_RATE_LIMIT_ENTRIES + 1;
   const iterator = buckets.keys();
   // eslint-disable-next-line functional/no-loop-statements, functional/no-let
   for (let i = 0; i < toEvict; i++) {

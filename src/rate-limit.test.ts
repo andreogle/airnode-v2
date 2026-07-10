@@ -56,7 +56,7 @@ describe('isWithinRateLimit', () => {
     }
 
     // Should have evicted the oldest entries
-    expect(buckets.size).toBeLessThanOrEqual(10_001);
+    expect(buckets.size).toBe(10_000);
     // The first IP should have been evicted
     expect(buckets.has('ip-0')).toBe(false);
   });
