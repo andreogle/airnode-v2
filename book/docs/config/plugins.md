@@ -101,7 +101,8 @@ which can be much rarer.
 ## Plugin name
 
 There is no `name` field in the config. The plugin's exported `name` (from its default export, or from the object its
-factory returns) is used for logging and budget tracking.
+factory returns) is used for logging and budget tracking. Every configured plugin must export a unique name; duplicate
+names fail startup so timeout budgets cannot be shared accidentally.
 
 ## Further reading
 
