@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { Command } from 'commander';
 import { validateConfig } from '../../config/validate';
+import { deriveEndpointId } from '../../endpoint';
 import type { Api } from '../../types';
 
 interface ValidateOptions {
@@ -43,4 +44,11 @@ config
     console.log(
       `Config is valid: ${String(result.config.apis.length)} API(s), ${String(result.config.apis.reduce((sum, api: Api) => sum + api.endpoints.length, 0))} endpoint(s)`
     );
+    // eslint-disable-next-line functional/no-loop-statements
+    for (const api of result.config.apis) {
+      // eslint-disable-next-line functional/no-loop-statements
+      for (const endpoint of api.endpoints) {
+        console.log(`  ${api.name}/${endpoint.name}: ${deriveEndpointId(api, endpoint)}`);
+      }
+    }
   });

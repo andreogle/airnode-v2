@@ -54,6 +54,10 @@ export const start = new Command('start')
     });
 
     logger.info(`Config loaded: ${String(config.apis.length)} API(s), ${String(endpointMap.size)} endpoint(s)`);
+    // eslint-disable-next-line functional/no-loop-statements
+    for (const [endpointId, resolvedEndpoint] of endpointMap) {
+      logger.info(`Endpoint ${resolvedEndpoint.api.name}/${resolvedEndpoint.endpoint.name}: ${endpointId}`);
+    }
 
     const cache = createCache();
     const asyncStore = createAsyncRequestStore();
