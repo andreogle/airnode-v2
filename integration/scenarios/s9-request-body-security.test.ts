@@ -42,8 +42,7 @@ describe('S9 — Request body security', () => {
     expect(body.error).toContain('application/json');
   });
 
-  test('malformed JSON is treated as empty parameters', async () => {
-    // WeatherAPI currentTemp requires `q` — with empty params it should return 400 (missing required)
+  test('malformed JSON is rejected before endpoint processing', async () => {
     const endpointId = findEndpointId(ctx.endpointMap, 'WeatherAPI', 'currentTemp');
 
     const response = await fetch(`${ctx.baseUrl}/endpoints/${endpointId}`, {
@@ -52,8 +51,10 @@ describe('S9 — Request body security', () => {
       body: '{invalid json',
     });
 
-    // Malformed JSON → empty params → missing required param `q` → 400
+    const body = (await response.json()) as { error: string };
+
     expect(response.status).toBe(400);
+    expect(body.error).toBe('Request body must be valid JSON');
   });
 
   test('empty body is treated as empty parameters', async () => {

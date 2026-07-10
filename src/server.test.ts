@@ -105,6 +105,37 @@ describe('createServer', () => {
     expect(handleRequest).toHaveBeenCalledTimes(1);
   });
 
+  test('rejects malformed JSON without calling the endpoint pipeline', async () => {
+    const handleRequest = mock(() => Promise.resolve(Response.json({ result: 'ok' }, { status: 200 })));
+    server = createServer(makeDeps({ handleRequest }));
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{invalid json',
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Request body must be valid JSON' });
+    expect(handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('does not accept a content type that only contains the application/json substring', async () => {
+    const handleRequest = mock(() => Promise.resolve(Response.json({ result: 'ok' }, { status: 200 })));
+    server = createServer(makeDeps({ handleRequest }));
+    baseUrl = `http://127.0.0.1:${String(server.port)}`;
+
+    const response = await fetch(`${baseUrl}/endpoints/${TEST_ENDPOINT_ID}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/application/json-evil' },
+      body: '{}',
+    });
+
+    expect(response.status).toBe(415);
+    expect(handleRequest).not.toHaveBeenCalled();
+  });
+
   test('rejects a request body whose "parameters" is not an object', async () => {
     const handleRequest = mock(() => Promise.resolve(Response.json({ result: 'ok' }, { status: 200 })));
     const deps = makeDeps({ handleRequest });
