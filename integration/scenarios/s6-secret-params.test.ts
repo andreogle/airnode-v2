@@ -11,25 +11,29 @@ function makeEndpoint(overrides: Partial<Endpoint> = {}): Endpoint {
   return { name: 'test', path: '/data', method: 'GET', parameters: [], ...overrides } as Endpoint;
 }
 
-describe('S6 — Secret parameter exclusion from endpoint ID', () => {
-  test('secret: true parameter does not affect the endpoint ID', () => {
+describe('S6 — Secret parameter handling in endpoint IDs', () => {
+  test('secret parameter semantics affect the endpoint ID without exposing the value', () => {
     const api = makeApi();
     const withSecret = makeEndpoint({
       parameters: [{ name: 'apiKey', in: 'header', required: true, secret: true, fixed: 'my-key' }],
     });
+    const rotated = makeEndpoint({
+      parameters: [{ name: 'apiKey', in: 'header', required: true, secret: true, fixed: 'rotated-key' }],
+    });
     const without = makeEndpoint();
 
-    expect(deriveEndpointId(api, withSecret)).toBe(deriveEndpointId(api, without));
+    expect(deriveEndpointId(api, withSecret)).toBe(deriveEndpointId(api, rotated));
+    expect(deriveEndpointId(api, withSecret)).not.toBe(deriveEndpointId(api, without));
   });
 
-  test('env-var fixed value (${...}) does not affect the endpoint ID', () => {
+  test('env-var fixed value is represented as a secret parameter marker', () => {
     const api = makeApi();
     const withEnv = makeEndpoint({
       parameters: [{ name: 'apiKey', in: 'header', required: true, secret: false, fixed: '${API_KEY}' }],
     });
     const without = makeEndpoint();
 
-    expect(deriveEndpointId(api, withEnv)).toBe(deriveEndpointId(api, without));
+    expect(deriveEndpointId(api, withEnv)).not.toBe(deriveEndpointId(api, without));
   });
 
   test('non-secret fixed parameter DOES affect the endpoint ID', () => {
@@ -49,6 +53,12 @@ describe('S6 — Secret parameter exclusion from endpoint ID', () => {
     });
 
     const id = deriveEndpointId(api, endpoint);
-    expect(id).toBe(keccak256(toHex('https://api.example.com|/data|GET|coin=bitcoin')));
+    expect(id).toBe(
+      keccak256(
+        toHex(
+          'https://api.example.com|/data|GET|[{"name":"coin","in":"query","required":false,"secret":false,"fixed":"bitcoin"}]'
+        )
+      )
+    );
   });
 });

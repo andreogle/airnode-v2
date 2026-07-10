@@ -49,16 +49,22 @@ describe('deriveEndpointId', () => {
     expect(id2).toBe('0x7ae17359a66be80e42869c5c41e84705b363158abc60dca8ee014565d8ce110a');
   });
 
-  test('secret parameters (secret: true) are excluded from ID', () => {
+  test('secret parameter semantics are included but secret values are excluded', () => {
     const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
     const withSecret = makeEndpoint({
       name: 'getPrice',
       path: '/price',
       parameters: [{ name: 'apiKey', in: 'header', required: true, secret: true, fixed: 'my-key' }],
     });
+    const changedSecret = makeEndpoint({
+      name: 'getPrice',
+      path: '/price',
+      parameters: [{ name: 'apiKey', in: 'header', required: true, secret: true, fixed: 'rotated-key' }],
+    });
     const withoutSecret = makeEndpoint({ name: 'getPrice', path: '/price' });
 
-    expect(deriveEndpointId(api, withSecret)).toBe(deriveEndpointId(api, withoutSecret));
+    expect(deriveEndpointId(api, withSecret)).toBe(deriveEndpointId(api, changedSecret));
+    expect(deriveEndpointId(api, withSecret)).not.toBe(deriveEndpointId(api, withoutSecret));
   });
 
   test('parameters with env-var fixed values (${...}) are excluded from ID', () => {
@@ -70,7 +76,7 @@ describe('deriveEndpointId', () => {
     });
     const plain = makeEndpoint({ name: 'getPrice', path: '/price' });
 
-    expect(deriveEndpointId(api, withEnvVar)).toBe(deriveEndpointId(api, plain));
+    expect(deriveEndpointId(api, withEnvVar)).not.toBe(deriveEndpointId(api, plain));
   });
 
   test('fixed non-secret parameters include their value in the ID', () => {
@@ -82,8 +88,13 @@ describe('deriveEndpointId', () => {
     });
 
     const id = deriveEndpointId(api, withFixed);
-    expect(id).toBe('0x9ca06527a73e016eafcc0557cb1c6d336a3a80a5b2b59bfbb9d310c133051f24');
-    expect(id).toBe(keccak256(toHex('https://api.example.com|/price|GET|coin=bitcoin')));
+    expect(id).toBe(
+      keccak256(
+        toHex(
+          'https://api.example.com|/price|GET|[{"name":"coin","in":"query","required":false,"secret":false,"fixed":"bitcoin"}]'
+        )
+      )
+    );
   });
 
   test('parameters are sorted by name (order-independent)', () => {
@@ -108,7 +119,26 @@ describe('deriveEndpointId', () => {
     const id1 = deriveEndpointId(api, ordered);
     const id2 = deriveEndpointId(api, reversed);
     expect(id1).toBe(id2);
-    expect(id1).toBe('0x0c2a50ea12738e0fca5ee5c0424446991b47de6853b2983435bfd2331040edbe');
+  });
+
+  test('parameter location, required status, and default value affect the ID', () => {
+    const api = makeApi({ url: 'https://api.example.com', endpoints: [] });
+    const base = { name: 'asset', required: false, secret: false } as const;
+    const query = makeEndpoint({ name: 'e', path: '/p', parameters: [{ ...base, in: 'query' }] });
+    const header = makeEndpoint({ name: 'e', path: '/p', parameters: [{ ...base, in: 'header' }] });
+    const required = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      parameters: [{ ...base, in: 'query', required: true }],
+    });
+    const withDefault = makeEndpoint({
+      name: 'e',
+      path: '/p',
+      parameters: [{ ...base, in: 'query', default: 'ETH' }],
+    });
+
+    const ids = [query, header, required, withDefault].map((endpoint) => deriveEndpointId(api, endpoint));
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   test('encoding spec changes the endpoint ID', () => {
