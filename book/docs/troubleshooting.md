@@ -164,12 +164,13 @@ that caches frequent endpoints. Client-side: slow your request rate or add jitte
 
 ## Upstream API errors
 
-### `API call failed` (502)
+### `Upstream API returned an error` / `API call failed` (502)
 
-**Cause:** The upstream API is unreachable, returned a non-2xx status code, or the response could not be parsed.
+**Cause:** The upstream API returned a non-2xx status, was unreachable, or returned an unparsable response. Airnode
+never encodes or signs non-2xx responses, even if their JSON shape matches the configured encoding.
 
 **Fix:** Verify the upstream API is accessible from the airnode's network. Check the `apis[].url` and endpoint `path` in
-the config. Review airnode logs for the upstream status code and response body.
+the config. Review airnode logs for the upstream status code.
 
 ### `API returned no data to encode` (502)
 

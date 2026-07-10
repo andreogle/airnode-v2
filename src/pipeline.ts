@@ -382,6 +382,13 @@ async function executeApiCall(
 
   const apiResponse = afterResult.response;
 
+  if (apiResponse.status < 200 || apiResponse.status >= 300) {
+    const statusError = new Error(`Upstream API returned status ${String(apiResponse.status)}`);
+    logger.warn(`Rejecting non-success upstream response for endpoint ${endpointId}: ${String(apiResponse.status)}`);
+    void deps.plugins.callError({ requestId, error: statusError, stage: 'apiCall', endpointId });
+    return jsonResponse({ error: 'Upstream API returned an error' }, 502);
+  }
+
   // Resolve encoding: operator-pinned fields win; `*` fields take the matching request reserved param
   const encoding = resolveEncoding(resolved.endpoint.encoding, resolvedParameters);
   if (encoding && 'invalid' in encoding) {
