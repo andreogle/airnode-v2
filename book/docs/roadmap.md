@@ -3,158 +3,252 @@ slug: /roadmap
 sidebar_position: 11
 ---
 
-# Roadmap
+# Technical Roadmap
 
-This page outlines the phased plan for Airnode v2. Each phase builds on the previous and can be delivered independently.
-Nothing here is a guarantee -- priorities may shift based on ecosystem needs.
+This roadmap covers Airnode v2 as a technical product: protocol integrity, verification, developer experience, operator
+reliability, delivery modes, and documentation. Marketplace, provider acquisition, pricing, and other business or
+ecosystem work are intentionally tracked separately.
 
-## Phase 1: HTTP server
+Items are ordered by dependency and risk, not by marketing value. An item is supported only when its implementation,
+tests, and documentation are delivered. Planned items are not guarantees.
 
-The foundation. Airnode is a stateless HTTP server that calls upstream APIs, signs responses, and returns them to
-clients.
+## Product principles
 
-**Delivered:**
+Future work should preserve these constraints:
 
-- HTTP server with `POST /endpoints/{endpointId}` and `GET /health`
-- EIP-191 signed responses (ABI-encoded or raw JSON)
-- Specification-bound endpoint IDs (hash of API URL, path, method, parameters, encoding)
-- Plugin system with 6 hooks and per-request time budgets
-- AirnodeVerifier contract (verify signature, prevent replay, forward to callback)
-- DNS identity verification (ERC-7529)
-- In-memory response cache with TTL
-- CLI for server management, config validation, key generation
+- **Receipts before claims**: define exactly what is signed and independently verifiable before adding stronger proof
+  language.
+- **Explicit trust boundaries**: distinguish provider signatures, intermediary signatures, separate TLS attestations,
+  confidential execution, and multi-party agreement.
+- **Fail closed for signed success**: malformed requests, ambiguous transformations, and upstream failures must not
+  become successful signed data.
+- **Versioned compatibility**: protocol changes need explicit versions, test vectors, and migration guidance.
+- **Small operational surface**: prefer bounded, inspectable components over a large mandatory network or control plane.
+- **Portable verification**: receipts should be verifiable without running an Airnode or trusting its operator.
+- **Documentation is part of the protocol**: every security-relevant field and limitation needs normative documentation
+  and executable examples.
 
-## Phase 2: Auth, payment, and streaming
+## Current foundation
 
-Monetization, access control, and real-time data delivery.
+### Runtime and delivery
 
-**Delivered:**
+- HTTP server with `POST /endpoints/{endpointId}`, `GET /requests/{requestId}`, and `GET /health`
+- Sync and async endpoint modes
+- Single-event SSE response mode, which establishes SSE framing but is not yet a continuous stream
+- EIP-191 signed responses with ABI encoding or raw JSON
+- Multi-value ABI encoding from one upstream response
+- Specification-derived endpoint IDs
+- In-memory response cache, rate limiting, concurrency limits, and bounded async admission
+- Plugin system with six hooks and per-request time budgets
 
-- **Multi-method auth**: endpoints accept one or more auth methods (any-of semantics)
-- **API key auth**: `X-Api-Key` header with constant-time comparison
-- **x402 payment**: HTTP 402-based pay-per-request. The client pays on-chain, signs an authorisation binding the payment
-  to the specific airnode, endpoint, and payer, and retries with a JSON-encoded `X-Payment-Proof` header. The server
-  verifies the signature, checks the on-chain receipt, and refuses proofs older than the configured lifetime. Mempool
-  observers cannot steal the call, and signatures cannot be reused across endpoints, airnodes, or after expiry.
-- **Async requests**: endpoints with `mode: async` return 202 immediately. Client polls `GET /requests/{requestId}`
-  until complete or failed. Background processing with admission limits.
-- **SSE streaming**: endpoints with `mode: stream` return signed data as a Server-Sent Event. Full plugin pipeline runs
-  before the SSE event is emitted. The current implementation sends a single signed event and closes the connection --
-  functionally equivalent to a sync response, but using SSE framing (`text/event-stream`) so clients can connect with
-  the browser `EventSource` API. This establishes the transport protocol for future real-time streaming (see below).
+### Access and payment
 
-### Future: real-time SSE streaming
+- API-key and multi-method client authentication
+- x402 pay-per-request verification with signer, payer, airnode, endpoint, transaction, and expiry binding
+- Upstream headers and fixed parameters with environment interpolation
 
-The current `mode: stream` sends one event per connection. The next iteration holds the connection open and pushes
-multiple signed events as the upstream data changes:
+### Contracts and identity
 
-- **Continuous signed updates**: the airnode re-queries the upstream API on an interval and pushes each new signed
-  result as an SSE event. Each event is a complete signed response that ran through the full plugin pipeline and carries
-  its own EIP-191 signature -- partial responses are never sent.
-- **EventSource reconnection**: SSE has built-in automatic reconnection. Clients that disconnect and reconnect receive
-  the next signed update without any client-side retry logic.
-- **Backpressure and flow control**: when the upstream produces data faster than the client consumes it, the server
-  drops stale events (keeping only the latest signed value) to prevent unbounded memory growth.
+- `AirnodeVerifier` for signature recovery, replay protection, and callback delivery
+- Example public and confidential consumers
+- DNS identity verification through ERC-7529
 
-This turns an endpoint into a real-time signed data stream without changing client code -- existing `EventSource`
-clients that work with the single-event implementation will automatically receive continuous updates when the server
-upgrades.
+### Proof and confidentiality modes
 
-## Phase 2.5: Integration-friction fixes
+- Optional Reclaim TLS claims produced from a separate gateway request
+- Optional Zama FHE encryption for configured on-chain consumers
+- ECIES plugin for requester-to-Airnode encrypted transport
 
-Small, focused additions that directly reduce integration cost for consumers and operators. Each ships independently of
-the others.
+TLS claims add independent evidence about the gateway's HTTPS session and configured response matches. They do not prove
+that the separately fetched response is byte-for-byte equal to the payload Airnode signed. See
+[TLS Proofs](/docs/concepts/proofs).
 
-- **Multi-value encoding**: one API call, one signature, multiple ABI-encoded values in one response (OHLC bundles,
-  price plus market cap plus volume, weather readings). Without this, each field requires a separate endpoint making the
-  same upstream call.
-- **Request batching**: `POST /batch` accepts an array of endpoint requests and returns an array of independently signed
-  responses. The batch is a transport optimisation, not a semantic unit. Useful for portfolio trackers, DeFi protocols
-  needing multiple prices atomically, and any client fetching N values at once.
-- **Signed errors and proof of absence**: the airnode signs upstream errors and empty results, not just successful data.
-  Downstream use cases include proving a negative ("the sanctions API confirmed this address has no flags"), verifiable
-  SLA reports ("9 signed proofs of failed attempts, upstream was down"), and gap detection in push feeds.
-- **MCP server mode**: the airnode exposes its endpoints as Model Context Protocol tools so AI agents discover and call
-  them through their native tool-use interface. The signed response is attached as metadata for the agent's principal to
-  submit on-chain or verify off-chain. Every airnode endpoint becomes immediately accessible to the AI agent ecosystem
-  without custom integration per framework.
+## Priority 1: Versioned signed receipts
 
-## Phase 3: Relayer
+The current signed tuple is compact, but it does not commit to the complete request invocation. The next protocol
+version should define a structured, domain-separated receipt, preferably using EIP-712 or an equivalently explicit
+encoding.
 
-Bridge for on-chain request-response without an off-chain client.
+A receipt should commit to:
 
-A relayer watches for on-chain request events, forwards them to the airnode's HTTP server, and submits the signed
-response back on-chain. This restores the request-response flow from Airnode v1 without requiring the airnode itself to
-touch the chain.
+- protocol and endpoint version
+- provider and signing key
+- endpoint ID
+- canonical request-manifest hash
+- response-schema hash
+- encoded data hash
+- issue and expiry times
+- request ID or nonce
+- optional payment-receipt hash
+- optional proof or attestation hash
+- optional transformation-manifest hash
 
-The relayer is a separate process, not part of the airnode. Anyone can run a relayer -- the airnode's HTTP API is the
-only interface.
+The canonical request manifest should cover the resolved method, URL, query parameters, relevant headers, request body,
+response selection, and encoding instructions without disclosing configured secrets. This allows a verifier to
+distinguish two invocations of the same endpoint specification, such as `asset=ETH` and `asset=BTC`.
 
-## Phase 4: Proof and confidentiality modes
+Delivery requirements:
 
-Reducing trust assumptions and enabling confidential data flows.
+1. Publish a normative receipt specification and canonicalization rules.
+2. Add fixed cross-language signing and verification vectors.
+3. Support both the existing receipt and the new version during migration.
+4. Add TypeScript-to-Solidity compatibility tests that exercise the production signing path.
+5. Document replay, expiry, privacy, and parameter-disclosure implications.
 
-**Delivered:**
+### Structured failure receipts
 
-- **TLS proofs (Reclaim)**: cryptographic proof that the data came from a specific HTTPS endpoint via MPC-TLS. An
-  independent attestor verifies the TLS session and signs a claim. Proofs are non-fatal -- responses are returned
-  without proofs if the attestor is unavailable. Configured via `settings.proof` and per-endpoint `responseMatches`. See
-  [TLS Proofs](/docs/concepts/proofs).
-- **FHE encryption (Zama)**: built-in encryption of the ABI-encoded response before signing, using the target chain's
-  FHE public key. Configured via `settings.fhe` plus a per-endpoint `encrypt` block. On-chain contracts compute directly
-  on the ciphertext via the Zama coprocessor, with a per-handle ACL controlling decryption. Enables MEV-protected price
-  feeds, paid-data access control, and confidential on-chain computation. See
-  [FHE Encryption](/docs/concepts/fhe-encryption).
-- **Encrypted channel (ECIES)**: plugin that establishes end-to-end encryption between the requester and the airnode.
-  Request parameters and signed response bodies are opaque to observers; only the requester's ephemeral key can decrypt.
+Arbitrary upstream error bodies must never be signed as successful endpoint data. A later receipt version may support
+failure evidence through a separate, domain-separated envelope containing a stable error code, attempt time, endpoint
+ID, and redacted diagnostic metadata. Failure receipts must be impossible to decode or submit as successful data.
 
-**Planned:**
+## Priority 2: Verification SDKs and normative documentation
 
-- **Deterministic replay (SP1 / RISC Zero)**: a zkVM proof that the response processing pipeline -- path extraction,
-  type casting, multiplier math, ABI encoding -- was applied correctly to the raw API response. Both SP1 and RISC Zero
-  are production-ready with on-chain verifiers; the target is a proof small enough to verify in a single transaction
-  alongside the signature. Combined with TLS proofs, this gives end-to-end verifiability from HTTPS byte to on-chain
-  uint256 without trusting the operator's processing.
-- **TEE attestation**: run the airnode inside a Trusted Execution Environment (AWS Nitro Enclaves, Intel TDX, AMD
-  SEV-SNP). Remote attestation proves the running code matches a specific binary hash. Combined with DNS identity
-  verification, this creates a verifiable chain: the domain proves who operates the airnode, the attestation proves what
-  code it runs.
+Portable verification should be a first-class product surface rather than example code copied from the book.
 
-## Phase 5: ChainAPI platform
+Planned deliverables:
 
-Operator tooling and discoverability for the first-party oracle ecosystem.
+- TypeScript verification package with receipt, freshness, signer, schema, and proof helpers
+- Solidity consumer library with trusted-signer, endpoint, expiry, replay, and decoding guards
+- JSON Schema and OpenAPI output for configured endpoints and receipt versions
+- generated MCP tool definitions and a server adapter that returns signed receipts as tool metadata
+- generated typed clients and response decoders
+- CLI commands to inspect, decode, and verify saved receipts
+- published positive and negative test vectors for every supported receipt version
+- one end-to-end conformance suite shared by the runtime, SDK, and contracts
 
-- **Endpoint directory**: public registry where API providers publish their airnode endpoints alongside documentation,
-  pricing, and availability metrics. Endpoint IDs serve as the stable identifier consumers integrate against.
-- **Operator dashboard**: request volume, revenue, uptime, and plugin budget metrics for airnode operators.
+The book should identify normative protocol pages separately from tutorials and clearly label experimental integrations.
 
-## Phase 6: Signing layer for existing APIs
+## Priority 3: Provider identity and key lifecycle
 
-Today, becoming an airnode operator means running a separate process. Many API providers already have production HTTP
-servers and would rather add signing to their existing stack than adopt a new one. Phase 6 makes signing a drop-in
-capability for any API provider, without changing how they serve HTTP.
+A signer address identifies a key, not a durable provider. Production operation needs continuity across key rotation and
+incidents.
 
-All three paths below produce the same signed response format as the standalone airnode, so consumers integrate the same
-way regardless of how the provider deployed. The provider holds the signing key throughout.
+Planned capabilities:
 
-- **Framework middleware**: a small library for Hono, Express, Fastify, FastAPI, Rails, Phoenix, Go `net/http`, and the
-  major serverless runtimes (Lambda, Vercel, Cloudflare Workers). The middleware signs outgoing response bodies with the
-  provider's key and optionally enforces `x402` or API-key auth on incoming requests. The response body is never
-  modified -- signatures go in HTTP headers, so existing clients are unaffected.
-- **API gateway plugins**: drop-in plugins for Kong, AWS API Gateway, and Cloudflare Workers. The provider installs the
-  plugin, configures a signing key, and every response passing through the gateway gets signed. No application changes
-  required.
-- **Reverse proxy / sidecar**: a standalone Docker container that sits in front of an existing API and signs all proxied
-  responses. Zero changes to the API server itself, ideal for legacy stacks or providers without access to their
-  application code.
+- provider identity document containing authorized signing keys and endpoint namespaces
+- signed key rotation and revocation records
+- historical verification after rotation
+- separate development, staging, and production authorities
+- hardware or remote signing backends without exposing raw keys to the runtime
+- CLI workflows for rotation, revocation, backup, and verification
+- documented compromise and recovery procedures
 
-This is the biggest adoption lever on the roadmap: it turns "add Airnode to your API" from "deploy and operate a new
-service" into "add a dependency."
+The first implementation should remain self-hostable. It should not require a token, staking system, or mandatory global
+registry.
 
-## Future
+## Priority 4: Operator reliability and observability
 
-- **Chain ports**: `AirnodeVerifier` is the only chain-specific component. The HTTP server and signature format are
-  chain-agnostic. Ports to Solana, Sui, Aptos, and non-EVM L1s are primarily contract work, not protocol work, and can
-  land independently.
-- **VRF as a service**: verifiable random functions using the airnode's existing key. RFC 9381 ECVRF with on-chain proof
-  verification, delivered as a new endpoint mode.
+The runtime should provide enough evidence to operate it safely without requiring a separate platform.
+
+Planned capabilities:
+
+- Prometheus-compatible metrics for requests, upstream calls, latency, proofs, payments, plugins, and queue pressure
+- structured health and version output suitable for automated deployment checks
+- per-endpoint success, failure, and proof-availability measurements
+- configuration dry-run and semantic diff before rollout
+- graceful configuration reload where safe, with restart required for key or trust-boundary changes
+- optional durable async storage with explicit retention and bounded cleanup
+- privacy-aware receipt and audit-log export
+- documented backup, recovery, upgrade, and rollback procedures
+- verified container images and release artifacts for supported targets
+
+Logs and metrics must not include secrets, raw payment credentials, or unredacted upstream error bodies.
+
+## Priority 5: Delivery modes
+
+### Continuous signed streams
+
+Extend the current single-event SSE mode into a bounded continuous stream:
+
+- each event is a complete independently verifiable receipt
+- configurable polling or upstream event source
+- event IDs and resumable delivery
+- latest-value backpressure rather than unbounded buffering
+- heartbeat, disconnect, shutdown, and reconnection semantics
+- per-subscriber admission and payment policy
+
+### Request batching
+
+Add a bounded batch transport that returns independently signed receipts. Batching reduces transport overhead but does
+not make upstream calls or results atomic. Limits, partial failures, ordering, cancellation, and payment behavior must
+be specified before implementation.
+
+### Webhooks and subscriptions
+
+Support signed webhook delivery with retry limits, idempotency keys, expiry, and replay-safe verification. Subscription
+state should remain outside the core stateless request pipeline where possible.
+
+### Policy-driven relayer
+
+Keep the relayer as a separate process. It may submit receipts based on freshness, deviation, schedule, proof policy,
+gas budget, or explicit on-chain requests. The relayer must not become a new source of truth; contracts continue to
+verify the provider receipt.
+
+## Priority 6: Verifiable processing and proof composition
+
+Proof work should build on the structured receipt and request manifest rather than introduce parallel, incompatible
+formats.
+
+Planned work:
+
+- bind proof metadata and extracted claims to the signed receipt
+- publish explicit proof profiles describing exactly what each mode establishes
+- hash and identify deterministic transformation programs
+- support reproducible transformations through a restricted runtime or hash-addressed WASM module
+- evaluate zkVM proofs only after the transformation format and performance budget are stable
+- evaluate TEE attestation only with reproducible builds, key-release policy, and documented hardware trust assumptions
+- harden FHE examples with capability checks, lifecycle guidance, and end-to-end compatibility tests
+- optionally bundle independent provider attestations without making a decentralized network mandatory
+
+A proof profile must never use a generic `verified` label when it proves only source, execution, confidentiality, or
+multi-party agreement.
+
+## Priority 7: Deployment adapters
+
+Reduce adoption friction without creating multiple receipt formats.
+
+Recommended order:
+
+1. **Reverse proxy or sidecar**: sign and optionally charge for responses from an existing API with no application
+   changes.
+2. **Framework middleware**: begin with one TypeScript runtime and one non-TypeScript reference implementation.
+3. **Gateway adapters**: add adapters only where deployment and key-custody semantics can be tested end to end.
+
+Every adapter must emit the same versioned receipt, pass the conformance suite, preserve streaming and error semantics,
+and keep the provider's signing key under provider control.
+
+## Longer-term technical options
+
+These remain valid experiments after the core receipt and verification work is mature:
+
+- append-only receipt transparency logs with Merkle inclusion proofs and optional batch anchoring
+- Solana, Sui, Aptos, and other verifier ports driven by concrete integrations
+- privacy-preserving selective disclosure of request and response fields
+- deterministic aggregate receipts over several named first-party providers
+- additional payment facilitators and settlement networks behind one payment-receipt interface
+
+## Removed or deferred from the technical roadmap
+
+The previous roadmap mixed protocol work with ecosystem and speculative features. The following are no longer technical
+roadmap commitments:
+
+- public endpoint marketplace and provider-directory work, which belongs to the separate business and ecosystem roadmap
+- generic operator dashboards tied to a hosted platform, although self-hosted observability remains a technical priority
+- token, staking, or mandatory decentralized-operator designs
+- OEV products and other application-specific economic mechanisms
+- VRF as a service without a concrete consumer and security specification
+- signing arbitrary upstream errors as successful data
+- broad framework and chain support before the receipt conformance suite exists
+
+## Recommended sequence
+
+1. Versioned signed receipt and canonical request manifest
+2. Cross-language conformance suite and verification SDKs
+3. Provider identity, rotation, and secure key backends
+4. Operator metrics, release evidence, and recovery documentation
+5. Continuous streaming, batching, webhooks, and policy relayer
+6. Proof composition and verifiable transformations
+7. Sidecar, middleware, gateways, and additional chain ports
+
+This sequence keeps the protocol honest and independently verifiable before increasing delivery modes, proof complexity,
+or deployment surface.
