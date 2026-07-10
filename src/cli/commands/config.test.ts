@@ -29,6 +29,7 @@ describe('config CLI — validate', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Config is valid');
     expect(stdout).toContain('1 API(s)');
+    expect(stdout).toMatch(/MockAPI\/getValue: 0x[\da-f]{64}/);
   });
 
   test('exits 1 and prints the validation errors on an invalid config', async () => {
