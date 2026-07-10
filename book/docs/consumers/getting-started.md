@@ -176,7 +176,8 @@ Supply the matching reserved parameter in the request body for each `'*'` field:
 ```
 
 - `_type` -- the Solidity ABI type to encode as (`int256`, `uint256`, `bool`, `bytes32`, `address`, `string`, `bytes`).
-  Only consumed when the operator set `encoding.type: '*'`.
+  Only consumed when the operator set `encoding.type: '*'`. Boolean encoding accepts only JSON booleans, `0`, `1`, and
+  the strings `"false"`, `"true"`, `"0"`, or `"1"`; other values fail instead of being treated as false.
 - `_path` -- JSONPath expression to extract from the upstream response. Only consumed when `encoding.path: '*'`.
 - `_times` -- multiplier applied before encoding (numeric types only). Only consumed when `encoding.times: '*'`.
 

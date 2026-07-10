@@ -40,6 +40,17 @@ describe('processResponse', () => {
       expect(result).toBe('0x0000000000000000000000000000000000000000000000000000000000000001');
     });
 
+    test('encodes explicit false-like values as bool false', () => {
+      const falseValues = ['false', 0, '0'] as const;
+
+      const results = falseValues.map((active) => processResponse({ active }, { type: 'bool', path: '$.active' }));
+      expect(results).toEqual([
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
+      ]);
+    });
+
     test('encodes bytes32 from string', () => {
       const result = processResponse({ id: 'hello' }, { type: 'bytes32', path: '$.id' });
 
@@ -171,6 +182,12 @@ describe('processResponse', () => {
     test('throws for invalid number conversion', () => {
       expect(() => processResponse({ value: 'not-a-number' }, { type: 'uint256', path: '$.value' })).toThrow(
         'Cannot parse numeric value: not-a-number'
+      );
+    });
+
+    test('throws instead of silently encoding an unknown bool value as false', () => {
+      expect(() => processResponse({ value: 'yes' }, { type: 'bool', path: '$.value' })).toThrow(
+        'Cannot convert "yes" to bool'
       );
     });
 
