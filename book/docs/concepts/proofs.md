@@ -5,18 +5,20 @@ sidebar_position: 5
 
 # TLS Proofs
 
-TLS proofs provide cryptographic evidence that an API response came from a specific HTTPS endpoint. When enabled,
-Airnode attaches a proof to each response alongside the EIP-191 signature. The signature proves the airnode endorsed the
-data; the proof proves the data actually came from the upstream API over TLS.
+TLS proofs provide cryptographic evidence that a separate API response matching configured patterns came from a specific
+HTTPS endpoint. When enabled, Airnode attaches a proof alongside the EIP-191 signature. The signature proves the airnode
+endorsed its payload; the proof attests the gateway's separate request and matching response, not that the signed
+payload is byte-for-byte the attested response.
 
 ## Why TLS proofs
 
 Without a proof, you trust the airnode operator to faithfully relay the API response. The EIP-191 signature proves who
 signed the data, but not where the data came from. A malicious operator could fabricate responses.
 
-TLS proofs close this gap. An independent attestor participates in the TLS session (via MPC-TLS) and produces a
-cryptographic attestation that the response came from the claimed HTTPS endpoint. The attestor never sees the full
-plaintext -- it only verifies the TLS transcript and checks that the response matches specified patterns.
+TLS proofs narrow this gap. An independent attestor participates in a separate TLS session (via MPC-TLS) and produces a
+cryptographic attestation that its response came from the claimed HTTPS endpoint and matched specified patterns. This
+adds independent evidence about the source and pattern, but it does not bind the attestor's response bytes to Airnode's
+separately fetched and signed payload.
 
 ## How it works
 
