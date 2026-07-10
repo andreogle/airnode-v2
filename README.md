@@ -174,6 +174,7 @@ Compile to a standalone binary:
 ```bash
 bun run build:osx        # macOS ARM64
 bun run build:linux-x64  # Linux x86_64
+bun run build:windows    # Windows x86_64
 
 ./dist/airnode start -c config.yaml
 ```

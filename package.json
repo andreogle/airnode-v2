@@ -12,7 +12,7 @@
     "book:version": "(cd book && bun run docusaurus docs:version)",
     "build:linux-x64": "bun src/build.ts --target=bun-linux-x64 --outfile dist/airnode",
     "build:osx": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode",
-    "build:windows": "bun src/build.ts --target=bun-darwin-arm64 --outfile dist/airnode.exe",
+    "build:windows": "bun src/build.ts --target=bun-windows-x64 --outfile dist/airnode.exe",
     "dev": "bun --watch src/cli/index.ts start",
     "fmt": "prettier . --write && eslint . --fix",
     "lint": "bun run lint:prettier && bun run lint:eslint && bun run lint:slither",
