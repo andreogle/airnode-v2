@@ -318,6 +318,17 @@ describe('x402 auth', () => {
     expect(expectError(result)).toBe('Payment proof expired');
   });
 
+  test('rejects a fractional expiresAt before hashing the payment proof', async () => {
+    const proof = JSON.stringify({
+      txHash: `0x${'ab'.repeat(32)}`,
+      expiresAt: Date.now() / 1000 + 120.5,
+      signature: `0x${'ab'.repeat(65)}`,
+    });
+
+    const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);
+    expect(expectError(result)).toBe('Invalid expiresAt in payment proof');
+  });
+
   test('rejects a proof whose lifetime exceeds the server limit', async () => {
     const proof = await makeSignedProof({ expiresAt: Math.floor(Date.now() / 1000) + 60 * 60 });
     const result = await authenticateRequest(makeRequest(proofHeader(proof)), CTX, x402Config);

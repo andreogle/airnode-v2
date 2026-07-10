@@ -209,7 +209,7 @@ function parsePaymentProof(raw: string): PaymentProofHeader | string {
   if (typeof p.txHash !== 'string' || !TX_HASH_REGEX.test(p.txHash)) {
     return 'Invalid txHash in payment proof';
   }
-  if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) {
+  if (typeof p.expiresAt !== 'number' || !Number.isSafeInteger(p.expiresAt) || p.expiresAt <= 0) {
     return 'Invalid expiresAt in payment proof';
   }
   if (typeof p.signature !== 'string' || !HEX_SIGNATURE_REGEX.test(p.signature)) {
