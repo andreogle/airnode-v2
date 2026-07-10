@@ -44,7 +44,7 @@ function makeConfig(overrides: ServerOverrides = {}): Config {
         endpoints: [{ name: 'test', path: '/data', method: 'GET', parameters: [] }],
       },
     ],
-    settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
+    settings: { maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
   } as unknown as Config;
 }
 

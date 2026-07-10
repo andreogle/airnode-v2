@@ -42,7 +42,6 @@ describe('configSchema', () => {
     expect(result.apis[0]?.endpoints[0]?.method).toBe('GET');
     expect(result.server.cors).toBeUndefined();
     expect(result.apis[0]?.timeout).toBe(10_000);
-    expect(result.settings.timeout).toBe(10_000);
     expect(result.settings.proof).toBe('none');
   });
 

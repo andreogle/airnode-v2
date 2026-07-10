@@ -114,7 +114,7 @@ function makeDeps(overrides: Partial<PipelineDependencies> = {}): PipelineDepend
     plugins: createRegistry([]),
     cache: createCache(),
     apiCallSemaphore: createSemaphore(100),
-    settings: { timeout: 10_000, maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
+    settings: { maxConcurrentApiCalls: 50, proof: 'none', fhe: 'none', plugins: [] },
     rateLimit: {
       window: 60_000,
       max: 1_000_000,

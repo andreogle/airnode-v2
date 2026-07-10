@@ -24,7 +24,7 @@ const makeConfig = (apis: readonly Api[]): Config =>
     version: '1.0',
     apis,
     server: { port: 3000, host: '0.0.0.0' },
-    settings: { timeout: 10_000, workers: 4, proof: 'none', plugins: [] },
+    settings: { workers: 4, proof: 'none', plugins: [] },
   }) as unknown as Config;
 
 // =============================================================================
