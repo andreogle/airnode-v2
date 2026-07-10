@@ -16,7 +16,7 @@ jobs:
       - run: bun run lint:prettier
       - run: bun run lint:eslint
       - run: bunx tsc --noEmit
-      - run: bun test
+      - run: bun run test:unit
 
   integration:
     name: Integration tests

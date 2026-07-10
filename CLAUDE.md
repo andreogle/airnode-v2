@@ -123,8 +123,8 @@ Plugins register hooks that fire during request processing. Budgets reset per re
 
 ## Testing
 
-- `bun test` / `bun run test:unit` — TypeScript unit tests rooted in `src/`. Coverage thresholds: 95% lines, functions,
-  and statements (configured in `bunfig.toml`).
+- `bun run test:unit` — TypeScript unit tests rooted in `src/` with per-file coverage floors of 92% lines and 88%
+  functions (configured in `bunfig.toml`). Use `bun test` for a faster local run without coverage.
 - `bun run test:contracts` — Foundry contract tests (`cd contracts && forge test`). Contracts are independent of the
   TypeScript node.
 

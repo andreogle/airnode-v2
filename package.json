@@ -21,7 +21,7 @@
     "lint:slither": "(cd contracts && slither .)",
     "test:contracts": "(cd contracts && forge test -vvv)",
     "test:integration": "bun run integration/run-sequential.ts",
-    "test:unit": "bun test"
+    "test:unit": "bun test --coverage"
   },
   "dependencies": {
     "@api3/promise-utils": "^0.4.0",
