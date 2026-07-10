@@ -734,6 +734,11 @@ describe('budget', () => {
 // =============================================================================
 // loadPlugins
 // =============================================================================
+async function expectPluginLoadFailure(load: Promise<unknown>, message: string): Promise<void> {
+  expect(load).rejects.toThrow(message);
+  await load.catch(() => {});
+}
+
 describe('loadPlugins', () => {
   const projectRoot = `${import.meta.dirname}/..`;
 
@@ -742,12 +747,11 @@ describe('loadPlugins', () => {
     expect(registry.plugins).toHaveLength(0);
   });
 
-  test('logs error for non-existent plugin file', async () => {
-    const registry = await loadPlugins([{ source: '/nonexistent/ghost.ts', timeout: 5000, config: {} }], projectRoot);
-    expect(registry.plugins).toHaveLength(0);
-
-    const errorOutput = String(errorMock.mock.calls[0]?.[0]);
-    expect(errorOutput).toContain('Failed to load');
+  test('aborts startup for a non-existent configured plugin', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: '/nonexistent/ghost.ts', timeout: 5000, config: {} }], projectRoot),
+      'Failed to load'
+    );
   });
 
   test('loads a valid plugin file by absolute source path', async () => {
@@ -780,6 +784,19 @@ describe('loadPlugins', () => {
     expect(registry.plugins).toHaveLength(2);
     expect(registry.plugins[0]?.name).toBe('heartbeat');
     expect(registry.plugins[1]?.name).toBe('logger');
+  });
+
+  test('aborts startup when configured plugins export the same name', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins(
+        [
+          { source: './examples/plugins/heartbeat.ts', timeout: 3000, config: {} },
+          { source: './examples/plugins/heartbeat.ts', timeout: 7000, config: {} },
+        ],
+        projectRoot
+      ),
+      'duplicate: "heartbeat"'
+    );
   });
 });
 
@@ -823,19 +840,18 @@ describe('loadPlugins — config', () => {
     expect(registry.plugins[0]?.name).toBe('slack-alerts');
   });
 
-  test('rejects a plugin whose config is missing a required field', async () => {
-    const registry = await loadPlugins([{ source: slackPath, timeout: 5000, config: {} }], projectRoot);
-    expect(registry.plugins).toHaveLength(0);
-    expect(String(errorMock.mock.calls[0]?.[0])).toContain('config is invalid');
+  test('aborts startup when plugin config is missing a required field', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: slackPath, timeout: 5000, config: {} }], projectRoot),
+      'config is invalid'
+    );
   });
 
-  test('rejects a plugin whose config value has the wrong shape', async () => {
-    const registry = await loadPlugins(
-      [{ source: heartbeatPath, timeout: 5000, config: { url: 'not a url' } }],
-      projectRoot
+  test('aborts startup when plugin config has the wrong shape', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: heartbeatPath, timeout: 5000, config: { url: 'not a url' } }], projectRoot),
+      'config is invalid'
     );
-    expect(registry.plugins).toHaveLength(0);
-    expect(String(errorMock.mock.calls[0]?.[0])).toContain('config is invalid');
   });
 
   test('passes the validated config to a factory default export', async () => {
@@ -855,21 +871,24 @@ describe('loadPlugins — config', () => {
     expect(warnings).toContain('config ignored');
   });
 
-  test('skips a plugin whose factory throws while constructing', async () => {
-    const registry = await loadPlugins([{ source: throwingFactoryPath, timeout: 5000, config: {} }], projectRoot);
-    expect(registry.plugins).toHaveLength(0);
-    expect(String(errorMock.mock.calls[0]?.[0])).toContain('factory threw');
+  test('aborts startup when a plugin factory throws', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: throwingFactoryPath, timeout: 5000, config: {} }], projectRoot),
+      'factory threw'
+    );
   });
 
-  test('skips a plugin module with no default export', async () => {
-    const registry = await loadPlugins([{ source: noDefaultPath, timeout: 5000, config: {} }], projectRoot);
-    expect(registry.plugins).toHaveLength(0);
-    expect(String(errorMock.mock.calls[0]?.[0])).toContain('no default export');
+  test('aborts startup when a plugin has no default export', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: noDefaultPath, timeout: 5000, config: {} }], projectRoot),
+      'no default export'
+    );
   });
 
-  test('skips a plugin missing required name or hooks fields', async () => {
-    const registry = await loadPlugins([{ source: missingFieldsPath, timeout: 5000, config: {} }], projectRoot);
-    expect(registry.plugins).toHaveLength(0);
-    expect(String(errorMock.mock.calls[0]?.[0])).toContain('missing required');
+  test('aborts startup when a plugin is missing required fields', async () => {
+    await expectPluginLoadFailure(
+      loadPlugins([{ source: missingFieldsPath, timeout: 5000, config: {} }], projectRoot),
+      'missing required'
+    );
   });
 });

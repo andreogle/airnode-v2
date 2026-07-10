@@ -453,15 +453,15 @@ function createRegistry(loaded: readonly LoadedPlugin[]): PluginRegistry {
 // For each entry: import the module → validate the supplied `config` against the
 // plugin's exported `configSchema` (if any) → instantiate (a factory default
 // export receives the validated config; a plain object is used as-is). Any
-// failure logs a clear error and skips that plugin rather than aborting startup.
+// failure aborts startup. An explicitly configured plugin is part of the
+// operator's security and processing policy, so silently omitting it is unsafe.
 // =============================================================================
-async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Promise<LoadedPlugin | undefined> {
+async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Promise<LoadedPlugin> {
   const resolved = path.isAbsolute(entry.source) ? entry.source : path.resolve(configDir, entry.source);
 
   const imported = await go(async () => (await import(resolved)) as PluginModule);
   if (!imported.success) {
-    logger.error(`Failed to load plugin "${entry.source}": ${imported.error.message}`);
-    return undefined;
+    throw new Error(`Failed to load plugin "${entry.source}": ${imported.error.message}`, { cause: imported.error });
   }
   const mod = imported.data;
 
@@ -471,26 +471,24 @@ async function loadPluginEntry(entry: PluginConfigEntry, configDir: string): Pro
     ? goSync(() => schema.parse(suppliedConfig))
     : { success: true as const, data: suppliedConfig as unknown };
   if (!parsed.success) {
-    logger.error(`Plugin "${entry.source}" config is invalid: ${parsed.error.message}`);
-    return undefined;
+    throw new Error(`Plugin "${entry.source}" config is invalid: ${parsed.error.message}`, { cause: parsed.error });
   }
   const config = (parsed.data ?? {}) as Record<string, unknown>;
 
   const def = mod.default;
   if (!def) {
-    logger.error(`Plugin "${entry.source}" has no default export`);
-    return undefined;
+    throw new Error(`Plugin "${entry.source}" has no default export`);
   }
   const built = goSync(() => (typeof def === 'function' ? def(config) : def));
   if (!built.success) {
-    logger.error(`Plugin "${entry.source}" factory threw while constructing: ${built.error.message}`);
-    return undefined;
+    throw new Error(`Plugin "${entry.source}" factory threw while constructing: ${built.error.message}`, {
+      cause: built.error,
+    });
   }
   const plugin = built.data;
 
   if (typeof plugin.name !== 'string' || typeof plugin.hooks !== 'object') {
-    logger.error(`Plugin "${entry.source}" is missing required "name" or "hooks" fields`);
-    return undefined;
+    throw new TypeError(`Plugin "${entry.source}" is missing required "name" or "hooks" fields`);
   }
   if (typeof def !== 'function' && Object.keys(suppliedConfig).length > 0) {
     logger.warn(`Plugin "${entry.source}" was given config but its default export is not a factory — config ignored`);
@@ -513,9 +511,13 @@ async function loadPlugins(configEntries: readonly PluginConfigEntry[], configDi
   // eslint-disable-next-line functional/no-loop-statements
   for (const entry of configEntries) {
     const result = await loadPluginEntry(entry, configDir);
-    if (result) {
-      loaded.push(result); // eslint-disable-line functional/immutable-data
-    }
+    loaded.push(result); // eslint-disable-line functional/immutable-data
+  }
+
+  const names = loaded.map((entry) => entry.plugin.name);
+  const duplicateName = names.find((name, index) => names.indexOf(name) !== index);
+  if (duplicateName) {
+    throw new Error(`Configured plugins must export unique names; duplicate: "${duplicateName}"`);
   }
 
   // Surface plugins that can rewrite signed payload bytes. These plugins can
