@@ -45,7 +45,7 @@ function createBoundedMap<K, V>(options: BoundedMapOptions<V>): BoundedMap<K, V>
     get: (key) => store.get(key),
 
     set: (key, value) => {
-      if (store.size >= options.maxEntries) {
+      if (!store.has(key) && store.size >= options.maxEntries) {
         const firstEntry = store.entries().next().value;
         if (firstEntry === undefined) {
           return false;
