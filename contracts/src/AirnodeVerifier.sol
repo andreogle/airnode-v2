@@ -28,7 +28,8 @@ pragma solidity ^0.8.24;
 ///     and consumers can deliver the same payload without blocking each other.
 ///   - The callback receives (requestHash, airnode, endpointId, timestamp, data)
 ///     so it has all the context it needs to validate and process the data.
-///   - Callback failure rev...[truncated]
+///   - Callback failure reverts the entire delivery, including replay state and the
+///     event, so the same signed payload can be retried safely.
 contract AirnodeVerifier {
   // ===========================================================================
   // Events
