@@ -22,7 +22,7 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     tfhe = new MockTFHE();
 
     vm.prank(FEED_OWNER);
-    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe));
+    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe), type(uint256).max);
 
     airnodeAddress = vm.addr(AIRNODE_KEY);
 
@@ -110,42 +110,6 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
   }
 
   // ===========================================================================
-  // Privacy property: non-owner can never revoke access
-  // ===========================================================================
-
-  /// @notice For any address that is not the owner, revokeAccess always reverts.
-  function check_non_owner_cannot_revoke(
-    bytes32 endpointId,
-    uint256 timestamp,
-    address attacker,
-    address target
-  ) public {
-    vm.assume(timestamp > 0 && timestamp <= block.timestamp);
-    vm.assume(attacker != FEED_OWNER);
-
-    bytes32 handleRef = bytes32(uint256(0x123));
-    bytes memory inputProof = hex'abcd';
-    bytes memory data = abi.encode(handleRef, inputProof);
-
-    bytes32 requestHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
-    vm.assume(!verifier.fulfilled(airnodeAddress, requestHash));
-
-    _fulfillViaVerifier(endpointId, timestamp, data);
-
-    // Owner grants first
-    vm.prank(FEED_OWNER);
-    feed.grantAccess(endpointId, target);
-
-    // Attacker tries to revoke
-    vm.prank(attacker);
-    try feed.revokeAccess(endpointId, target) {
-      assert(false); // Must never succeed
-    } catch {
-      assert(true);
-    }
-  }
-
-  // ===========================================================================
   // Privacy property: external contracts cannot manipulate handle ACL
   // ===========================================================================
 
@@ -195,12 +159,13 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     uint256 freshHandle = feed.prices(endpointId);
     assert(freshHandle != 0);
 
-    // Submit stale data — callback should revert silently
+    // Submit stale data. Callback failure must revert the verifier delivery.
     bytes32 staleRef = bytes32(uint256(0xdead));
     bytes memory staleData = abi.encode(staleRef, hex'bb');
     bytes32 staleHash = keccak256(abi.encodePacked(endpointId, staleTs, staleData));
     vm.assume(!verifier.fulfilled(airnodeAddress, staleHash));
 
+    vm.expectRevert('Stale data');
     _fulfillViaVerifier(endpointId, staleTs, staleData);
 
     // Price must not have changed
@@ -239,7 +204,9 @@ contract ConfidentialPriceFeedSymbolicTest is Test {
     // untrustedAirnode, the verifier would succeed but the feed would reject
     // (untrusted airnode). Either way, price must not update.
 
-    // Try with the correct untrusted airnode address — verifier passes, feed rejects
+    // Try with the correct untrusted airnode address. The feed rejection bubbles
+    // through the verifier and rolls the delivery back.
+    vm.expectRevert('Untrusted airnode');
     verifier.verifyAndFulfill(
       untrustedAirnode,
       endpointId,

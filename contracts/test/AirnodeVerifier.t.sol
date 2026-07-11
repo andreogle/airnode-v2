@@ -139,11 +139,14 @@ contract AirnodeVerifierTest is Test {
     );
   }
 
-  function test_fulfills_even_when_callback_reverts() public {
+  function test_reverts_and_preserves_retry_when_callback_reverts() public {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
     bytes32 requestHash = keccak256(abi.encodePacked(ENDPOINT_ID, TIMESTAMP, DATA));
+    bytes32 deliveryHash = keccak256(
+      abi.encode(airnodeAddress, requestHash, address(revertingCallback), RevertingCallback.fulfill.selector)
+    );
 
-    // Should not revert — the callback reverts but that precise delivery is recorded.
+    vm.expectRevert('intentional revert');
     verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
@@ -154,12 +157,14 @@ contract AirnodeVerifierTest is Test {
       RevertingCallback.fulfill.selector
     );
 
-    assertTrue(verifier.fulfilled(airnodeAddress, requestHash));
+    assertFalse(verifier.fulfilled(airnodeAddress, requestHash));
+    assertFalse(verifier.fulfilledDelivery(deliveryHash));
   }
 
   function test_wrong_callback_cannot_burn_intended_delivery() public {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
 
+    vm.expectRevert('intentional revert');
     verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
@@ -178,6 +183,7 @@ contract AirnodeVerifierTest is Test {
   function test_wrong_selector_cannot_burn_intended_delivery() public {
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
 
+    vm.expectRevert();
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), bytes4(0xdeadbeef));
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(callback), CALLBACK_SELECTOR);
 
@@ -219,6 +225,13 @@ contract AirnodeVerifierTest is Test {
 
     vm.expectRevert('Callback address is zero');
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(0), CALLBACK_SELECTOR);
+  }
+
+  function test_reverts_on_callback_without_code() public {
+    bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
+
+    vm.expectRevert('Callback has no code');
+    verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(0xBEEF), CALLBACK_SELECTOR);
   }
 
   function test_different_timestamps_produce_different_request_hash() public {

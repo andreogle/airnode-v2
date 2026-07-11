@@ -48,12 +48,13 @@ contract AirnodePriceConsumer {
 
   /// @notice The latest accepted value.
   int256 public latestPrice;
-  /// @notice The Airnode timestamp the latest value was produced at.
+  /// @notice The timestamp Airnode included when signing the latest value.
   uint256 public latestTimestamp;
 
   event PriceUpdated(int256 price, uint256 timestamp, bytes32 requestHash);
 
   error ZeroAddress();
+  error VerifierHasNoCode();
   error NotVerifier(address caller);
   error UntrustedAirnode(address attested);
   error WrongEndpoint(bytes32 attested);
@@ -62,6 +63,7 @@ contract AirnodePriceConsumer {
 
   constructor(address airnodeVerifier, address trustedAirnode, bytes32 trustedEndpointId, uint256 maxAgeSeconds) {
     if (airnodeVerifier == address(0) || trustedAirnode == address(0)) revert ZeroAddress();
+    if (airnodeVerifier.code.length == 0) revert VerifierHasNoCode();
     verifier = airnodeVerifier;
     airnode = trustedAirnode;
     endpointId = trustedEndpointId;
@@ -89,9 +91,12 @@ contract AirnodePriceConsumer {
     //    irrelevant against a maxStaleness measured in minutes/hours.
     // slither-disable-next-line timestamp
     if (attestedAt > block.timestamp) revert TimestampInFuture(attestedAt);
-    uint256 deadline = attestedAt + maxStaleness;
     // slither-disable-next-line timestamp
-    if (block.timestamp > deadline) revert DataTooStale(attestedAt, deadline);
+    uint256 age = block.timestamp - attestedAt;
+    if (age > maxStaleness) {
+      // This addition cannot overflow: maxStaleness < block.timestamp - attestedAt.
+      revert DataTooStale(attestedAt, attestedAt + maxStaleness);
+    }
 
     // Optional, but typical for a feed: ignore out-of-order delivery. (No revert — the
     // submitter shouldn't lose their tx just because a newer update already landed; and

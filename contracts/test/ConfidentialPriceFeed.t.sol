@@ -29,7 +29,7 @@ contract ConfidentialPriceFeedTest is Test {
   function setUp() public {
     verifier = new AirnodeVerifier();
     tfhe = new MockTFHE();
-    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe));
+    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe), 1 hours);
     airnodeAddress = vm.addr(AIRNODE_KEY);
 
     // Trust the airnode
@@ -58,6 +58,14 @@ contract ConfidentialPriceFeedTest is Test {
   // fulfill
   // ===========================================================================
 
+  function test_constructor_rejects_dependencies_without_code() public {
+    vm.expectRevert('Verifier has no code');
+    new ConfidentialPriceFeed(address(0xBEEF), address(tfhe), 1 hours);
+
+    vm.expectRevert('FHE adapter has no code');
+    new ConfidentialPriceFeed(address(verifier), address(0xBEEF), 1 hours);
+  }
+
   function test_registers_fhe_handle_on_fulfill() public {
     _fulfill(ENDPOINT_ID, TIMESTAMP, DATA);
 
@@ -68,6 +76,20 @@ contract ConfidentialPriceFeedTest is Test {
     // Price handle should be stored (mock returns sequential IDs starting at 1)
     assertEq(feed.prices(ENDPOINT_ID), 1);
     assertEq(feed.timestamps(ENDPOINT_ID), TIMESTAMP);
+  }
+
+  function test_rejects_a_future_timestamp() public {
+    uint256 futureTimestamp = block.timestamp + 1;
+
+    vm.expectRevert('Future timestamp');
+    _fulfill(ENDPOINT_ID, futureTimestamp, DATA);
+  }
+
+  function test_rejects_data_older_than_max_staleness() public {
+    uint256 staleTimestamp = block.timestamp - 1 hours - 1;
+
+    vm.expectRevert('Data too stale');
+    _fulfill(ENDPOINT_ID, staleTimestamp, DATA);
   }
 
   function test_grants_self_access_on_fulfill() public {
@@ -82,21 +104,20 @@ contract ConfidentialPriceFeedTest is Test {
 
     bytes memory sig = _sign(ENDPOINT_ID, TIMESTAMP, DATA);
 
-    // The verifier will call fulfill, but fulfill will silently fail (low-level call)
-    // because the airnode is untrusted. The verifier still records fulfillment.
+    vm.expectRevert('Untrusted airnode');
     verifier.verifyAndFulfill(airnodeAddress, ENDPOINT_ID, TIMESTAMP, DATA, sig, address(feed), CALLBACK_SELECTOR);
 
-    // Price should NOT be stored since the callback reverted
     assertEq(feed.prices(ENDPOINT_ID), 0);
   }
 
   function test_rejects_stale_data() public {
     _fulfill(ENDPOINT_ID, TIMESTAMP, DATA);
 
-    // Try to submit older data — the callback should revert (silently via verifier)
+    // Try to submit older data. Callback failure must roll back verifier state.
     bytes memory olderData = abi.encode(bytes32(uint256(0x01d)), hex'cafe');
     uint256 olderTimestamp = TIMESTAMP - 1;
     bytes memory sig = _sign(ENDPOINT_ID, olderTimestamp, olderData);
+    vm.expectRevert('Stale data');
     verifier.verifyAndFulfill(
       airnodeAddress,
       ENDPOINT_ID,
@@ -136,32 +157,12 @@ contract ConfidentialPriceFeedTest is Test {
     assertTrue(tfhe.acl(handle, consumer));
   }
 
-  function test_owner_revokes_access() public {
-    _fulfill(ENDPOINT_ID, TIMESTAMP, DATA);
-
-    feed.grantAccess(ENDPOINT_ID, consumer);
-    feed.revokeAccess(ENDPOINT_ID, consumer);
-
-    uint256 handle = feed.prices(ENDPOINT_ID);
-    assertFalse(tfhe.acl(handle, consumer));
-  }
-
   function test_non_owner_cannot_grant_access() public {
     _fulfill(ENDPOINT_ID, TIMESTAMP, DATA);
 
     vm.prank(consumer);
     vm.expectRevert('Only owner');
     feed.grantAccess(ENDPOINT_ID, consumer);
-  }
-
-  function test_non_owner_cannot_revoke_access() public {
-    _fulfill(ENDPOINT_ID, TIMESTAMP, DATA);
-
-    feed.grantAccess(ENDPOINT_ID, consumer);
-
-    vm.prank(consumer);
-    vm.expectRevert('Only owner');
-    feed.revokeAccess(ENDPOINT_ID, consumer);
   }
 
   function test_cannot_grant_access_for_missing_endpoint() public {
@@ -174,6 +175,11 @@ contract ConfidentialPriceFeedTest is Test {
   // ===========================================================================
   // Airnode trust management
   // ===========================================================================
+
+  function test_rejects_zero_airnode() public {
+    vm.expectRevert('Airnode is zero');
+    feed.trustAirnode(address(0));
+  }
 
   function test_only_owner_can_trust_airnode() public {
     vm.prank(consumer);
