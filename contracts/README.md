@@ -197,13 +197,11 @@ contracts/
     AirnodeVerifier.sol                 Signature verification + callback forwarding
     examples/
       AirnodePriceConsumer.sol          Reference consumer (the four required checks)
-      QuorumPriceConsumer.sol           Exact-match M-of-N signer quorum example
       ConfidentialPriceFeed.sol         FHE-ciphertext consumer (ingests an encrypted value)
       ITFHE.sol                         Minimal FHE adapter used by the example
   test/
     AirnodeVerifier.{t,invariant.t,symbolic.t}.sol     Unit / invariant / symbolic tests
     AirnodePriceConsumer.t.sol          Consumer tests (the four checks, out-of-order, fuzz)
-    QuorumPriceConsumer.t.sol           Quorum, duplicate signer, freshness, and disagreement tests
     ConfidentialPriceFeed.{t,invariant.t,symbolic.t}.sol
     MockCallback.sol / MockTFHE.sol     Test doubles
   lib/
