@@ -36,8 +36,8 @@ The `data` field is the ABI-encoded value extracted from the API response at the
 `times` if specified, and encoded as the configured `type` (e.g., `int256`).
 
 The `proof` field is present only when [TLS proofs](/docs/concepts/proofs) are enabled and the endpoint has
-`responseMatches` configured. It contains the attestor's cryptographic attestation that the data came from the claimed
-API over TLS.
+`responseMatches` configured. It attests that the gateway's separate HTTPS response matched configured patterns. It does
+not prove that Airnode signed the same response.
 
 ## Response (raw)
 
@@ -61,7 +61,7 @@ covers the keccak256 hash of the JSON:
 ```
 
 Raw mode is useful when the consumer needs the full JSON structure or when multiple values from the same response are
-needed. The signature still proves the data came from this airnode, but the data itself is not ABI-encoded for on-chain
+needed. The signature identifies the Airnode key that signed the response, but the data is not ABI-encoded for on-chain
 use. The `proof` field appears when [TLS proofs](/docs/concepts/proofs) are enabled for the endpoint.
 
 ## Response (empty)

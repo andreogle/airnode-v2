@@ -111,9 +111,8 @@ uniqueness key — it can be redeemed exactly once.
 
 `expiresAt` must be a future unix-seconds timestamp no further ahead than 10 minutes; longer-lived proofs are rejected.
 
-Submitted proofs are additionally rate-limited **per client IP** before the airnode touches the chain RPC — currently 30
-attempts per minute per IP. The unpaid 402 challenge path is unaffected. This is independent of `server.rateLimit` and
-keeps an unauthenticated flooder from draining the operator's RPC quota by spamming bogus proofs.
+Submitted proofs use the separate `server.rateLimit.x402` per-IP limit before Airnode calls the chain RPC. The unpaid
+402 challenge path does not use this bucket.
 
 ### Multiple auth methods
 
@@ -155,10 +154,9 @@ caller (and every on-chain submission) gets the identical signed payload.
 
 :::warning On-chain race within the cache window
 
-Because every caller in a TTL window receives the **byte-identical** signed response, only the first on-chain submission
-through `AirnodeVerifier` succeeds. The verifier's `fulfilled[]` mapping treats subsequent submissions of the same
-`(endpointId, timestamp, data)` as replays and reverts with `"Already fulfilled"` — the second and third callers pay gas
-for a failed transaction.
+Because every caller in a TTL window receives the **byte-identical** signed response, only the first delivery to a given
+callback and selector succeeds. Repeating the same delivery reverts with `"Already fulfilled"`, so later callers may pay
+gas for a failed transaction.
 
 For endpoints whose consumers race to submit on-chain (price feeds, single-fulfillment auctions), set a short `maxAge`
 (e.g. 1000ms) or omit `cache` entirely so each caller gets a fresh signature. Caching is most useful for off-chain
@@ -265,15 +263,15 @@ In short: only `body` parameters may be nested; everything else should be a prim
 
 ### Parameter fields
 
-| Field         | Type                          | Required | Default | Description                                                    |
-| ------------- | ----------------------------- | -------- | ------- | -------------------------------------------------------------- |
-| `name`        | `string`                      | Yes      | --      | Parameter name as the upstream API expects it.                 |
-| `in`          | `string`                      | No       | `query` | Where to send: `query`, `header`, `path`, `cookie`, or `body`. |
-| `required`    | `boolean`                     | No       | `false` | If `true`, the client must provide this parameter.             |
-| `fixed`       | `string \| number \| boolean` | No       | --      | Hardcoded value. Always overrides the client's value.          |
-| `default`     | `string \| number \| boolean` | No       | --      | Fallback value when the client does not provide one.           |
-| `secret`      | `boolean`                     | No       | `false` | If `true`, excluded from endpoint ID derivation.               |
-| `description` | `string`                      | No       | --      | Human-readable description.                                    |
+| Field         | Type                          | Required | Default | Description                                                             |
+| ------------- | ----------------------------- | -------- | ------- | ----------------------------------------------------------------------- |
+| `name`        | `string`                      | Yes      | --      | Parameter name as the upstream API expects it.                          |
+| `in`          | `string`                      | No       | `query` | Where to send: `query`, `header`, `path`, `cookie`, or `body`.          |
+| `required`    | `boolean`                     | No       | `false` | If `true`, the client must provide this parameter.                      |
+| `fixed`       | `string \| number \| boolean` | No       | --      | Hardcoded value. Always overrides the client's value.                   |
+| `default`     | `string \| number \| boolean` | No       | --      | Fallback value when the client does not provide one.                    |
+| `secret`      | `boolean`                     | No       | `false` | Omits the parameter value, but not the parameter, from the endpoint ID. |
+| `description` | `string`                      | No       | --      | Human-readable description.                                             |
 
 ### Fixed vs default
 
@@ -295,8 +293,8 @@ optional — there is always a fallback value. The schema validator rejects this
 
 ### Secret parameters
 
-Parameters marked `secret: true` are excluded from endpoint ID derivation. This means changing a secret parameter does
-not change the endpoint ID.
+Parameters marked `secret: true` remain part of the endpoint specification, but their values are excluded. Changing the
+secret value does not change the endpoint ID. Adding, removing, or renaming the parameter does.
 
 Parameters with `fixed` values that use `${VAR}` interpolation are also treated as secret automatically.
 

@@ -48,7 +48,7 @@ giving plugins the ability to observe, filter, or modify data at each stage.
 11. **Plugin: onBeforeSign** -- plugins can modify the encoded (or, for `encrypt` endpoints, encrypted) data before
     signing.
 12. **Sign** -- EIP-191 personal sign over `keccak256(encodePacked(endpointId, timestamp, data))`. The signature proves
-    the data came from this airnode at this time for this endpoint.
+    the Airnode key signed this payload and timestamp for this endpoint.
 13. **TLS proof** -- if proof is enabled in settings and the endpoint has `responseMatches`, request a TLS proof from
     the proof gateway. Proof failures are non-fatal -- the response is returned without a proof. See
     [TLS Proofs](/docs/concepts/proofs).
@@ -96,8 +96,8 @@ raw-response hashing rules.
 
 When Airnode starts:
 
-1. Load and validate `config.yaml` against the Zod schema.
-2. Interpolate environment variables (`${VAR}` references in the config).
+1. Load `config.yaml` and interpolate environment variables (`${VAR}` references).
+2. Validate the resolved config against the Zod schema.
 3. Derive the airnode address from `AIRNODE_PRIVATE_KEY` or `AIRNODE_MNEMONIC`.
 4. Build the endpoint map: compute each endpoint ID and register it.
 5. Load plugins from their `source` paths.

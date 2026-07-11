@@ -52,7 +52,8 @@ This is enough when:
 - One API provider operates one airnode.
 - Clients connect directly to the airnode (no aggregation needed).
 
-No external infrastructure required. The airnode is the entire backend.
+No coordinator or chain-watching service is required. Airnode still depends on its upstream API and normal hosting, DNS,
+and key-management infrastructure.
 
 ## Multi-operator setup
 

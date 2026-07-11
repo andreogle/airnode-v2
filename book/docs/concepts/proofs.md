@@ -161,5 +161,6 @@ https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd
 
 ## Example config
 
-See [`examples/configs/reclaim-proof/`](https://github.com/api3dao/airnode-v2/tree/main/examples/configs/reclaim-proof)
+See
+[`examples/configs/reclaim-proof/`](https://github.com/andreogle/airnode-v2/tree/main/examples/configs/reclaim-proof)
 for a minimal working configuration with TLS proofs enabled.

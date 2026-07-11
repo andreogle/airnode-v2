@@ -12,7 +12,7 @@ Airnode is configured with a single YAML file. JSON is also accepted. The file h
 | ----------------------------------- | ------------------------------------------------------- |
 | `version`                           | Must be `'1.0'`. Used for schema validation.            |
 | [`server`](/docs/config/server)     | HTTP server port, host, CORS, and rate limiting.        |
-| [`settings`](/docs/config/settings) | Timeout, upstream concurrency, proof, FHE, and plugins. |
+| [`settings`](/docs/config/settings) | Upstream concurrency, proof, FHE, and plugins.          |
 | [`apis`](/docs/config/apis)         | Upstream API definitions with endpoints and parameters. |
 
 ## Minimal config
@@ -22,7 +22,9 @@ version: '1.0'
 
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
+    trustForwardedFor: false
     window: 60000
     max: 100
     x402:
@@ -56,6 +58,7 @@ server:
     origins:
       - '*'
   rateLimit:
+    trustForwardedFor: false
     window: 60000
     max: 100
     x402:
@@ -63,7 +66,6 @@ server:
       max: 30
 
 settings:
-  timeout: 15000
   maxConcurrentApiCalls: 50
   proof: none # or: { type: reclaim, gatewayUrl: 'http://localhost:5177/v1/prove' }
   plugins:

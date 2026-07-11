@@ -72,11 +72,10 @@ v2 endpoint IDs are hashes of the full API specification — the URL, path, meth
 rules. The signature over `(endpointId, timestamp, data)` therefore commits to exactly what the airnode was configured
 to do.
 
-**Why:** The first-party model — the API provider runs the airnode that serves their own API — means the signature and
-the data source are the same party. The endpoint ID turns that configuration into a verifiable commitment: a consumer
-contract hard-coding an ID binds itself to the specific URL, parameters, and encoding rules the operator declared. The
-operator cannot silently point an endpoint at a different upstream without changing the ID. TLS proofs extend this
-further: the endpoint ID can be cross-checked against the proven HTTP request that backs the response.
+**Why:** In the intended first-party model, the API provider also controls the signing key. The endpoint ID commits to
+the URL, parameter rules, and encoding declared in config. It does not prove which config ran or bind requester-supplied
+values for one call. TLS proofs add evidence about a gateway's separate HTTPS request, not the exact payload Airnode
+signed.
 
 ### Fixed and client-controlled encoding, both committed to by the ID
 
@@ -121,8 +120,7 @@ v1 signed `keccak256(requestId, timestamp, airnodeAddress, data)` where the requ
 (sponsor, requester, chain ID, nonce).
 
 v2 signs `keccak256(encodePacked(endpointId, timestamp, data))` where the endpoint ID is derived from the API spec. The
-endpoint ID, timestamp, and data are separate top-level fields — not nested inside another hash — so on-chain contracts
-and TLS proof verifiers can inspect each field independently.
+fields are transported separately, so a verifier can validate them before recomputing the signed hash.
 
 ## TLS proofs for data provenance
 
@@ -131,9 +129,8 @@ _who_ signed — not _where the data came from_. A compromised or dishonest oper
 them.
 
 v2 integrates [TLS proofs](/docs/concepts/proofs) via [Reclaim Protocol](https://reclaimprotocol.org/). When enabled, an
-independent attestor participates in the upstream TLS session over MPC-TLS and signs a claim that the response actually
-came from the declared HTTPS endpoint and matched the configured `responseMatches` patterns. Airnode attaches the proof
-to the response alongside the signature.
+independent attestor makes a separate HTTPS request over MPC-TLS and signs a claim that its response came from the
+declared endpoint and matched the configured `responseMatches` patterns. Airnode attaches the proof to its own response.
 
 ```yaml
 settings:
@@ -155,9 +152,9 @@ apis:
 Proof generation is **non-fatal** — if the gateway is unavailable, Airnode still returns the signed response without the
 `proof` field and logs a warning. Consumers that require provenance simply reject responses that lack a `proof`.
 
-**Why:** Signatures answer "who endorsed this data." TLS proofs answer "did this data really come from the API." Pairing
-them turns an airnode from a trusted relay into a verifiable relay — the operator can no longer forge upstream responses
-undetected.
+**Why:** Signatures identify the Airnode key. A TLS proof adds evidence that an attestor's separate HTTPS response
+matched configured patterns. It does not prove that Airnode signed the same response bytes, so consumers must apply the
+limits described on the TLS proofs page.
 
 ## A real plugin system
 

@@ -5,8 +5,8 @@ sidebar_position: 2
 
 # Identity Verification (ERC-7529)
 
-Identity verification proves that an airnode address is controlled by the entity that owns a specific DNS domain. It
-follows [ERC-7529](https://eips.ethereum.org/EIPS/eip-7529), a standard for associating EVM addresses with DNS domains.
+Identity verification checks that a domain's DNS records associate it with an Airnode address. It follows
+[ERC-7529](https://eips.ethereum.org/EIPS/eip-7529), a standard for associating EVM addresses with DNS domains.
 
 ## How it works
 
@@ -39,8 +39,7 @@ Value: 0xAbC123..., 0xDef456...
 airnode identity show --domain api.coingecko.com
 ```
 
-This reads `AIRNODE_PRIVATE_KEY` from your environment, derives the address, and displays the exact TXT record host and
-value to set:
+This reads `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY`, derives the address, and displays the TXT record to set:
 
 ```
 ──────────────────────────────────────────────────────────────────────
@@ -109,10 +108,11 @@ Check that the response contains the expected airnode address.
 
 ## Trust model
 
-Identity verification proves **who** operates the airnode -- it does not prove what data the airnode serves. An operator
-who sets the TXT record is claiming: "I control this domain and I operate this airnode address." This is useful because:
+Identity verification shows that the domain controller published an association with an Airnode address. It does not
+prove who runs the process or whether its responses are correct. The record claims: "this domain recognizes this
+address." This is useful because:
 
-- **Requesters can verify operator identity** before trusting an airnode with their funds.
+- **Requesters can verify the published domain association** before trusting an Airnode.
 - **DNS records are controlled by domain owners**, not by the airnode software. Only someone with access to
   `api.coingecko.com`'s DNS can set records under that domain.
 - **It composes with existing trust**: if you already trust CoinGecko's API, verifying that their airnode address
@@ -121,8 +121,8 @@ who sets the TXT record is claiming: "I control this domain and I operate this a
 ### First-party verification
 
 DNS identity verification is most meaningful for **first-party airnodes** — where the API provider operates the node.
-When CoinGecko sets a DNS TXT record associating their airnode address with `api.coingecko.com`, consumers can verify
-that the data signer is the same entity that controls the data source. This is the strongest trust configuration.
+When an API provider sets a DNS TXT record for an Airnode address under its API domain, consumers can attribute that
+address to the domain controller. This avoids adding an unidentified relay, but does not prove response provenance.
 
 A third-party operator can only verify their own domain. If `oracle-service.example.com` claims to serve CoinGecko data,
 DNS verification proves the operator controls `oracle-service.example.com` — not that CoinGecko authorized them or that

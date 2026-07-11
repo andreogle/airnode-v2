@@ -34,7 +34,9 @@ version: '1.0'
 
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
+    trustForwardedFor: false
     window: 60000
     max: 100
     x402:
@@ -112,7 +114,8 @@ Expected response:
 | `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                        |
 | `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                     |
 
-\* Exactly one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required.
+\* At least one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required. If both are set, the mnemonic takes
+precedence.
 
 Bun automatically loads `.env` files from the working directory.
 

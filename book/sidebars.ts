@@ -1,44 +1,44 @@
 import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 
-// Audience-first navigation: a reader landing on the docs picks "I'm an
-// operator" or "I'm a consumer" first, then drills into concepts /
-// reference / security as needed. Concepts come after the audience tracks
-// because they make more sense once you know what you're building.
 const sidebars: SidebarsConfig = {
   docs: [
     'introduction',
     {
       type: 'category',
-      label: 'Operators',
+      label: 'Run an Airnode',
       items: ['operators/index', 'operators/deployment', 'operators/publishing-endpoints'],
     },
     {
       type: 'category',
-      label: 'Consumers',
+      label: 'Use an Airnode',
       items: ['consumers/getting-started', 'consumers/http-client', 'consumers/on-chain'],
     },
     {
       type: 'category',
-      label: 'Concepts',
+      label: 'How it works',
+      items: ['concepts/architecture', 'concepts/request-response', 'concepts/endpoint-ids', 'concepts/signing'],
+    },
+    {
+      type: 'category',
+      label: 'Optional features',
+      items: ['concepts/proofs', 'concepts/fhe-encryption', 'plugins'],
+    },
+    {
+      type: 'category',
+      label: 'Reference',
       items: [
-        'concepts/architecture',
-        'concepts/request-response',
-        'concepts/endpoint-ids',
-        'concepts/signing',
-        'concepts/proofs',
-        'concepts/fhe-encryption',
+        {
+          type: 'category',
+          label: 'Configuration',
+          items: ['config/index', 'config/server', 'config/settings', 'config/apis', 'config/plugins'],
+        },
+        'cli',
+        {
+          type: 'category',
+          label: 'Contracts',
+          items: ['contracts/overview', 'contracts/verifier'],
+        },
       ],
-    },
-    {
-      type: 'category',
-      label: 'Config Reference',
-      items: ['config/index', 'config/server', 'config/settings', 'config/apis', 'config/plugins'],
-    },
-    'plugins',
-    {
-      type: 'category',
-      label: 'Contracts',
-      items: ['contracts/overview', 'contracts/verifier'],
     },
     {
       type: 'category',
@@ -46,9 +46,11 @@ const sidebars: SidebarsConfig = {
       items: ['security/trust-model', 'security/identity-verification'],
     },
     'troubleshooting',
-    'cli',
-    'v1-comparison',
-    'roadmap',
+    {
+      type: 'category',
+      label: 'Project',
+      items: ['v1-comparison', 'roadmap'],
+    },
   ],
 };
 

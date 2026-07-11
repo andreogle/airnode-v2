@@ -143,14 +143,13 @@ const ethPrice = rawData.ethereum.usd; // 3842.17
 
 At this point you have:
 
-- A verified `airnode` address (proves who signed it).
+- An Airnode address from a trusted provider-controlled source.
 - A decoded `value` (the price, the temperature, whatever the endpoint serves).
 - A `timestamp` (so you can decide if the value is fresh enough for your use case).
 
-That's the full off-chain consumer loop. Use the value in your app, run your own staleness check
-(`Date.now() / 1000 - timestamp < maxAgeSeconds`), and store or forward the signed payload if you want to prove
-provenance to a downstream system later — `(airnode, endpointId, timestamp, data, signature)` is a self-contained
-attestation that anyone can re-verify.
+That's the full off-chain consumer loop. Use the value in your app and apply your own staleness check
+(`Date.now() / 1000 - timestamp < maxAgeSeconds`). You can store the signed payload for later verification, but anyone
+checking it still needs an independent reason to trust the signer and data source.
 
 ## Step 7: Submit on-chain (optional)
 
@@ -194,7 +193,7 @@ out of nothing.
 | `400`  | ``Endpoint requires `_type` request parameter``  | The operator marked `type: '*'`. Supply `_type` in `parameters`.                |
 | `400`  | ``Endpoint requires `_path` request parameter``  | The operator marked `path: '*'`. Supply `_path` in `parameters`.                |
 | `400`  | ``Endpoint requires `_times` request parameter`` | The operator marked `times: '*'`. Supply `_times` in `parameters`.              |
-| `401`  | `Missing X-Api-Key header`                       | The endpoint requires authentication. Add `X-Api-Key: your-key` to the request. |
+| `401`  | `Missing X-Api-Key header`                       | The endpoint requires authentication. Add the `X-Api-Key` header.               |
 | `401`  | `Invalid API key`                                | The key value is wrong. Check with the airnode operator.                        |
 | `404`  | `Endpoint not found`                             | The endpoint ID is incorrect. Verify the ID with the operator.                  |
 | `413`  | `Request body too large`                         | The request body exceeds 64KB. Reduce the payload size.                         |
