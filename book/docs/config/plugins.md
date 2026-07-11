@@ -92,7 +92,7 @@ hook from `onBeforeApiCall` onward:
 
 - `onBeforeApiCall`, `onAfterApiCall`, `onBeforeSign` — **only fire on the first request in each cache window**. Cached
   hits within the TTL never invoke them.
-- `onHttpRequest`, `onResponseSent`, `onError` — fire on every request, cached or not.
+- `onHttpRequest` and `onResponseSent` fire for cached and uncached requests. `onError` fires only when a request fails.
 
 If your plugin tracks per-request signal (heartbeats, counters, alerting), put that work in `onResponseSent` or
 `onHttpRequest`. Don't rely on the mutation hooks to run once per HTTP request — they run once per upstream API call,

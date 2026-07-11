@@ -37,7 +37,7 @@ The callback receives five arguments:
 
 ```solidity
 function fulfill(
-  bytes32 requestHash, // keccak256(endpointId, timestamp, data) -- unique per submission
+  bytes32 requestHash, // keccak256(endpointId, timestamp, data) -- identifies the signed payload
   address airnode, // the signer's address
   bytes32 endpointId, // which API endpoint produced this data
   uint256 timestamp, // when Airnode signed the data

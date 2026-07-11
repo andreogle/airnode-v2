@@ -34,7 +34,9 @@ version: '1.0'
 
 server:
   port: 3000
+  host: '0.0.0.0'
   rateLimit:
+    trustForwardedFor: false
     window: 60000
     max: 100
     x402:

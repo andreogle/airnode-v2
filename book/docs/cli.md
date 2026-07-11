@@ -67,14 +67,14 @@ No options. Outputs the mnemonic and address.
 
 ## `airnode address`
 
-Derive and display the airnode address from the `AIRNODE_PRIVATE_KEY` environment variable. Useful for verifying which
-address your node will use without starting it.
+Derive and display the Airnode address from `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY`. This lets you check the address
+without starting the server.
 
 ```bash
 airnode address
 ```
 
-No options. Requires `AIRNODE_PRIVATE_KEY` in the environment.
+No options. At least one signing credential is required. If both are set, the mnemonic takes precedence.
 
 ## `airnode identity show`
 
@@ -89,7 +89,7 @@ airnode identity show --domain <domain> [options]
 | `--domain <domain>` | `-d`  | --      | Domain name to associate    |
 | `--chain-id <id>`   |       | `1`     | Chain ID for the TXT record |
 
-Requires `AIRNODE_PRIVATE_KEY` in the environment.
+Requires `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY`. If both are set, the mnemonic takes precedence.
 
 ```bash
 airnode identity show --domain api.coingecko.com

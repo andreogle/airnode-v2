@@ -57,5 +57,5 @@ is implemented inline for auditability and to minimize the attack surface.
 
 ### Flat architecture
 
-A standalone contract with no shared state, no inheritance chain, and no external dependencies. It can be deployed and
-used independently.
+A standalone contract with no admin or configuration state, no inheritance chain, and no external dependencies. It keeps
+only replay-delivery state and can be deployed independently.

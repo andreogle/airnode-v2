@@ -71,7 +71,7 @@ For JSON log aggregation, set `LOG_FORMAT=json` in the `.env` file.
 ```dockerfile
 FROM oven/bun:1
 WORKDIR /app
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 EXPOSE 3000
@@ -119,13 +119,13 @@ docker compose up -d
 | `LOG_FORMAT`          | No       | `text` (default) or `json`.                                                        |
 | `LOG_LEVEL`           | No       | `debug`, `info` (default), `warn`, or `error`.                                     |
 
-\* Exactly one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required. Any `${VAR}` referenced in your config must
-also be set in the environment.
+\* At least one of `AIRNODE_MNEMONIC` or `AIRNODE_PRIVATE_KEY` is required. If both are set, the mnemonic takes
+precedence. Any `${VAR}` referenced in your config must also be set in the environment.
 
 ## Graceful shutdown
 
-Airnode handles `SIGINT` and `SIGTERM` for clean shutdown. The server stops accepting new requests, in-flight requests
-complete, the cache is cleared, and the process exits.
+Airnode handles `SIGINT` and `SIGTERM` for clean shutdown. The server stops accepting new requests, waits for in-flight
+requests, stops background timers, and exits.
 
 ```bash
 # Manual stop

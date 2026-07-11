@@ -14,8 +14,8 @@ Common errors, what causes them, and how to fix them.
 **Cause:** Your `config.yaml` uses `${VAR_NAME}` interpolation, but the variable is not defined in the environment or
 `.env` file.
 
-**Fix:** Create a `.env` file in the same directory as `config.yaml` and define the variable. Bun loads `.env`
-automatically -- no dotenv needed.
+**Fix:** By default, Airnode loads `.env` from the current working directory. Define the variable there or pass another
+file with `airnode start --env /path/to/.env`.
 
 ```bash
 # .env
@@ -23,11 +23,12 @@ COINGECKO_URL=https://api.coingecko.com/api/v3
 API_KEY_1=your-key-here
 ```
 
-### `AIRNODE_PRIVATE_KEY environment variable is required`
+### `AIRNODE_PRIVATE_KEY or AIRNODE_MNEMONIC is required`
 
-**Cause:** The server cannot start without a private key to derive the airnode address and sign responses.
+**Cause:** The server cannot start without a credential to derive the Airnode address and sign responses.
 
-**Fix:** Add `AIRNODE_PRIVATE_KEY` to your `.env` file. It must be a valid 32-byte hex string with the `0x` prefix.
+**Fix:** Add a BIP-39 `AIRNODE_MNEMONIC` or a 32-byte hexadecimal `AIRNODE_PRIVATE_KEY`. If both are set, the mnemonic
+takes precedence.
 
 ```bash
 # .env
