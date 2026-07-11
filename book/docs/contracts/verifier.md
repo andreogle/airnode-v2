@@ -12,8 +12,8 @@ pull path -- a client gets signed data from the HTTP server and submits it to tr
 
 1. Anyone calls `verifyAndFulfill()` with signed data and a callback target.
 2. The contract recovers the signer from the signature.
-3. If the signer matches the provided airnode address, and the data hasn't been submitted before (replay protection),
-   the data is forwarded to the callback contract.
+3. If the signer matches the provided Airnode address and this exact callback delivery has not run before, the data is
+   forwarded to the callback contract.
 4. If the callback reverts, the fulfillment is still recorded. This prevents griefing where a callback intentionally
    reverts to block fulfillment.
 
@@ -40,16 +40,18 @@ function fulfill(
   bytes32 requestHash, // keccak256(endpointId, timestamp, data) -- unique per submission
   address airnode, // the signer's address
   bytes32 endpointId, // which API endpoint produced this data
-  uint256 timestamp, // when the data was produced
+  uint256 timestamp, // when Airnode signed the data
   bytes calldata data // the ABI-encoded response
 ) external;
 ```
 
 ## Replay protection
 
-The `requestHash` is the `messageHash` from the signature. Replay protection is scoped by signer, so each unique
-`(airnode, endpointId, timestamp, data)` combination can only be fulfilled once while independent airnodes can attest
-the same payload. The nested `fulfilled(airnode, requestHash)` mapping is public.
+The `requestHash` is the message hash from the signature. Replay protection is scoped to the signer, payload, callback
+address, and callback selector. The same signed payload can be delivered once to each distinct callback target.
+
+The public `fulfilled(airnode, requestHash)` mapping records whether a signer and payload have been delivered anywhere.
+The contract uses a separate `fulfilledDelivery` mapping to prevent duplicate delivery to the same callback.
 
 ## Trust model
 
@@ -62,26 +64,37 @@ the same payload. The nested `fulfilled(airnode, requestHash)` mapping is public
 
 ## Consumer contract example
 
-Your contract receives the callback and decides what to do with the data. At minimum, check that you trust the airnode:
+Your callback is public, so checking only the Airnode address is unsafe. At minimum, verify the caller, signer,
+endpoint, and timestamp before decoding data:
 
 ```solidity
 contract MyConsumer {
-  address public trustedAirnode;
+  address public immutable verifier;
+  address public immutable trustedAirnode;
+  bytes32 public immutable trustedEndpointId;
   int256 public lastPrice;
 
-  constructor(address _airnode) {
+  constructor(address _verifier, address _airnode, bytes32 _endpointId) {
+    verifier = _verifier;
     trustedAirnode = _airnode;
+    trustedEndpointId = _endpointId;
   }
 
   function fulfill(
     bytes32, // requestHash (unused here)
     address airnode,
-    bytes32, // endpointId (unused here)
-    uint256, // timestamp (unused here)
+    bytes32 endpointId,
+    uint256 timestamp,
     bytes calldata data
   ) external {
+    require(msg.sender == verifier, 'Untrusted verifier');
     require(airnode == trustedAirnode, 'Untrusted airnode');
+    require(endpointId == trustedEndpointId, 'Unexpected endpoint');
+    require(timestamp <= block.timestamp && block.timestamp - timestamp <= 5 minutes, 'Stale timestamp');
     lastPrice = abi.decode(data, (int256));
   }
 }
 ```
+
+Production consumers should also decide how to handle repeated or out-of-order updates. See
+[On-chain integration](/docs/consumers/on-chain) for a complete example.

@@ -155,9 +155,9 @@ apis:
 Proof generation is **non-fatal** — if the gateway is unavailable, Airnode still returns the signed response without the
 `proof` field and logs a warning. Consumers that require provenance simply reject responses that lack a `proof`.
 
-**Why:** Signatures answer "who endorsed this data." TLS proofs answer "did this data really come from the API." Pairing
-them turns an airnode from a trusted relay into a verifiable relay — the operator can no longer forge upstream responses
-undetected.
+**Why:** Signatures identify the Airnode key. A TLS proof adds evidence that an attestor's separate HTTPS response
+matched configured patterns. It does not prove that Airnode signed the same response bytes, so consumers must apply the
+limits described on the TLS proofs page.
 
 ## A real plugin system
 

@@ -37,8 +37,8 @@ signing:
    [@zama-fhe/relayer-sdk](https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer) SDK, producing an
    encrypted-input handle and a zero-knowledge proof.
 3. It replaces the `data` field with `abi.encode(bytes32 handle, bytes inputProof)`.
-4. Airnode signs the ciphertext — the EIP-191 signature proves the encrypted data is authentically from the API
-   provider. (`onBeforeSign` plugins also see the ciphertext, not the plaintext.)
+4. Airnode signs the ciphertext. The EIP-191 signature identifies the signing key; provider identity must be established
+   separately. (`onBeforeSign` plugins also see the ciphertext, not the plaintext.)
 5. The client submits the signed response to `AirnodeVerifier` on-chain (the existing contract — no changes needed).
 6. `AirnodeVerifier` verifies the signature and forwards the bytes to the consumer's callback, which unpacks the data,
    registers the FHE handle via `FHE.fromExternal(handle, inputProof)`, and manages its own decryption access control.
@@ -165,7 +165,7 @@ euint256 price = FHE.fromExternal(handle, inputProof);
 ## Example consumer contract
 
 An example `ConfidentialPriceFeed` contract is provided in
-[`contracts/src/examples/`](https://github.com/api3dao/airnode-v2/tree/main/contracts/src/examples). It demonstrates:
+[`contracts/src/examples/`](https://github.com/andreogle/airnode-v2/tree/main/contracts/src/examples). It demonstrates:
 
 - Receiving encrypted price data via the `AirnodeVerifier` callback pattern
 - Registering FHE handles with the coprocessor

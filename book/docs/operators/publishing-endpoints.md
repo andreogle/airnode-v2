@@ -38,8 +38,8 @@ curl http://localhost:3000/health
 }
 ```
 
-This address is what consumers pin as a trusted signer. Never let it drift — rotating the key means re-deriving every
-endpoint a consumer trusts.
+This address is what consumers pin as a trusted signer. Key rotation changes the address, so consumers must update the
+trusted signer. Endpoint IDs do not change because they are derived from API configuration, not the signing key.
 
 ## Listing endpoint IDs
 

@@ -3,139 +3,112 @@ slug: /security/trust-model
 sidebar_position: 1
 ---
 
-# Trust Model
+# Trust model
 
-Understanding what you are trusting when you consume data from an airnode.
+An Airnode response has two separate questions:
 
-## First-party oracle model
+1. Who signed it?
+2. Why should you trust the signed value?
 
-Airnode is designed around the **first-party oracle** principle: the entity that operates the API also operates the
-airnode. When CoinGecko runs an airnode serving CoinGecko's API, the signature on every response traces directly back to
-the data source. There is no intermediary oracle network, no third-party relaying the data, no trust gap between the
-signer and the source.
+The signature answers only the first question. Consumers must decide the second.
 
-This is important because it means the trust relationship is the same on-chain as it is off-chain. If you already trust
-CoinGecko's API for off-chain use, an airnode operated by CoinGecko extends that exact same trust on-chain. The
-signature is the API provider's signature.
+## The intended setup
 
-### Why first-party matters
+Airnode is designed for an API provider to operate the Airnode that serves its own API. For example, if an exchange runs
+an Airnode for its own market data, the exchange controls both the API and the signing key.
 
-With a third-party oracle (someone other than the API provider running the node), consumers must trust that the
-operator:
+This removes an extra relay from the trust path, but it does not make the data objectively true. You still trust the
+provider, its API, its Airnode process, and its key management.
 
-- Is actually calling the API they claim and not fabricating or caching responses
-- Has legitimate access to the API and is not violating terms of service
-- Is not modifying, delaying, or selectively omitting data
-- Will keep the node running and the API credentials current
+Before accepting data, confirm that the Airnode address belongs to the provider through
+[DNS identity verification](/docs/security/identity-verification). DNS proves control of a domain and its association
+with an address. It does not inspect the running code or the upstream request.
 
-None of these properties can be verified on-chain today. The endpoint ID commits to _what_ API should be called, but it
-does not prove the operator is actually calling it. DNS identity verification proves _who_ controls a domain, but a
-third-party operator would only prove their own domain -- not the API provider's.
+## What a signature proves
 
-**First-party operation eliminates this entire class of trust assumptions.** The API provider has no incentive to
-fabricate responses to their own API, already has legitimate access, and controls the infrastructure end-to-end.
+An EIP-191 signature proves that the holder of the Airnode private key signed:
 
-Consumers should prefer airnodes operated by the API provider and verify this via
-[DNS identity verification](/docs/security/identity-verification). If an airnode's identity cannot be traced to the API
-provider's domain, treat it with the same skepticism you would apply to any unverified data source.
+```text
+endpointId + timestamp + data
+```
 
-## What you are trusting
+It does not prove that:
 
-### 1. The airnode operator is calling the API they claim
+- the signer is the API provider
+- the operator used the published configuration
+- the operator called the configured API
+- the upstream API returned that value
+- the value is accurate or suitable for your application
 
-The endpoint ID is a specification-bound hash that commits to the API URL, path, method, parameters, and encoding rules.
-You can recompute the endpoint ID from the operator's published config and confirm it matches what you are integrating
-against — this is a verifiable commitment to the configuration, but not on its own proof that the airnode is actually
-running that config. With a first-party airnode, this is not a concern: the API provider has no reason to misrepresent
-calls to their own API. TLS proofs close the remaining gap by attesting that each response really did come from the
-declared HTTPS endpoint.
+The endpoint ID commits to a configuration. It is not runtime evidence. See [Endpoint IDs](/docs/concepts/endpoint-ids).
 
-### 2. The airnode's private key is secure
+## What consumers trust
 
-The signature proves the airnode endorsed this data. If the private key is compromised, an attacker can sign arbitrary
-data. Operators should use dedicated keys (not general-purpose wallets), store them securely (HSM, encrypted at rest),
-and rotate them if exposure is suspected.
+### The operator identity
 
-### 3. The data is genuine
+Use the provider's published domain and DNS record to verify the expected Airnode address. Reading an address from
+`/health` is not enough, because an untrusted server can return any address.
 
-The first-party trust model means the API provider is already trusted. If you use CoinGecko's price API off-chain, you
-trust CoinGecko. Airnode extends that trust on-chain -- the data is signed by the API provider's key, not by a
-third-party oracle network.
+### The signing key
 
-For higher assurance, use a quorum of multiple independent first-party airnodes -- each operated by a different API
-provider serving comparable data. An attacker would need to compromise a majority of providers to manipulate the result.
+Anyone with the private key can produce valid signatures. Operators should use a dedicated key, restrict access to it,
+and publish a recovery or rotation plan.
 
-## How trust is established
+Key rotation changes the trusted signer address. It does not change endpoint IDs, because endpoint IDs are derived from
+API configuration rather than the signing key.
 
-### DNS identity verification (ERC-7529)
+### The provider and upstream data
 
-Operators prove their identity by setting a DNS TXT record that associates their domain with their airnode address. This
-proves **who** operates the airnode -- the entity controlling `api.coingecko.com` has explicitly claimed this airnode
-address. See [Identity Verification](/docs/security/identity-verification) for details.
+A first-party Airnode carries the same basic provider trust as the provider's normal API. If the provider is wrong,
+compromised, or dishonest, its signed response can also be wrong.
 
-### Endpoint ID as verifiable commitment
+For higher resilience, a consumer can compare signed responses from independent providers. The consumer must define the
+aggregation rule, freshness policy, and minimum number of acceptable providers.
 
-The endpoint ID is `keccak256(apiUrl, path, method, parameters, encoding)`. Given a config file, anyone can recompute
-the endpoint ID and confirm it matches what the airnode is serving. This does not prove the operator is running that
-config, but it creates an auditable commitment.
+## Third-party operators
 
-### Quorum across providers
+If someone other than the API provider operates the Airnode, the consumer also trusts that operator to call the claimed
+API and relay the result correctly. DNS verification of the operator's domain does not prove a relationship with the API
+provider.
 
-Different API providers each run their own airnode for their own API. A consumer can collect signed data from several
-first-party airnodes — for example, a BTC/USD quorum composed of exchanges that each publish their own price feed — and
-aggregate the results off-chain or submit them to an on-chain quorum verifier. The trust gain comes from independence at
-the source: each airnode commits to its own specific endpoint, and an attacker would need to compromise multiple
-unrelated providers to manipulate the aggregate.
+Do not describe a third-party Airnode as first-party data unless the API provider has explicitly authorized and
+identified it.
 
-### TLS proofs and third-party trust
+## TLS proofs
 
-zkTLS / TLS Notary produces cryptographic proof that the data came from a specific HTTPS endpoint, eliminating the need
-to trust the operator's honesty -- the proof shows the data was not fabricated. Airnode integrates this today via the
-Reclaim protocol: when `settings.proof` is configured and an endpoint declares `responseMatches`, each response carries
-an attestation of the upstream call. See [TLS Proofs](/docs/concepts/proofs). (Proofs are non-fatal — a gateway outage
-just omits the `proof` field rather than failing the request — and the consumer verifies the attestor signature
-on-chain, not Airnode.)
+Airnode can request a Reclaim TLS proof. The gateway and attestor make a separate HTTPS request and attest that the
+response matched configured patterns.
 
-TLS proofs are particularly significant for third-party operators. A third-party operator cannot, by signature alone,
-prove it is actually calling the API it claims. With a TLS proof, the cryptographic proof itself demonstrates the data
-came from the API provider's HTTPS endpoint -- regardless of who operates the airnode. This makes third-party operation
-viable for use cases where the API provider does not want to run infrastructure, while still preserving verifiable data
-provenance. Without a proof, first-party operation remains the only trust model where the data source is guaranteed.
+This adds evidence about the attestor's request. It does not prove that Airnode's separately fetched and signed payload
+is byte-for-byte the same response. Consumers also trust the proof system, gateway behavior, attestor set, matching
+rules, and verification code.
 
-### Future: TEE attestation
+Proof generation is optional and non-fatal. A response may be signed without a proof when the gateway fails. Consumers
+that require a proof must reject responses that omit it.
 
-Running the airnode in a Trusted Execution Environment (AWS Nitro Enclaves, Intel SGX, AMD SEV-SNP) produces attestation
-proofs that the running code matches a specific binary hash. Combined with DNS identity verification, this creates a
-verifiable chain: the domain proves who operates the airnode, the attestation proves what code it runs.
+See [TLS Proofs](/docs/concepts/proofs) for the exact boundary.
 
-## What is NOT trusted
+## Plugins
 
-### Who submits data on-chain
+Plugins run in the Airnode process without a sandbox. Mutation hooks can change parameters or data before signing. Trust
+in an Airnode therefore includes every loaded plugin.
 
-AirnodeVerifier is permissionless. Anyone can submit valid signed data -- the client, a relayer, the airnode itself, or
-any third party. The contract verifies the signature, not the submitter.
-
-### The transport layer
-
-Responses are signed. A man-in-the-middle can observe the data but cannot modify it without invalidating the signature.
-The signature is verified on-chain by the contracts and can be verified off-chain by any client.
-
-## Off-chain trust: plugins
-
-The airnode node supports a [plugin system](/docs/plugins) that can intercept and modify data at every stage of the
-request lifecycle. Plugins run in the airnode process with no sandboxing. A malicious plugin can alter data before the
-airnode signs it.
-
-The trust placed in an airnode implicitly extends to all plugins it runs. Operators should audit plugin code and load
-only plugins from trusted sources.
+Operators should review plugin code and keep the plugin list small.
 
 ## On-chain verification
 
-### Signature verification
+`AirnodeVerifier` checks the EIP-191 signature, replay state, and callback flow. It does not verify the upstream API
+call or decide whether the signer is trustworthy.
 
-`AirnodeVerifier` recovers the signer from an EIP-191 signature over
-`keccak256(encodePacked(endpointId, timestamp, data))` and asserts it matches the airnode address the caller claimed.
-See [Signing and Verification](/docs/concepts/signing) for the full format.
+Anyone can submit a valid signed response. The contract verifies the signature, not the submitter.
 
-`endpointId` is a top-level field (not buried inside another hash) so future on-chain verifiers — including TLS proof
-verifiers — can inspect it directly without reconstructing a nested hash structure.
+## Consumer checklist
+
+Before using an Airnode response:
+
+- Verify the expected signer through a provider-controlled channel.
+- Pin the signer and endpoint ID you intend to trust.
+- Check the timestamp against your freshness limit.
+- Decode the data using the expected ABI type.
+- Decide whether a TLS proof is required, and reject missing proofs if it is.
+- Define how key rotation, provider failure, and conflicting providers are handled.

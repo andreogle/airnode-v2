@@ -5,23 +5,23 @@ sidebar_position: 3
 
 # Endpoint IDs
 
-Endpoint IDs are deterministic hashes of the full API specification. They are not names, not UUIDs, not
-auto-incrementing counters. The ID is derived from what the endpoint does -- its URL, path, method, parameters, and
-encoding -- so the airnode's signature carries a commitment to exactly what was called and how the response was
-interpreted.
+An endpoint ID identifies a configured API operation. Airnode derives it from the parts of the configuration that affect
+the upstream request or the meaning of the signed data.
+
+Changing one of those fields creates a new ID. Human-readable names, client authentication, caching, and other
+operational settings do not affect it.
 
 ## Derivation
 
-The endpoint ID is the keccak256 hash of a pipe-delimited canonical string. Parameters are represented as canonical JSON
-objects so their location and semantics cannot collapse into the same ID:
+Airnode hashes this canonical string with Keccak-256:
 
+```text
+api URL | path | method | sorted parameter rules | encoding | encryption
 ```
-endpointId = keccak256(url | path | method | sorted parameter JSON | encoding spec | encrypt spec)
-```
 
-(The `encoding spec` and `encrypt spec` segments are only present when the endpoint configures them.)
+The encoding and encryption segments are omitted when they are not configured.
 
-Concretely, for an endpoint configured as:
+For example:
 
 ```yaml
 apis:
@@ -32,216 +32,122 @@ apis:
         path: /simple/price
         method: GET
         parameters:
-          - name: vs_currencies
-            in: query
-            fixed: usd
           - name: ids
             in: query
             required: true
+          - name: vs_currencies
+            in: query
+            fixed: usd
         encoding:
           type: int256
           path: $.ethereum.usd
           times: '1e18'
 ```
 
-The canonical string is:
+produces a canonical value like:
 
-```
+```text
 https://api.coingecko.com/api/v3|/simple/price|GET|[{"name":"ids","in":"query","required":true,"secret":false},{"name":"vs_currencies","in":"query","required":false,"secret":false,"fixed":"usd"}]|type=int256,path=$.ethereum.usd,times=1e18
 ```
 
-And the endpoint ID is `keccak256` of that string encoded as hex bytes.
+Parameter rules are sorted by name and location before hashing.
 
-### Fixed vs. client-controlled encoding
+## Included fields
 
-One upstream API usually serves many different consumers. A CoinGecko price endpoint can be projected as `int256 × 1e18`
-for a lending protocol, as `uint128 × 1e8` for a DEX, or read for its `last_updated_at` timestamp by a staleness check.
-These are legitimate, simultaneous uses of the same HTTP call.
+The ID includes:
 
-Airnode supports this by letting the operator decide **per field** whether to pin a concrete value or open it to the
-client via the literal wildcard `'*'`. Wildcard fields are filled at request time via reserved parameters `_type`,
-`_path`, and `_times` in the request body. The endpoint ID commits to the exact split — whatever the operator wrote
-flows through to the canonical string verbatim, so a `'*'` in config means `*` in the ID.
+- API URL
+- endpoint path and method
+- each parameter's name, location, required flag, and secret marker
+- non-secret fixed and default parameter values
+- encoding type, JSON path, and multiplier
+- FHE ciphertext type and consumer contract, when encryption is configured
 
-`type` and `path` are required whenever an `encoding` block is present. `times` is optional and only valid for numeric
-types (`int256` / `uint256`).
+This means changing the URL, moving a parameter from a query string to a header, or changing the response encoding
+creates a new ID.
 
-Three valid configurations:
+## Excluded fields
 
-| Operator config                                                                | Encoding spec in ID                           | Who controls what                                     |
-| ------------------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------- |
-| `encoding: { type: int256, path: $.price, times: '1e18' }` — fully pinned      | `type=int256,path=$.price,times=1e18`         | Fully operator-fixed                                  |
-| `encoding: { type: int256, path: '*', times: '1e18' }` — pin type & multiplier | `type=int256,path=*,times=1e18`               | Operator fixes type & multiplier; client chooses path |
-| `encoding: { type: '*', path: '*', times: '*' }` — all wildcards (fully open)  | `type=*,path=*,times=*`                       | Client fully controls encoding                        |
-| No `encoding` block at all                                                     | (encoding spec omitted from canonical string) | Endpoint returns raw-JSON-hash responses only         |
+The ID does not include:
 
-Client-supplied fields are **silently ignored** for any field the operator pinned. If the operator sets `type: int256`,
-the request's `_type` parameter has no effect on encoding (it's still consumed by the pipeline and never sent to the
-upstream API). Wildcard fields require the matching reserved parameter: omitting `_path` on an endpoint with `path: '*'`
-returns 400.
+- API or endpoint names
+- upstream headers
+- secret parameter values
+- client authentication
+- timeouts and caching
+- response mode
+- FHE network and relayer settings
 
-### FHE-encrypted endpoints
+These fields are operational or secret. For example, rotating an upstream API key should not change the endpoint ID.
 
-An endpoint with an [`encrypt`](/docs/concepts/fhe-encryption) block appends an encryption spec to the canonical string:
+## Secret parameters
 
+A parameter marked `secret: true` remains represented in the parameter list, but its value is omitted. Airnode also
+treats a fixed `${ENV_VAR}` value as secret.
+
+Adding or removing a secret parameter changes the ID. Changing only its secret value does not.
+
+## Fixed and client-selected encoding
+
+An encoding field can be fixed by the operator or set to `'*'` so the client supplies it at request time.
+
+```yaml
+# Fully fixed
+encoding:
+  type: int256
+  path: $.price
+  times: '1e18'
+
+# Client chooses only the path
+encoding:
+  type: int256
+  path: '*'
+  times: '1e18'
 ```
-fhe=euint256,contract=0x5fbdb2315678afecb367f032d93f642f64180aa3
+
+The endpoint ID includes either the fixed value or the literal `*`. A consumer that accepts an ID containing a wildcard
+is also accepting that the requester controls that part of the encoding.
+
+Clients fill wildcard fields with reserved request parameters:
+
+| Config value | Request parameter |
+| ------------ | ----------------- |
+| `type: '*'`  | `_type`           |
+| `path: '*'`  | `_path`           |
+| `times: '*'` | `_times`          |
+
+Client values cannot override fixed encoding fields. If the endpoint has no `encoding` block, these reserved parameters
+do not enable encoding; Airnode returns signed raw JSON instead.
+
+## FHE encryption
+
+An encrypted endpoint adds this shape to the ID:
+
+```text
+fhe=euint256,contract=0x...
 ```
 
-So the endpoint ID commits to the ciphertext type and the consumer contract the encrypted input is bound to. The
-`encrypt.contract` value is always operator-fixed — there is no requester-controlled variant — and the relayer/verifier
-settings (`settings.fhe`) are operational config, so they are _not_ part of the ID.
+The consumer contract and ciphertext type therefore affect the ID. Relayer and network settings do not.
 
-### Why this design
+## What the ID proves
 
-The two obvious alternatives both fail.
+The ID lets a consumer recompute the hash from a published configuration and detect changes to that specification.
 
-**"Force operators to fully fix every projection."** This sounds safer, but it turns the operator into a gatekeeper for
-every consumer-side design change. Each new downstream use case (new type, new JSON path, new multiplier) would require
-an operator config push, a new endpoint ID, and coordination across teams that have no business reason to coordinate. In
-practice, operators would either (a) refuse to add endpoints, killing adoption, or (b) add every imaginable projection
-upfront, which is neither maintainable nor knowable in advance.
+It does not prove that:
 
-**"Leave encoding fully unbound and stop including it in the ID."** This is what v1 effectively did. The endpoint ID
-becomes a loose identifier of "which upstream was called," and the signature over `(endpointId, timestamp, data)`
-carries no guarantee about what `data` means. On-chain consumers then need out-of-band schema agreements to interpret
-the bytes safely — which reintroduces the registry and coordination problems that specification-bound IDs were
-introduced to solve.
+- the published configuration is the one currently running
+- the operator called the configured API for a particular response
+- the upstream API returned the signed value
 
-**The middle ground.** The endpoint ID commits to the _contract_ between operator and consumer: which fields the
-operator stands behind, and which fields the submitter is trusted to choose. A consumer contract hard-coding a specific
-endpoint ID implicitly accepts exactly that trust split:
+The operator's signature still carries those trust assumptions. A separate [TLS proof](/docs/concepts/proofs) can add
+evidence about a gateway's HTTPS request and response matching, subject to the limits described on that page.
 
-- `keccak256(...|type=int256,path=$.price,times=1e18)` — the consumer is trusting only the operator. The submitter
-  cannot influence what the bytes mean.
-- `keccak256(...|type=int256,path=*,times=1e18)` — the consumer is trusting the operator for type & multiplier, and
-  trusting the submitter to pick a meaningful JSON path. This is a weaker guarantee and should be used deliberately.
-- `keccak256(...|type=*,path=*,times=*)` — the consumer is trusting the submitter for everything about the projection.
-  Only reasonable in contexts where the submitter is the consumer itself (they sign the transaction that submits, so
-  they're only lying to themselves).
+## Print endpoint IDs
 
-If the operator later widens or narrows an endpoint (e.g. removes the fixed `type`), the endpoint ID changes and any
-consumer hard-coding the old ID stops matching new signatures — exactly the behavior you want. The operator cannot
-silently alter the trust split of an existing endpoint.
-
-**Security properties this gives you:**
-
-1. **Clients cannot widen an endpoint.** `_type`/`_path`/`_times` only fill fields the operator left open; they cannot
-   override fixed values. A malicious submitter cannot turn a fully-fixed `type=int256,path=$.price` endpoint into
-   something that projects volume or timestamp instead.
-2. **Consumers explicitly opt into any flexibility.** By hard-coding a specific ID, a consumer is accepting the exact
-   encoding contract baked into that ID. A consumer who wants no submitter-side flexibility simply refuses to recognize
-   any ID whose encoding spec contains `*`.
-3. **Operators cannot silently rewire an endpoint.** Any change to the fixed-vs-wildcard split changes the ID. Existing
-   consumers hard-coding the old ID stop accepting signatures the moment the operator widens or narrows the endpoint.
-
-### Endpoints with no `encoding` block
-
-An endpoint with no `encoding` block in config does not include an encoding spec in the canonical string. Its signature
-covers `keccak256(json_hash)` of the raw upstream response. Reserved request parameters cannot synthesize an encoding
-out of nothing — `_type` / `_path` / `_times` are ignored in raw mode, so the only way to ABI-encode a response is for
-the operator to declare an `encoding` block (pinned or wildcarded).
-
-If a consumer contract wants the endpoint ID to bind some encoding shape, the operator should declare an `encoding`
-block with the appropriate pin/wildcard split. An endpoint without any `encoding` block should be treated as
-raw-JSON-only from a consumer perspective.
-
-## What Is Included
-
-These fields are part of the hash:
-
-| Field               | Example                                                  | Why                                                            |
-| ------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
-| `api.url`           | `https://api.coingecko.com/api/v3`                       | Different APIs produce different endpoint IDs                  |
-| `endpoint.path`     | `/simple/price`                                          | Different paths on the same API are different endpoints        |
-| `endpoint.method`   | `GET`                                                    | A GET and POST to the same path are different operations       |
-| Parameter semantics | name, location, required/default/fixed and secret marker | Parameters define the generated request                        |
-| `encoding.type`     | `int256` or `*`                                          | Different encodings of the same data produce different outputs |
-| `encoding.path`     | `$.ethereum.usd` or `*`                                  | Extracting different fields produces different data            |
-| `encoding.times`    | `1e18` or `*`                                            | Different multipliers produce different values                 |
-| `encrypt.type`      | `euint256` (if `encrypt` is set)                         | The FHE ciphertext type changes the response shape             |
-| `encrypt.contract`  | `0x5fbdb2…` (if `encrypt` is set)                        | The encrypted input is bound to this consumer contract         |
-
-### Parameter rules
-
-Parameters are sorted by name and location. Each entry commits to `name`, `in`, `required`, whether it is secret, and
-any non-secret `default` or `fixed` value. Secret parameter values are omitted, but the parameter itself remains
-represented. Rotating a secret therefore preserves the ID, while adding or removing a secret header changes it.
-
-## What Is Excluded
-
-These fields do not affect the endpoint ID:
-
-| Field                          | Why excluded                                                       |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `endpoint.name`                | Names are for human readability, not identity                      |
-| `api.headers`                  | Headers often contain secrets (API keys, auth tokens)              |
-| `api.auth`                     | Client-facing auth is an operator choice, not a data specification |
-| `api.timeout`                  | Operational config, not data specification                         |
-| `api.cache` / `endpoint.cache` | Caching is an optimization, not a data property                    |
-| `endpoint.mode`                | `sync` / `async` / `stream` is a delivery choice, not a data spec  |
-| `endpoint.auth`                | Endpoint-level client auth override, like `api.auth`               |
-| Secret parameter values        | Credentials rotate without changing the public endpoint contract   |
-
-## Why This Design
-
-### Commitment to the API specification
-
-Airnode is built for the first-party oracle model: the API provider runs the airnode that serves their own API. The
-endpoint ID turns that arrangement into a cryptographic commitment. A consumer contract hard-coding an endpoint ID binds
-itself to the specific URL, path, method, parameters, and encoding rules the provider declared in config.
-
-If the provider later changes any part of the spec — redirects to a different upstream, renames a parameter, tweaks the
-encoding — the endpoint ID changes and existing signatures no longer match what the consumer expected. The consumer
-immediately stops accepting data under the old ID. There is no silent re-pointing.
-
-The same property holds in reverse: if you recompute the endpoint ID from a published config and it matches the ID you
-had already integrated against, you know the airnode is serving exactly the spec you committed to.
-
-### Aggregation across providers
-
-Different API providers each run their own airnode for their own API. A consumer can aggregate signed data from several
-first-party airnodes — for instance, combining BTC/USD prices from multiple exchanges — by collecting signatures across
-those distinct endpoint IDs. Each airnode's signature is independently verifiable, and the aggregation happens at the
-consumer's side with no coordination layer or shared registry.
-
-### TLS proof verification
-
-The canonical string used to derive the endpoint ID matches the information that would be present in a TLS proof of the
-HTTP request. A future verifier can check that:
-
-1. The API URL and path in the TLS proof match the endpoint specification.
-2. The query parameters in the TLS proof match the non-secret parameters.
-3. The endpoint ID hash is consistent with the observed request.
-
-This is why secret parameters are excluded -- they would appear in the TLS transcript but should not be part of the
-public identity.
-
-### No registry
-
-Endpoint IDs do not require registration, coordination, or a central authority. An operator derives the ID locally from
-the config, publishes it alongside their endpoint, and consumers integrate against it directly.
-
-## Computing an Endpoint ID
-
-The CLI prints endpoint IDs for every endpoint when you validate a config:
+Validate a config to print every derived endpoint ID:
 
 ```bash
 airnode config validate -c config.yaml
 ```
 
-You can also derive the ID programmatically:
-
-```typescript
-import { keccak256, toHex } from 'viem';
-
-const canonical = [
-  'https://api.coingecko.com/api/v3',
-  '/simple/price',
-  'GET',
-  'ids,vs_currencies=usd',
-  'type=int256,path=$.ethereum.usd,times=1e18',
-].join('|');
-
-const endpointId = keccak256(toHex(canonical));
-```
+The server also prints registered IDs during startup.

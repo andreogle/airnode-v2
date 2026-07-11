@@ -5,9 +5,9 @@ sidebar_position: 4
 
 # Signing and Verification
 
-Every response from Airnode is signed with the operator's private key using EIP-191. The signature proves that a
-specific airnode produced specific data for a specific endpoint at a specific time. Consumers can verify the signature
-off-chain or submit it to an on-chain contract for verification.
+Every response from Airnode is signed with the operator's private key using EIP-191. The signature proves that the key
+holder signed specific data for a specific endpoint and timestamp. It does not prove who controls the key or where the
+data came from. Consumers can verify the signature off-chain or submit it to an on-chain contract.
 
 ## Signature Format
 
@@ -29,8 +29,8 @@ The three fields are ABI-packed with their types:
 The `endpointId`, `timestamp`, and `data` are packed as separate fields -- not nested inside another hash. This is a
 deliberate design choice:
 
-- **On-chain contracts** can decode the packed data and inspect each field independently. A freshness check can reject
-  data with a stale timestamp. An endpoint filter can reject data for an unexpected endpoint.
+- **On-chain contracts** receive each field separately and can inspect it before using the data. A consumer can reject a
+  stale timestamp or an unexpected endpoint ID.
 - **TLS proof verification** can match the endpoint ID against the observed HTTP request without needing to reconstruct
   a nested hash structure.
 - **Simplicity** -- the signed message is a single `keccak256(encodePacked(...))`, which maps directly to how Solidity

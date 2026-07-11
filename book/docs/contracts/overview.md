@@ -38,7 +38,7 @@ The fields it commits to:
 
 - **endpointId** -- a specification-bound hash committing to the API URL, path, method, parameters, and encoding rules.
   Two independent airnodes serving the same API with the same config produce the same endpoint ID.
-- **timestamp** -- unix timestamp (seconds) of when the data was produced.
+- **timestamp** -- Unix timestamp (seconds) of when Airnode signed the data.
 - **data** -- the signed payload: ABI-encoded value, an FHE ciphertext, or `keccak256` of the raw JSON. The contract
   treats it as opaque `bytes` and forwards it to the callback unchanged. (Airnode caps the HTTP _request_ body at 64 KB,
   but the contract imposes no size limit on `data`.)

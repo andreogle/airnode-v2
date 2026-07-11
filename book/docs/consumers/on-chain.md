@@ -25,7 +25,7 @@ AirnodeVerifier contract, which verifies the signature and forwards the data to 
 Your contract receives the callback. `verifyAndFulfill` is **permissionless** (anyone can submit any valid
 Airnode-signed payload and point the callback anywhere) and signed payloads are **public**, so your `fulfill` must run
 four checks before trusting the data. A documented reference is
-[`AirnodePriceConsumer.sol`](https://github.com/api3dao/airnode-v2/blob/main/contracts/src/examples/AirnodePriceConsumer.sol);
+[`AirnodePriceConsumer.sol`](https://github.com/andreogle/airnode-v2/blob/main/contracts/src/examples/AirnodePriceConsumer.sol);
 the essentials:
 
 ```solidity
