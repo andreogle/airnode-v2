@@ -19,7 +19,7 @@ contract MockTFHE is ITFHE {
   bytes32 public lastHandleRef;
   bytes public lastInputProof;
 
-  function asEuint256(bytes32 handleRef, bytes calldata inputProof) external returns (uint256 handle) {
+  function fromExternal(bytes32 handleRef, bytes calldata inputProof) external returns (uint256 handle) {
     lastHandleRef = handleRef;
     lastInputProof = inputProof;
 
@@ -30,10 +30,5 @@ contract MockTFHE is ITFHE {
   function allow(uint256 handle, address account) external {
     require(handleOwner[handle] == msg.sender, 'Not handle owner');
     acl[handle][account] = true;
-  }
-
-  function deny(uint256 handle, address account) external {
-    require(handleOwner[handle] == msg.sender, 'Not handle owner');
-    acl[handle][account] = false;
   }
 }

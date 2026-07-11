@@ -49,6 +49,11 @@ contract AirnodePriceConsumerTest is Test {
     new AirnodePriceConsumer(address(0), airnode, ENDPOINT_ID, MAX_STALENESS);
   }
 
+  function test_constructor_rejects_verifier_without_code() public {
+    vm.expectRevert(AirnodePriceConsumer.VerifierHasNoCode.selector);
+    new AirnodePriceConsumer(address(0xBEEF), airnode, ENDPOINT_ID, MAX_STALENESS);
+  }
+
   function test_constructor_rejects_zero_airnode() public {
     vm.expectRevert(AirnodePriceConsumer.ZeroAddress.selector);
     new AirnodePriceConsumer(address(verifier), address(0), ENDPOINT_ID, MAX_STALENESS);
@@ -112,6 +117,20 @@ contract AirnodePriceConsumerTest is Test {
     consumer.fulfill(bytes32(0), airnode, ENDPOINT_ID, TIMESTAMP, abi.encode(int256(1)));
   }
 
+  function test_accepts_unbounded_staleness_without_overflow() public {
+    AirnodePriceConsumer unbounded = new AirnodePriceConsumer(
+      address(verifier),
+      airnode,
+      ENDPOINT_ID,
+      type(uint256).max
+    );
+
+    vm.prank(address(verifier));
+    unbounded.fulfill(bytes32(0), airnode, ENDPOINT_ID, block.timestamp, abi.encode(int256(42)));
+
+    assertEq(unbounded.latestPrice(), int256(42));
+  }
+
   function test_accepts_data_at_the_staleness_boundary() public {
     vm.warp(TIMESTAMP + MAX_STALENESS); // exactly at the deadline — still OK
     _submit(ENDPOINT_ID, TIMESTAMP, abi.encode(int256(42)));
@@ -144,16 +163,15 @@ contract AirnodePriceConsumerTest is Test {
     assertEq(consumer.latestTimestamp(), TIMESTAMP);
   }
 
-  // A consumer revert inside the callback does not revert verifyAndFulfill — the request
-  // is still marked fulfilled (anti-griefing). The consumer's state simply stays put.
-  function test_consumer_revert_does_not_break_verifyAndFulfill() public {
+  function test_consumer_revert_rolls_back_verifier_delivery() public {
     bytes memory data = abi.encode(int256(7));
     bytes32 wrongEndpoint = bytes32(uint256(0xDEAD));
     bytes memory sig = _sign(wrongEndpoint, TIMESTAMP, data);
 
+    vm.expectRevert(abi.encodeWithSelector(AirnodePriceConsumer.WrongEndpoint.selector, wrongEndpoint));
     verifier.verifyAndFulfill(airnode, wrongEndpoint, TIMESTAMP, data, sig, address(consumer), SELECTOR);
 
-    assertTrue(verifier.fulfilled(airnode, keccak256(abi.encodePacked(wrongEndpoint, TIMESTAMP, data))));
+    assertFalse(verifier.fulfilled(airnode, keccak256(abi.encodePacked(wrongEndpoint, TIMESTAMP, data))));
     assertEq(consumer.latestTimestamp(), 0); // consumer rejected it (WrongEndpoint)
   }
 }

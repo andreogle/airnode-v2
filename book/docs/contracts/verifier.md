@@ -12,10 +12,9 @@ pull path -- a client gets signed data from the HTTP server and submits it to tr
 
 1. Anyone calls `verifyAndFulfill()` with signed data and a callback target.
 2. The contract recovers the signer from the signature.
-3. If the signer matches the provided Airnode address and this exact callback delivery has not run before, the data is
-   forwarded to the callback contract.
-4. If the callback reverts, the fulfillment is still recorded. This prevents griefing where a callback intentionally
-   reverts to block fulfillment.
+3. If the signer matches the provided Airnode address and this exact callback delivery has not succeeded before, the
+   data is forwarded to the callback contract.
+4. If the callback reverts, the entire transaction reverts. Replay state is rolled back so the delivery can be retried.
 
 ## Function
 
@@ -59,8 +58,8 @@ The contract uses a separate `fulfilledDelivery` mapping to prevent duplicate de
   care who pays gas.
 - **No airnode registry.** The contract does not know which airnodes are legitimate. It only verifies the math: "did
   this address sign this data?" The callback contract is responsible for checking whether it trusts the airnode address.
-- **Callback failure is safe.** If the callback reverts, the fulfillment is still recorded and the event is emitted. The
-  submitter's transaction succeeds. This prevents a malicious callback from blocking fulfillment.
+- **Callback failure is retryable.** If the callback reverts, the verifier transaction and replay-state writes revert
+  too. This prevents a premature or underfunded submission from consuming a valid delivery.
 
 ## Consumer contract example
 

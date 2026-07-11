@@ -28,7 +28,8 @@ pragma solidity ^0.8.24;
 ///     and consumers can deliver the same payload without blocking each other.
 ///   - The callback receives (requestHash, airnode, endpointId, timestamp, data)
 ///     so it has all the context it needs to validate and process the data.
-///   - If the callback reverts, that precise delivery tuple is still recorded.
+///   - Callback failure reverts the entire delivery, including replay state and the
+///     event, so the same signed payload can be retried safely.
 contract AirnodeVerifier {
   // ===========================================================================
   // Events
@@ -60,7 +61,7 @@ contract AirnodeVerifier {
   /// @param timestamp The timestamp included in the signature.
   /// @param data The ABI-encoded response data.
   /// @param signature The EIP-191 personal signature (65 bytes: r || s || v).
-  /// @param callbackAddress The contract to forward the data to. Must not be zero.
+  /// @param callbackAddress The deployed contract to forward the data to.
   /// @param callbackSelector The function selector on the callback contract.
   function verifyAndFulfill(
     address airnode,
@@ -72,32 +73,47 @@ contract AirnodeVerifier {
     bytes4 callbackSelector
   ) external {
     require(callbackAddress != address(0), 'Callback address is zero');
+    require(callbackAddress.code.length != 0, 'Callback has no code');
 
     // Derive the message hash: keccak256(encodePacked(endpointId, timestamp, data))
     bytes32 messageHash = keccak256(abi.encodePacked(endpointId, timestamp, data));
 
-    // Apply EIP-191 prefix and recover the signer
-    bytes32 ethSignedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', messageHash));
-    address recovered = _recover(ethSignedHash, signature);
-    require(recovered == airnode, 'Signature mismatch');
+    {
+      // Apply EIP-191 prefix and recover the signer.
+      bytes32 ethSignedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', messageHash));
+      address recovered = _recover(ethSignedHash, signature);
+      require(recovered == airnode, 'Signature mismatch');
+    }
 
     // Replay protection is scoped to the signer and callback target. Two
     // independent consumers may legitimately deliver the same attestation, and
     // a caller cannot burn it by supplying an unrelated callback or selector.
-    bytes32 deliveryHash = keccak256(abi.encode(airnode, messageHash, callbackAddress, callbackSelector));
-    require(!fulfilledDelivery[deliveryHash], 'Already fulfilled');
-    fulfilledDelivery[deliveryHash] = true;
+    {
+      bytes32 deliveryHash = keccak256(abi.encode(airnode, messageHash, callbackAddress, callbackSelector));
+      require(!fulfilledDelivery[deliveryHash], 'Already fulfilled');
+      fulfilledDelivery[deliveryHash] = true;
+    }
     fulfilled[airnode][messageHash] = true;
 
     // Emit before external interaction (checks-effects-interactions pattern)
     emit Fulfilled(messageHash, airnode, endpointId, timestamp, callbackAddress);
 
-    // Forward to callback via the caller-specified selector. We use a low-level
-    // call because the selector is dynamic — there is no fixed interface. The
-    // return value is intentionally discarded: if the callback reverts, the
-    // fulfillment is still recorded to prevent griefing.
-    // slither-disable-next-line low-level-calls,unchecked-lowlevel
-    callbackAddress.call(abi.encodeWithSelector(callbackSelector, messageHash, airnode, endpointId, timestamp, data));
+    // Forward to callback via the caller-specified selector. Failure must revert
+    // this transaction so an underfunded or premature submission cannot consume a
+    // valid payload without updating the consumer. Reverting also rolls back both
+    // replay flags and the event, preserving a safe retry path.
+    // slither-disable-next-line low-level-calls
+    (bool success, bytes memory returndata) = callbackAddress.call(
+      abi.encodeWithSelector(callbackSelector, messageHash, airnode, endpointId, timestamp, data)
+    );
+    if (!success) {
+      // Bubble the callback's revert data. This standard assembly pattern preserves
+      // custom errors and revert strings for callers.
+      // slither-disable-next-line assembly
+      assembly ('memory-safe') {
+        revert(add(returndata, 0x20), mload(returndata))
+      }
+    }
   }
 
   // ===========================================================================

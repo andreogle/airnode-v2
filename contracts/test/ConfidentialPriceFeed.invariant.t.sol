@@ -25,7 +25,7 @@ contract ConfidentialFeedHandler is Test {
   // Ghost state
   uint256 public ghost_fulfillCount;
   uint256 public ghost_grantCount;
-  uint256 public ghost_revokeCount;
+
   mapping(bytes32 => uint256) public ghost_timestamps;
   mapping(uint256 => mapping(address => bool)) public ghost_acl;
 
@@ -47,7 +47,7 @@ contract ConfidentialFeedHandler is Test {
   function fulfill(bytes32 endpointId, uint256 timestamp, bytes32 handleRef) external {
     timestamp = bound(timestamp, 1, block.timestamp);
 
-    // Only submit if timestamp is strictly newer (otherwise callback reverts silently)
+    // Only submit if timestamp is strictly newer (otherwise the delivery reverts)
     if (timestamp <= ghost_timestamps[endpointId]) return;
 
     bytes memory inputProof = abi.encodePacked(handleRef);
@@ -90,20 +90,6 @@ contract ConfidentialFeedHandler is Test {
     ghost_acl[handle][account] = true;
     grantedAddresses.push(account);
     grantedHandles.push(handle);
-  }
-
-  // ===========================================================================
-  // revokeAccess — owner revokes decryption access
-  // ===========================================================================
-  function revokeAccess(bytes32 endpointId, address account) external {
-    uint256 handle = feed.prices(endpointId);
-    if (handle == 0) return;
-
-    vm.prank(feedOwner);
-    feed.revokeAccess(endpointId, account);
-
-    ghost_revokeCount++;
-    ghost_acl[handle][account] = false;
   }
 
   // ===========================================================================
@@ -163,7 +149,7 @@ contract ConfidentialPriceFeedInvariantTest is Test {
     tfhe = new MockTFHE();
 
     vm.prank(FEED_OWNER);
-    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe));
+    feed = new ConfidentialPriceFeed(address(verifier), address(tfhe), type(uint256).max);
 
     vm.prank(FEED_OWNER);
     feed.trustAirnode(vm.addr(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
