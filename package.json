@@ -27,7 +27,7 @@
     "@api3/promise-utils": "^0.4.0",
     "@zama-fhe/relayer-sdk": "^0.4.4",
     "commander": "^15.0.0",
-    "viem": "^2.55.0",
+    "viem": "^2.55.2",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
