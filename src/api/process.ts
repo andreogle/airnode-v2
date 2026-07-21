@@ -40,10 +40,10 @@ function parseDecimal(input: string): { readonly mantissa: bigint; readonly exp:
   const isNegative = input.startsWith('-');
   const unsigned = isNegative ? input.slice(1) : input;
 
-  const [baseRaw = '', expRaw] = unsigned.split(/[eE]/);
+  const [baseRaw = '', expRaw] = unsigned.split(/[eE]/, 2);
   const scientificExp = expRaw ? Number(expRaw) : 0;
 
-  const [intPart = '0', fracPart = ''] = baseRaw.split('.');
+  const [intPart = '0', fracPart = ''] = baseRaw.split('.', 2);
   const mantissaDigits = `${intPart}${fracPart}`.replace(/^0+(?=\d)/, '') || '0';
   const mantissa = (isNegative ? -1n : 1n) * BigInt(mantissaDigits);
 
@@ -59,7 +59,7 @@ function scaleToBigInt(mantissa: bigint, exp: number): bigint {
 
 function applyMultiplier(value: string, multiply: string | undefined): bigint {
   const valueParts = parseDecimal(value);
-  if (isNil(multiply) || multiply === '') {
+  if (multiply === '' || isNil(multiply)) {
     return scaleToBigInt(valueParts.mantissa, valueParts.exp);
   }
   const timesParts = parseDecimal(multiply);

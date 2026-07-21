@@ -17,6 +17,7 @@
     "fmt": "prettier . --write && eslint . --fix",
     "lint": "bun run lint:prettier && bun run lint:eslint && bun run lint:slither",
     "lint:eslint": "eslint . --cache",
+    "lint:eslint:fix": "eslint . --cache --fix",
     "lint:prettier": "prettier . --check",
     "lint:slither": "(cd contracts && slither .)",
     "test:contracts": "(cd contracts && forge test -vvv)",
@@ -38,7 +39,7 @@
     "eslint-plugin-functional": "^10.0.0",
     "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-promise": "^7.3.0",
-    "eslint-plugin-unicorn": "^71.1.0",
+    "eslint-plugin-unicorn": "^72.0.0",
     "prettier": "3.9.5",
     "prettier-plugin-solidity": "^2.3.1",
     "typescript-eslint": "^8.64.0"

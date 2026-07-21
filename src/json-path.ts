@@ -208,7 +208,7 @@ function resolveToken(current: readonly JsonValue[], token: string, isDeepScan: 
 
     // Slice: [start:end]
     if (inner.includes(':')) {
-      const [startString, endString] = inner.split(':');
+      const [startString, endString] = inner.split(':', 2);
       return current.flatMap((c) => {
         if (!Array.isArray(c)) {
           return [];
