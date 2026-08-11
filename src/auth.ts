@@ -53,7 +53,7 @@ function isPaymentRequired(result: AuthResult): result is AuthPaymentRequired {
 // =============================================================================
 // Shared RPC client pool
 //
-// `verifyPayment` only needs three read methods. We model that narrow surface
+// `isPaymentValid` only needs three read methods. We model that narrow surface
 // explicitly (a) so it's clear what an RPC outage / mismatch can affect and
 // (b) so tests can inject a fake client via `setRpcClientFactory`.
 // =============================================================================
@@ -162,7 +162,7 @@ const PROOF_RETENTION_MS = (MAX_TX_AGE_SECONDS + 60) * 1000;
 const MAX_PROOF_LIFETIME_MS = 10 * 60 * 1000;
 
 // Replay protection. FIFO eviction is refused for entries that are still
-// within the recency window enforced by verifyPayment — otherwise a flooder
+// within the recency window enforced by isPaymentValid — otherwise a flooder
 // could push legitimate entries out and replay them.
 const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
   maxEntries: 500_000,
@@ -174,7 +174,7 @@ const usedPaymentProofs = createBoundedMap<string, PaymentProofEntry>({
 // =============================================================================
 // x402 DoS guard — verification rate limit
 //
-// `verifyPayment` hits the chain RPC (3 reads × up to 3 retries) per attempt,
+// `isPaymentValid` hits the chain RPC (3 reads × up to 3 retries) per attempt,
 // so unauthenticated callers spamming bogus `X-Payment-Proof` headers would
 // otherwise drain the operator's RPC quota. A separate, much stricter per-IP
 // token bucket on x402 verification attempts (the global `server.rateLimit`
@@ -223,7 +223,7 @@ function parsePaymentProof(raw: string): PaymentProofHeader | string {
   };
 }
 
-async function verifyPayment(
+async function isPaymentValid(
   rpc: string,
   txHash: Hex,
   token: string,
@@ -313,7 +313,7 @@ async function checkX402(
   }
 
   // A submitted proof — whether bogus or not — will hit the chain RPC in
-  // verifyPayment. Apply a stricter per-IP bucket here so an attacker can't use
+  // isPaymentValid. Apply a stricter per-IP bucket here so an attacker can't use
   // a single permissive `server.rateLimit` to flood the verification path and
   // drain the operator's RPC quota. The bucket is independent of the global
   // limit; missing client IPs (programmatic callers) share an 'unknown' bucket.
@@ -364,7 +364,7 @@ async function checkX402(
     return { authenticated: false, error: 'Replay cache full — retry shortly' };
   }
 
-  const isValid = await verifyPayment(config.rpc, parsed.txHash, config.token, config.amount, config.recipient, payer);
+  const isValid = await isPaymentValid(config.rpc, parsed.txHash, config.token, config.amount, config.recipient, payer);
   if (!isValid) {
     usedPaymentProofs.delete(normalizedHash);
     return { authenticated: false, error: 'Payment verification failed' };
