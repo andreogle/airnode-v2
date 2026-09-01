@@ -30,7 +30,7 @@
     "commander": "^15.0.0",
     "viem": "^2.56.0",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.1"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",
